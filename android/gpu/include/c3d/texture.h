@@ -1,4 +1,6 @@
 #pragma once
+/* Altered Citro3D interface: ALIGN is the Android shim's attribute spelling.
+ * Upstream provenance and zlib notice: ../../THIRD_PARTY.md. */
 #include "types.h"
 
 typedef struct

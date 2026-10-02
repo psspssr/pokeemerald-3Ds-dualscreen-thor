@@ -1,4 +1,6 @@
 #pragma once
+/* Adapted Citro2D interface and inline helpers. See ../THIRD_PARTY.md and
+ * ../licenses/citro2d.txt for upstream provenance and the retained zlib notice. */
 #include <citro3d.h>
 #include <tex3ds.h>
 #define C2D_DEFAULT_MAX_OBJECTS 4096

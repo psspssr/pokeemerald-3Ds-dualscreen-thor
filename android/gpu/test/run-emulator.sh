@@ -25,4 +25,4 @@ python3 tools/picasso2glsl.py origin/3ds_port/src/voxel/voxel.v.pica -o "$out/vo
     android/gpu/test/offscreen.c android/gpu/src/*.c android/gpu/src/maths/*.c \
     -lEGL -lGLESv3 -landroid -llog -lm -o "$out/gpu-offscreen-test"
 "${adb_cmd[@]}" push "$out/gpu-offscreen-test" "$out/voxel.shbin" /data/local/tmp/
-"${adb_cmd[@]}" shell /data/local/tmp/gpu-offscreen-test /data/local/tmp/voxel.shbin | tee "$out/result.log"
+"${adb_cmd[@]}" shell /data/local/tmp/gpu-offscreen-test /data/local/tmp/voxel.shbin "${@:2}" | tee "$out/result.log"

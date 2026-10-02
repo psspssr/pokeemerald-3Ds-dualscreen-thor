@@ -40,7 +40,7 @@ static unsigned morton(unsigned x,unsigned y)
 
 int main(int argc,char **argv)
 {
-    assert(argc==2);
+    assert(argc==2 || (argc==3 && !strcmp(argv[2],"--benchmark")));
     assert(C3D_Init(0)); assert(C2D_Init(128)); C2D_Prepare();
     C3D_RenderTarget *target=C3D_RenderTargetCreate(16,16,GPU_RB_RGBA8,GPU_RB_DEPTH16); assert(target);
     C2D_TargetClear(target,C2D_Color32(0,0,0,255)); C2D_SceneBegin(target);
@@ -79,6 +79,18 @@ int main(int argc,char **argv)
     C3D_BlendingColor(C2D_Color32(128,128,128,64));
     C2D_DrawRectSolid(0,0,0,16,16,C2D_Color32(0,0,255,255)); pixel(2,13,64,0,128,255);
     C2D_Prepare();
+
+    C3D_Tex rowsTexture={0}; assert(C3D_TexInit(&rowsTexture,16,16,GPU_RGBA5551));
+    for(unsigned i=0;i<256;i++) ((u16 *)rowsTexture.data)[i]=0xF801;
+    Tex3DS_SubTexture rowsSub={16,16,0,1,1,0};
+    C2D_DrawImageAt((C2D_Image){&rowsTexture,&rowsSub},0,0,0,NULL,1,1); pixel(2,13,255,0,0,255);
+    /* Change only the second PICA tile row. Its GL y-origin is zero. */
+    for(unsigned i=128;i<256;i++) ((u16 *)rowsTexture.data)[i]=0x07C1;
+    C2D_DrawImageAt((C2D_Image){&rowsTexture,&rowsSub},0,0,0,NULL,1,1);
+    pixel(2,13,255,0,0,255); pixel(2,2,0,255,0,255);
+    for(unsigned i=0;i<128;i++) ((u16 *)rowsTexture.data)[i]=0x003F;
+    C2D_DrawImageAt((C2D_Image){&rowsTexture,&rowsSub},0,0,0,NULL,1,1);
+    pixel(2,13,0,0,255,255); pixel(2,2,0,255,0,255);
 
     C3D_Tex renderTexture={0}; assert(C3D_TexInitVRAM(&renderTexture,16,16,GPU_RGBA8));
     C3D_RenderTarget *renderTarget=C3D_RenderTargetCreateFromTex(&renderTexture,GPU_TEXFACE_2D,0,-1); assert(renderTarget);
@@ -149,5 +161,20 @@ int main(int argc,char **argv)
     pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255); pixel(100,300,0,255,0,255);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
     printf("PASS %d GLES pixel assertions: 2D, tiling, flips, tint, CPU edits, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display\n",checks);
+    if(argc==3) {
+        /* Upstream's atlas is 1024x1024, but a typed glyph can change one
+         * 8x8 tile. Measure that real update pattern separately from VBlank. */
+        C3D_Tex atlas={0}; assert(C3D_TexInit(&atlas,1024,1024,GPU_RGBA5551));
+        Tex3DS_SubTexture glyph={8,8,0,1,8.f/1024,1-8.f/1024};
+        C2D_Prepare(); C2D_SceneBegin(target); C2D_ViewReset();
+        C2D_DrawImageAt((C2D_Image){&atlas,&glyph},0,0,0,NULL,1,1); C2D_Flush(); glFinish();
+        double start=gpuNow();
+        for(int i=0;i<60;i++) {
+            for(int p=0;p<64;p++) ((u16 *)atlas.data)[p]=(i&1)?0xF801:0x07C1;
+            C2D_DrawImageAt((C2D_Image){&atlas,&glyph},0,0,0,NULL,1,1); C2D_Flush(); glFinish();
+        }
+        printf("BENCH 1024-square atlas, one modified tile, 60 upload/draw/finish iterations: %.3f ms/update\n",(gpuNow()-start)*1000/60);
+        C3D_TexDelete(&atlas);
+    }
     C2D_Fini(); C3D_Fini(); shaderProgramFree(&program); DVLB_Free(binary); gfxExit(); return 0;
 }

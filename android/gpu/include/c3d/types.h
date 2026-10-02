@@ -1,4 +1,6 @@
 #pragma once
+/* Altered Citro3D interface: always use the Android compatibility types.
+ * Upstream provenance and zlib notice: ../../THIRD_PARTY.md. */
 #include <3ds.h>
 
 #ifndef CITRO3D_NO_DEPRECATION

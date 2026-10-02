@@ -47,12 +47,31 @@ GLuint gpuTextureId(C3D_Tex *texture)
     GpuTexture *record=gpuFindTexture(texture);
     if(!record) return 0;
     glBindTexture(GL_TEXTURE_2D,record->id); gpuSetTextureParams(texture);
-    if(!record->authoritative && (!record->uploaded || memcmp(record->shadow,texture->data,texture->size))) {
-        if(!gpuDecodeTexture(texture->data,record->rgba,texture->width,texture->height,texture->fmt)) {
-            GPU_LOG("unsupported texture format %u",texture->fmt); return 0;
+    if(!record->authoritative) {
+        /* Origin edits atlas tiles directly, without a TexFlush per glyph.
+         * PICA stores an eight-pixel-high tile row contiguously. Compare those
+         * rows, then combine adjacent changed rows into one upload. Updating
+         * one glyph must not detile/upload the entire 1024-square atlas. */
+        unsigned rows=texture->height/8;
+        size_t rowBytes=texture->size/rows;
+        int first=-1;
+        for(unsigned row=0;row<=rows;row++) {
+            bool changed=row<rows && (!record->uploaded ||
+                memcmp(record->shadow+row*rowBytes,(unsigned char *)texture->data+row*rowBytes,rowBytes));
+            if(changed && first<0) first=(int)row;
+            if(!changed && first>=0) {
+                unsigned height=(row-(unsigned)first)*8,glY=(rows-row)*8;
+                const unsigned char *source=(unsigned char *)texture->data+(unsigned)first*rowBytes;
+                unsigned char *pixels=record->rgba+(size_t)glY*texture->width*4;
+                if(!gpuDecodeTexture(source,pixels,texture->width,height,texture->fmt)) {
+                    GPU_LOG("unsupported texture format %u",texture->fmt); return 0;
+                }
+                glTexSubImage2D(GL_TEXTURE_2D,0,0,glY,texture->width,height,GL_RGBA,GL_UNSIGNED_BYTE,pixels);
+                memcpy(record->shadow+(unsigned)first*rowBytes,source,(row-(unsigned)first)*rowBytes);
+                first=-1;
+            }
         }
-        glTexSubImage2D(GL_TEXTURE_2D,0,0,0,texture->width,texture->height,GL_RGBA,GL_UNSIGNED_BYTE,record->rgba);
-        memcpy(record->shadow,texture->data,texture->size); record->uploaded=true;
+        record->uploaded=true;
     }
     return record->id;
 }
