@@ -1,0 +1,26 @@
+--- a/src/battle_script_commands.c
++++ b/src/battle_script_commands.c
+@@ -6274,7 +6274,12 @@
+ 
+ static void Cmd_jumpifplayerran(void)
+ {
+-    if (TryRunFromBattle(gBattlerFainted))
++    /* Saying No to "Use next Pokemon?" is also a player-requested escape.
++     * Stay opens the usual replacement selector without rolling escape odds
++     * or incrementing runTries, and without printing a failed-run message. */
++    if (!CtrQol_ConfirmFlee())
++        gBattlescriptCurrInstr = BattleScript_FaintedMonTryChoose;
++    else if (TryRunFromBattle(gBattlerFainted))
+         gBattlescriptCurrInstr = T1_READ_PTR(gBattlescriptCurrInstr + 1);
+     else
+         gBattlescriptCurrInstr += 5;
+--- a/include/battle_scripts.h
++++ b/include/battle_scripts.h
+@@ -17,6 +17,7 @@
+ extern const u8 BattleScript_FaintTarget[];
+ extern const u8 BattleScript_GiveExp[];
+ extern const u8 BattleScript_HandleFaintedMon[];
++extern const u8 BattleScript_FaintedMonTryChoose[];
+ extern const u8 BattleScript_LocalTrainerBattleWon[];
+ extern const u8 BattleScript_LocalTwoTrainersDefeated[];
+ extern const u8 BattleScript_LocalBattleWonLoseTexts[];
