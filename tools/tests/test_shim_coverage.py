@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -68,6 +69,59 @@ class CoverageTest(unittest.TestCase):
         with patch.dict(os.environ, {"ANDROID_NDK_HOME": "/ndk/from-env"}, clear=True):
             self.assertEqual(Path("/ndk/from-env"), coverage.find_ndk())
             self.assertEqual(Path("/ndk/explicit"), coverage.find_ndk(Path("/ndk/explicit")))
+
+    def build_gc_fixture(self, missing=False):
+        if not shutil.which("cc") or not shutil.which("nm"):
+            self.skipTest("host C compiler and nm required for link coverage regression")
+        self.write("3ds_port/native.c", """
+            extern int __ctru_heap;
+            extern void svcControlMemory(void);
+            extern void svcMissing(void);
+            void unused_3ds_startup(void) {
+                __ctru_heap = 1;
+                svcControlMemory();
+                %s
+            }
+            void entry(void) {}
+        """ % ("svcMissing();" if missing else ""))
+        self.write("3ds_port/sdk.c", "int __ctru_heap; void svcControlMemory(void) {}\n")
+        self.write("3ds_port/stale.c", "void svcMissing(void) {}\n")
+        native = self.root / "3ds_port/build/native.o"
+        sdk = self.root / "3ds_port/build/android/shim/src/sdk.o"
+        stale = self.root / "3ds_port/build/android/shim/src/stale.o"
+        sdk.parent.mkdir(parents=True)
+        for source, output in (("native", native), ("sdk", sdk), ("stale", stale)):
+            subprocess.run(["cc", "-ffunction-sections", "-fdata-sections", "-c",
+                            str(self.root / f"3ds_port/{source}.c"), "-o", str(output)], check=True)
+        library = self.root / "3ds_port/library.elf"
+        subprocess.run(["cc", "-nostdlib", "-no-pie", "-Wl,--gc-sections", "-Wl,-e,entry",
+                        str(native), str(sdk), "-o", str(library)], check=True)
+        self.write("3ds_port/build/link.rsp", "build/native.o build/android/shim/src/sdk.o -lc\n")
+        return native, library, sdk
+
+    def test_dead_startup_dependencies_have_real_sdk_definitions_before_gc(self):
+        native, library, sdk = self.build_gc_fixture()
+        needed = coverage.nm(native, "-u", tool="nm")
+        final = coverage.nm(library, "--defined-only", tool="nm")
+        self.assertEqual({"__ctru_heap", "svcControlMemory"}, needed - final)
+        objects = coverage.linked_sdk_objects(self.root)
+        self.assertEqual([sdk], objects)
+        provided = final.copy()
+        for obj in objects:
+            provided |= coverage.nm(obj, "-g", "--defined-only", tool="nm")
+        self.assertEqual(set(), needed - provided)
+
+    def test_missing_definition_is_not_hidden_by_stale_unlinked_sdk_object(self):
+        native, library, _ = self.build_gc_fixture(missing=True)
+        provided = coverage.nm(library, "--defined-only", tool="nm")
+        for obj in coverage.linked_sdk_objects(self.root):
+            provided |= coverage.nm(obj, "-g", "--defined-only", tool="nm")
+        self.assertEqual({"svcMissing"}, coverage.nm(native, "-u", tool="nm") - provided)
+
+    def test_missing_linked_sdk_object_fails_closed(self):
+        self.write("3ds_port/build/link.rsp", "build/android/shim/src/absent.o\n")
+        with self.assertRaisesRegex(ValueError, "linked SDK object missing"):
+            coverage.linked_sdk_objects(self.root)
 
 
 if __name__ == "__main__":

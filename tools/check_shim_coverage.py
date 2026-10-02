@@ -17,7 +17,10 @@ identifier they use and checks it against the Android layer:
 
 With --headers-only this is an advisory source check, not link or behavior
 validation. With all native objects, the symbol check compares their undefined
-symbols with the library and NDK exports. Before that, it is estimated from
+symbols with the library, SDK object definitions from the actual link response
+file, and NDK exports. SDK definitions can be absent from the final library when
+--gc-sections removes unused 3DS startup code together with its dependencies.
+Before that, coverage is estimated from
 call sites in the source. The native build's check_link.py remains authoritative
 for the final ELF, relocation and load-address requirements.
 SDK identifiers are recognised by libctru/citro naming (C3D_*, gfx*, svc*,
@@ -30,6 +33,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -157,6 +161,28 @@ def nm(path: Path, *flags: str, tool: str = "arm-linux-gnueabi-nm") -> set[str]:
     return {line.split()[-1].split("@")[0] for line in out.stdout.splitlines() if line.split()}
 
 
+def linked_sdk_objects(tree: Path) -> list[Path]:
+    """SDK inputs to this link, excluding stale objects left by earlier builds."""
+    port = (tree / "3ds_port").resolve()
+    response = port / "build/link.rsp"
+    if not response.is_file():
+        raise ValueError(f"native link response file missing: {response}; rebuild the native library")
+    sdk_roots = [port / "build/android" / component for component in ("shim", "gpu", "host")]
+    objects: list[Path] = []
+    for token in shlex.split(response.read_text(encoding="utf-8")):
+        path = Path(token)
+        if path.suffix != ".o":
+            continue
+        path = (path if path.is_absolute() else port / path).resolve()
+        if not any(path.is_relative_to(root) for root in sdk_roots):
+            continue
+        if not path.is_file():
+            raise ValueError(f"linked SDK object missing: {path}; rebuild the native library")
+        if path not in objects:
+            objects.append(path)
+    return objects
+
+
 def find_ndk(explicit: Path | None = None) -> Path:
     if explicit:
         return explicit
@@ -216,10 +242,14 @@ def main() -> int:
     defined = nm(lib, "--defined-only", tool=args.nm) if lib.exists() and not args.headers_only else set()
 
     undefined: list[str] = []
+    sdk_objects: list[Path] = []
     method = "not checked (--headers-only)" if args.headers_only else "not checked (library not built)"
     if not args.headers_only and lib.exists() and not missing_objects:
-        method = "native objects' undefined symbols vs %s" % lib
+        method = "native objects' undefined symbols vs linked SDK objects, NDK exports and %s" % lib
         provided = defined | ndk_exports(find_ndk(args.ndk), args.nm)
+        sdk_objects = linked_sdk_objects(args.tree)
+        for obj in sdk_objects:
+            provided |= nm(obj, "-g", "--defined-only", tool=args.nm)
         need = set()
         for o in objects:
             need |= nm(o, "-u", tool=args.nm)
@@ -235,6 +265,7 @@ def main() -> int:
         "undefined": undefined,
         "undefined_method": method,
         "native_objects_missing": [str(o.relative_to(args.tree)) for o in missing_objects],
+        "linked_sdk_objects": [str(o.relative_to(args.tree.resolve())) for o in sdk_objects],
         "headers_only": args.headers_only,
     }
     if args.json:

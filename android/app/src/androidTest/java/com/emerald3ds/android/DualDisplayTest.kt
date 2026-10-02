@@ -109,8 +109,10 @@ class DualDisplayTest {
     }
 
     private fun touch(displayId: Int, action: Int, x: Float, y: Float, down: Long) {
-        val e = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, y, 0)
-        e.source = InputDevice.SOURCE_TOUCHSCREEN
+        val pointer = MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER }
+        val coords = MotionEvent.PointerCoords().apply { this.x = x; this.y = y; pressure = 1f; size = 1f }
+        val e = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, 1,
+            arrayOf(pointer), arrayOf(coords), 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
         // setDisplayId is hidden in the SDK, but available to debuggable instrumentation.
         android.view.InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
             .invoke(e, displayId)
@@ -286,6 +288,38 @@ class DualDisplayTest {
             inst.runOnMainSync { display!!.resize(1000, 1000, 240) }
             waitUntil("changed display metrics did not recreate bottom window") {
                 presentation(scenario)?.surfaceWidth == 1000 && presentation(scenario)?.surfaceHeight == 1000
+            }
+        }
+    }
+
+    @Test fun secondaryMoveStreamIsDeliveredWhileRenderingAndWhilePaused() {
+        addDisplay()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitDual(scenario)
+            val p = presentation(scenario)!!
+            val displayId = display!!.display.displayId
+            for (paused in listOf(false, true)) {
+                if (paused) scenario.onActivity {
+                    p.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_MODE))
+                }
+                val down = SystemClock.uptimeMillis()
+                touch(displayId, MotionEvent.ACTION_DOWN, 310f, 307.5f, down)
+                for (step in 1..10) {
+                    // Goes through InputDispatcher, not View.dispatchTouchEvent.
+                    // A batched secondary MOVE used to sit unacknowledged for
+                    // five seconds on API 30 and produce an application ANR.
+                    touch(displayId, MotionEvent.ACTION_MOVE, 310f + 62f * step, 307.5f + 23.25f * step, down)
+                }
+                if (paused) {
+                    assertEquals(NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
+                    assertEquals(0, HostProbe.snapshot()[1])
+                } else {
+                    assertTrue(HostProbe.snapshot()[1] and CtrKeys.TOUCH != 0)
+                    assertArrayEquals(intArrayOf(240, 120), HostProbe.snapshot().sliceArray(4..5))
+                }
+                touch(displayId, MotionEvent.ACTION_UP, 930f, 540f, down)
+                assertTrue("secondary drag stalled", SystemClock.uptimeMillis() - down < 4000)
+                assertEquals(0, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
             }
         }
     }

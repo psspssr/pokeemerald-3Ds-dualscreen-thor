@@ -251,6 +251,11 @@ class ControlsOverlayView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // The game renders through EGL, independently of Android View frames.
+        // In particular, a secondary display may have no UI vsync to drain
+        // batched MOVE events. Acknowledge this whole gesture immediately,
+        // including touches while gameplay input is disabled by the menu.
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) requestUnbufferedDispatch(event)
         if (!inputEnabled) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {

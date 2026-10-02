@@ -59,7 +59,7 @@ jobs:
       - name: Build the real ARM game and debug APK
         run: python3 tools/bootstrap.py --ndk "$ANDROID_HOME/ndk/27.2.12479018" --make --apk -j2
       - name: Native SDK symbol coverage
-        run: python3 tools/check_shim_coverage.py
+        run: python3 tools/check_shim_coverage.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
       - name: Build engine-only release APK
         run: python3 tools/bootstrap.py --ndk "$ANDROID_HOME/ndk/27.2.12479018" --make --apk --release --out build/android-release-out -j2
       - name: Keep build diagnostics
