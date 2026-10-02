@@ -58,8 +58,11 @@ Keep source changes under this repository's `android/`, `tools/` and
 `build/upstream/` is generated. Use a separate `--dir` if you need an independent
 build. `--clean` rebuilds that generated tree and discards its local edits.
 
-Development APKs embed generated game data for local testing. Do not publish
-them as release downloads. CI builds them but uploads only diagnostics.
+Development APKs embed generated game data for local testing. The authorized
+first **private prerelease** packages that full native/data output in a signed,
+non-debuggable Gradle release APK; follow [RELEASING.md](RELEASING.md).
+The repository remains private. CI still uploads only diagnostics, not APKs
+or generated game data.
 
 ## Engine-only build and data packs
 
@@ -67,11 +70,14 @@ them as release downloads. CI builds them but uploads only diagnostics.
 python3 tools/bootstrap.py --make --apk --release --out build/android-release-out -j4
 ```
 
-This packages engine assets without the game data. The result is
-`android/app/build/outputs/apk/release/emerald3ds-android-release-unsigned.apk`; apply your own
-release signing configuration before installing or distributing it.
+The bootstrap's `--release` flag packages engine assets without the game data.
+It is distinct from Gradle's `assembleRelease`, which selects the Android
+release variant and packages whichever native output it is given. The
+engine-only result is
+`android/app/build/outputs/apk/release/emerald3ds-android-release-unsigned.apk`;
+signing and verification are covered in [RELEASING.md](RELEASING.md#align-sign-and-inspect).
 
-A release needs `emerald3ds.pak` generated for the **same Android build**.
+An **engine-only** APK needs `emerald3ds.pak` generated for the **same Android build**.
 The data ABI includes executable-specific pointers. A stock 3DS pack, or a
 pack from an older Android build, is not interchangeable. The game checks the
 pack's ABI when loading it. Import the pack from the app's Settings, then

@@ -60,8 +60,8 @@ autosave or an emulator save state.
 The port verifies the freshly written slot's signatures, sections, counter and
 checksums before copying the complete 128 KiB image. A new snapshot is written
 to a temporary file, synced and renamed before older snapshots are rotated.
-A failed backup does not invalidate the normal save or delete previous backups.
-Disabling the option leaves existing snapshots available.
+If creating the new snapshot fails, previous snapshots are kept; the normal
+save remains valid. Disabling the option leaves existing snapshots available.
 
 **Restore a save backup** lists snapshots newest first. Restoration is staged,
 then applied on restart using the same path as save import; the previous active
