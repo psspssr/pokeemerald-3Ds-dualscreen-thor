@@ -67,7 +67,9 @@ static Vertex2D vertex(float x,float y,float depth,float u,float v,C2D_Tint tint
 {
     float tx=view.r[0].x*x+view.r[0].y*y+view.r[0].w;
     float ty=view.r[1].x*x+view.r[1].y*y+view.r[1].w;
-    Vertex2D out={.u=u,.v=v,.z=depth*2-1,.blend=tint.blend};
+    /* Citro2D's [-1,+1] scene depth, after its PICA projection and depth map,
+     * is OpenGL clip Z unchanged. A [0,1] conversion would clip negative Z. */
+    Vertex2D out={.u=u,.v=v,.z=depth,.blend=tint.blend};
     if(sceneTilt) { out.x=1-2*ty/sceneHeight; out.y=2*tx/sceneWidth-1; }
     else { out.x=2*tx/sceneWidth-1; out.y=1-2*ty/sceneHeight; }
     out.r=(tint.color&255)/255.f; out.g=((tint.color>>8)&255)/255.f;

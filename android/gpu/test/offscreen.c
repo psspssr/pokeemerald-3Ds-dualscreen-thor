@@ -91,6 +91,11 @@ int main(int argc,char **argv)
     /* The top-left of a rotated screen maps to framebuffer x=height-1,y=0. */
     C2D_SceneSize(16,16,true); C2D_DrawRectSolid(0,0,0,8,8,C2D_Color32(255,255,0,255));
     pixel(13,2,255,255,0,255);
+    C2D_SceneSize(16,16,false); C2D_TargetClear(target,0);
+    C3D_DepthTest(true,GPU_GREATER,GPU_WRITE_ALL);
+    C2D_DrawRectSolid(0,0,-0.5f,16,16,C2D_Color32(0,255,0,255)); pixel(2,13,0,255,0,255);
+    C2D_DrawRectSolid(0,0,0.75f,16,16,C2D_Color32(0,0,255,255)); pixel(2,13,0,0,255,255);
+    C2D_DrawRectSolid(0,0,-0.75f,16,16,C2D_Color32(255,0,0,255)); pixel(2,13,0,0,255,255);
 
     FILE *file=fopen(argv[1],"rb"); assert(file); fseek(file,0,SEEK_END); long size=ftell(file); rewind(file);
     u32 *shader=malloc(size); assert(fread(shader,1,size,file)==(size_t)size); fclose(file);
