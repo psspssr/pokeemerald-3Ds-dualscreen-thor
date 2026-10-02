@@ -10,6 +10,7 @@
 
 #include "ctr_host.h"
 #include "ctr_host_internal.h"
+#include "ctr_mystery.h"
 
 #define BRIDGE_CLASS "com/emerald3ds/android/NativeBridge"
 
@@ -147,6 +148,26 @@ Java_com_emerald3ds_android_NativeBridge_nativeIsShinyFleePending(JNIEnv *env, j
 {
     (void)env; (void)cls;
     return CtrHost_IsShinyFleePending((uint32_t)request) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jintArray JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeMysteryEvents(JNIEnv *env, jclass cls)
+{
+    (void)cls;
+    int states[CTR_MYSTERY_MAX_EVENTS];
+    unsigned count = CtrHost_QueryMysteryEvents(states, CTR_MYSTERY_MAX_EVENTS, 2000);
+    jint values[CTR_MYSTERY_MAX_EVENTS];
+    for (unsigned i = 0; i < count; ++i) values[i] = states[i];
+    jintArray array = (*env)->NewIntArray(env, (jsize)count);
+    if (array && count) (*env)->SetIntArrayRegion(env, array, 0, (jsize)count, values);
+    return array;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeActivateMysteryEvent(JNIEnv *env, jclass cls, jint eventId)
+{
+    (void)env; (void)cls;
+    return CtrHost_ActivateMysteryEvent((unsigned)eventId, 2000);
 }
 
 #ifdef CTR_HOST_HARNESS

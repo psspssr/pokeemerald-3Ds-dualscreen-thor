@@ -102,6 +102,7 @@ ANDROID_SRCS += $(wildcard $(ANDROID_DIR)/gpu/src/*.c $(ANDROID_DIR)/gpu/src/*/*
 ANDROID_SRCS += $(wildcard $(ANDROID_DIR)/host/src/*.c $(ANDROID_DIR)/host/src/*/*.c $(ANDROID_DIR)/host/src/*/*/*.c)
 ANDROID_SRCS += $(ANDROID_NATIVE)/src/load_address.c $(ANDROID_NATIVE)/src/save_abi.c
 ANDROID_SRCS += $(ANDROID_NATIVE)/src/qol_rules.c $(ANDROID_NATIVE)/src/qol_game.c $(ANDROID_NATIVE)/src/qol_backups.c
+ANDROID_SRCS += $(ANDROID_NATIVE)/src/mystery_events.c
 ANDROID_OBJS := $(patsubst $(ANDROID_DIR)/%.c,build/android/%.o,$(ANDROID_SRCS))
 ANDROID_CFLAGS := -O2 -g -std=gnu11 -Wall -Wextra -ffunction-sections -fdata-sections \
 	-DCTR_LOAD_ADDRESS=$(LOAD_ADDRESS)
@@ -112,7 +113,7 @@ build/android/%.o: $(ANDROID_DIR)/%.c
 	"$(CC)" $(CPPFLAGS) $(ANDROID_CFLAGS) -MMD -MP -c $< -o $@
 
 # Game hooks and save compatibility assertions use the actual game ABI.
-ANDROID_GAME_OBJS := build/android/native/src/save_abi.o build/android/native/src/qol_game.o
+ANDROID_GAME_OBJS := build/android/native/src/save_abi.o build/android/native/src/qol_game.o build/android/native/src/mystery_events.o
 $(ANDROID_GAME_OBJS): build/android/native/%.o: $(ANDROID_NATIVE)/%.c
 	@mkdir -p $(dir $@)
 	"$(CC)" $(FULLFLAGS) $(FULLCFLAGS) -std=gnu11 -MMD -MP -c $< -o $@

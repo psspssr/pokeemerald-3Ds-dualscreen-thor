@@ -1,0 +1,72 @@
+diff --git a/src/new_game.c b/src/new_game.c
+--- a/src/new_game.c
++++ b/src/new_game.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_mystery.h"
+ #include "new_game.h"
+ #include "random.h"
+ #include "pokemon.h"
+@@ -159,6 +160,7 @@
+ 
+ void NewGameInitData(void)
+ {
++    CtrMystery_ResetSession();
+     if (gSaveFileStatus == SAVE_STATUS_EMPTY || gSaveFileStatus == SAVE_STATUS_CORRUPT)
+         RtcReset();
+ 
+diff --git a/src/title_screen.c b/src/title_screen.c
+--- a/src/title_screen.c
++++ b/src/title_screen.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_mystery.h"
+ #include "battle.h"
+ #include "title_screen.h"
+ #include "sprite.h"
+@@ -620,6 +621,7 @@
+ 
+ void CB2_InitTitleScreen(void)
+ {
++    CtrMystery_ResetSession();
+     switch (gMain.state)
+     {
+     default:
+diff --git a/src/overworld.c b/src/overworld.c
+--- a/src/overworld.c
++++ b/src/overworld.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_mystery.h"
+ #include "overworld.h"
+ #include "battle_pyramid.h"
+ #include "battle_setup.h"
+@@ -1811,6 +1812,8 @@
+ {
+     u8 trainerHillMapId;
+ 
++    CtrMystery_ContinueSession();
++
+     FieldClearVBlankHBlankCallbacks();
+     StopMapMusic();
+     ResetSafariZoneFlag_();
+diff --git a/src/save.c b/src/save.c
+--- a/src/save.c
++++ b/src/save.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_mystery.h"
+ #include "platform.h"
+ #include "agb_flash.h"
+ #include "gba/flash_internal.h"
+@@ -795,7 +796,10 @@
+     {
+         gSaveAttemptStatus = SAVE_STATUS_OK;
+         if (saveType == SAVE_NORMAL || saveType == SAVE_OVERWRITE_DIFFERENT_FILE)
++        {
++            CtrMystery_SavedSession();
+             CtrQol_BackupCompletedSave(gSaveCounter);
++        }
+         return SAVE_STATUS_OK;
+     }
+     else

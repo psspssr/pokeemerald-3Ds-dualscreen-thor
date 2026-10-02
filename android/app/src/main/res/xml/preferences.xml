@@ -142,6 +142,12 @@
                 app:title="@string/qol_protect_shinies" app:summary="@string/qol_protect_shinies_summary"
                 app:iconSpaceReserved="false" />
         </PreferenceScreen>
+        <PreferenceScreen app:key="mystery_events" app:title="@string/mystery_events_title"
+            app:summary="@string/mystery_events_summary" app:iconSpaceReserved="false">
+            <Preference app:key="mystery_events_intro" app:title="@string/mystery_events_intro"
+                app:summary="@string/mystery_events_intro_summary"
+                app:selectable="false" app:iconSpaceReserved="false" />
+        </PreferenceScreen>
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/cat_data" app:iconSpaceReserved="false">

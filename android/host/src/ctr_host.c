@@ -14,6 +14,7 @@
 
 #include "ctr_host.h"
 #include "ctr_host_internal.h"
+#include "ctr_mystery.h"
 
 #define GAME_THREAD_STACK (8u * 1024u * 1024u)
 /* How long surfaceDestroyed waits for the game thread to drop the window. */
@@ -23,6 +24,9 @@ extern int main(void);
 /* The production shim supplies cleanup. The standalone host harness has no
  * libctru layer and only needs the normal game-exit notification. */
 extern void CtrShim_Exit(int status) __attribute__((weak, noreturn));
+/* The display-only harness has no engine or save state. */
+extern unsigned CtrMystery_Query(int *, unsigned) __attribute__((weak));
+extern int CtrMystery_Activate(unsigned) __attribute__((weak));
 
 static pthread_mutex_t sLock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t sCond = PTHREAD_COND_INITIALIZER;
@@ -50,6 +54,25 @@ static unsigned sGameSpeed = 1, sShinyMultiplier = 1;
 static bool sSharedExperience, sSaveBackups, sProtectShinies;
 static uint32_t sPromptSequence, sPromptPending;
 static bool sPromptAllow;
+
+enum MysteryPhase { MYSTERY_IDLE, MYSTERY_QUEUED, MYSTERY_EXECUTING, MYSTERY_DONE };
+static enum MysteryPhase sMysteryPhase;
+static bool sMysteryActivate;
+static unsigned sMysteryEvent, sMysteryCount;
+static int sMysteryResult, sMysteryStates[CTR_MYSTERY_MAX_EVENTS];
+static struct timespec sMysteryDeadline;
+static pthread_once_t sMysteryOnce = PTHREAD_ONCE_INIT;
+static pthread_cond_t sMysteryCond;
+static bool sMysteryCondReady;
+
+static void InitMysteryCond(void)
+{
+    pthread_condattr_t attr;
+    if (pthread_condattr_init(&attr) != 0) return;
+    if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC) == 0)
+        sMysteryCondReady = pthread_cond_init(&sMysteryCond, &attr) == 0;
+    pthread_condattr_destroy(&attr);
+}
 
 static void CopyPath(char *dst, const char *src)
 {
@@ -334,6 +357,14 @@ void CtrHost_SetState(CtrHostState state)
     {
         sState = state;
         sPauseAcknowledged = false;
+        if (state != CTR_HOST_PAUSED && sMysteryPhase == MYSTERY_QUEUED)
+        {
+            sMysteryResult = state == CTR_HOST_EXITING ? CTR_MYSTERY_RESULT_NO_GAME
+                                                      : CTR_MYSTERY_RESULT_BUSY;
+            sMysteryCount = 0;
+            sMysteryPhase = MYSTERY_DONE;
+            pthread_cond_broadcast(&sMysteryCond);
+        }
         /* Keys held when the activity went away must not stay held. */
         if (state != CTR_HOST_RUNNING)
         {
@@ -356,6 +387,128 @@ CtrHostState CtrHost_GetState(void)
     return state;
 }
 
+static int RequestMystery(bool activate, unsigned eventId, int *states,
+                          unsigned capacity, int timeoutMs, unsigned *count)
+{
+    struct timespec deadline;
+    *count = 0;
+    pthread_mutex_lock(&sLock);
+    if (!sStarted || sState == CTR_HOST_EXITING || !CtrMystery_Query || !CtrMystery_Activate)
+    {
+        pthread_mutex_unlock(&sLock);
+        return CTR_MYSTERY_RESULT_NO_GAME;
+    }
+    if (sState != CTR_HOST_PAUSED || sMysteryPhase != MYSTERY_IDLE)
+    {
+        pthread_mutex_unlock(&sLock);
+        return CTR_MYSTERY_RESULT_BUSY;
+    }
+    pthread_once(&sMysteryOnce, InitMysteryCond);
+    if (!sMysteryCondReady)
+    {
+        pthread_mutex_unlock(&sLock);
+        return CTR_MYSTERY_RESULT_FAILED;
+    }
+    sMysteryActivate = activate;
+    sMysteryEvent = eventId;
+    sMysteryCount = 0;
+    sMysteryResult = CTR_MYSTERY_RESULT_FAILED;
+    sMysteryPhase = MYSTERY_QUEUED;
+    /* RTC/date changes must not extend a queued operation's lifetime. */
+    int waitMs = timeoutMs < 0 ? 0 : timeoutMs > 5000 ? 5000 : timeoutMs;
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
+    deadline.tv_sec += waitMs / 1000;
+    deadline.tv_nsec += (long)(waitMs % 1000) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L)
+    {
+        ++deadline.tv_sec;
+        deadline.tv_nsec -= 1000000000L;
+    }
+    sMysteryDeadline = deadline;
+    pthread_cond_broadcast(&sCond);
+    while (sMysteryPhase != MYSTERY_DONE)
+    {
+        if (sMysteryPhase == MYSTERY_EXECUTING)
+        {
+            /* A started in-memory operation cannot be rolled back or reported
+             * as unexecuted. It never waits on I/O/UI, and its result is exact. */
+            pthread_cond_wait(&sMysteryCond, &sLock);
+        }
+        else if (pthread_cond_timedwait(&sMysteryCond, &sLock, &deadline) == ETIMEDOUT
+                 && sMysteryPhase == MYSTERY_QUEUED)
+        {
+            sMysteryPhase = MYSTERY_IDLE;
+            pthread_mutex_unlock(&sLock);
+            return CTR_MYSTERY_RESULT_TIMEOUT;
+        }
+    }
+    int result = sMysteryResult;
+    *count = sMysteryCount;
+    if (states && capacity && sMysteryCount)
+    {
+        unsigned n = capacity < sMysteryCount ? capacity : sMysteryCount;
+        memcpy(states, sMysteryStates, n * sizeof(*states));
+    }
+    sMysteryPhase = MYSTERY_IDLE;
+    pthread_mutex_unlock(&sLock);
+    return result;
+}
+
+unsigned CtrHost_QueryMysteryEvents(int *states, unsigned capacity, int timeoutMs)
+{
+    unsigned count;
+    int result = RequestMystery(false, 0, states, capacity, timeoutMs, &count);
+    return result == CTR_MYSTERY_RESULT_ACTIVATED ? count : 0;
+}
+
+int CtrHost_ActivateMysteryEvent(unsigned eventId, int timeoutMs)
+{
+    unsigned count;
+    if (eventId >= CTR_MYSTERY_MAX_EVENTS) return CTR_MYSTERY_RESULT_INVALID;
+    return RequestMystery(true, eventId, NULL, 0, timeoutMs, &count);
+}
+
+/* Called with sLock held, exclusively from the game thread's pause loop. */
+static void RunMysteryRequest(void)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    if (now.tv_sec > sMysteryDeadline.tv_sec
+        || (now.tv_sec == sMysteryDeadline.tv_sec && now.tv_nsec >= sMysteryDeadline.tv_nsec))
+    {
+        sMysteryResult = CTR_MYSTERY_RESULT_TIMEOUT;
+        sMysteryCount = 0;
+        sMysteryPhase = MYSTERY_DONE;
+        pthread_cond_broadcast(&sMysteryCond);
+        return;
+    }
+    int states[CTR_MYSTERY_MAX_EVENTS];
+    for (unsigned i = 0; i < CTR_MYSTERY_MAX_EVENTS; ++i) states[i] = CTR_MYSTERY_NO_GAME;
+    unsigned count = 0, eventId = sMysteryEvent;
+    bool activate = sMysteryActivate;
+    sMysteryPhase = MYSTERY_EXECUTING;
+    sPauseAcknowledged = false;
+    pthread_mutex_unlock(&sLock);
+    int result;
+    if (activate)
+        result = CtrMystery_Activate(eventId);
+    else
+    {
+        count = CtrMystery_Query(states, CTR_MYSTERY_MAX_EVENTS);
+        result = count <= CTR_MYSTERY_MAX_EVENTS ? CTR_MYSTERY_RESULT_ACTIVATED
+                                               : CTR_MYSTERY_RESULT_FAILED;
+        if (count > CTR_MYSTERY_MAX_EVENTS) count = 0;
+    }
+    pthread_mutex_lock(&sLock);
+    if (count) memcpy(sMysteryStates, states, count * sizeof(*states));
+    sMysteryCount = count;
+    sMysteryResult = result;
+    sMysteryPhase = MYSTERY_DONE;
+    sPauseAcknowledged = sState == CTR_HOST_PAUSED;
+    pthread_cond_broadcast(&sCond);
+    pthread_cond_broadcast(&sMysteryCond);
+}
+
 CtrHostState CtrHost_WaitWhilePaused(void)
 {
     CtrHostState state;
@@ -364,7 +517,12 @@ CtrHostState CtrHost_WaitWhilePaused(void)
     sPauseAcknowledged = sState == CTR_HOST_PAUSED;
     pthread_cond_broadcast(&sCond);
     while (sState == CTR_HOST_PAUSED)
-        pthread_cond_wait(&sCond, &sLock);
+    {
+        if (sMysteryPhase == MYSTERY_QUEUED)
+            RunMysteryRequest();
+        else
+            pthread_cond_wait(&sCond, &sLock);
+    }
     sPauseAcknowledged = false;
     state = sState;
     pthread_mutex_unlock(&sLock);

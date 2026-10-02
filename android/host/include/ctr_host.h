@@ -83,6 +83,12 @@ bool CtrHost_ProtectShinies(void);
 bool CtrHost_ConfirmShinyFlee(void);
 void CtrHost_AnswerShinyFlee(uint32_t request, bool allow);
 bool CtrHost_IsShinyFleePending(uint32_t request);
+/* Settings worker only. Requests run on the paused game thread, without
+ * advancing frames. A queued request expires before it can mutate the game;
+ * once a bounded in-memory operation begins, its actual result is returned.
+ * An empty snapshot means no active game/transport unavailable. */
+unsigned CtrHost_QueryMysteryEvents(int *states, unsigned capacity, int timeoutMs);
+int CtrHost_ActivateMysteryEvent(unsigned eventId, int timeoutMs);
 /* Starts the game thread (origin's main()). Called once. */
 bool CtrHost_StartGame(void);
 

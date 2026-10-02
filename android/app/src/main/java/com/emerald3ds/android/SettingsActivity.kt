@@ -38,7 +38,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
     }
 
     override fun onPreferenceStartScreen(caller: PreferenceFragmentCompat, pref: PreferenceScreen): Boolean {
-        val fragment = SettingsFragment().apply {
+        val fragment = (if (pref.key == "mystery_events") MysteryEventsFragment() else SettingsFragment()).apply {
             arguments = Bundle().apply { putString(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT, pref.key) }
         }
         supportFragmentManager.beginTransaction().replace(R.id.settings_container, fragment)

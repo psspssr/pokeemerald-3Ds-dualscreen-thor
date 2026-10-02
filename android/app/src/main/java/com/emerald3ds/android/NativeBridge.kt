@@ -56,6 +56,8 @@ object NativeBridge {
     @JvmStatic private external fun nativeAnswerShinyFlee(request: Int, allow: Boolean)
     @JvmStatic private external fun nativeIsShinyFleePending(request: Int): Boolean
     @JvmStatic private external fun nativeTestShinyFlee(): Boolean
+    @JvmStatic private external fun nativeMysteryEvents(): IntArray
+    @JvmStatic private external fun nativeActivateMysteryEvent(event: Int): Int
 
     fun init(romfsDir: String, sdmcDir: String) {
         if (loaded) nativeInit(romfsDir, sdmcDir)
@@ -97,6 +99,12 @@ object NativeBridge {
     }
 
     fun isShinyFleePending(request: Int): Boolean = loaded && nativeIsShinyFleePending(request)
+
+    /** Mystery-events worker only: native code services these at its paused frame boundary. */
+    internal fun mysteryEvents(): IntArray = if (loaded) nativeMysteryEvents() else intArrayOf()
+
+    internal fun activateMysteryEvent(event: Int): Int =
+        if (loaded) nativeActivateMysteryEvent(event) else MysteryEventsModel.RESULT_NO_GAME
 
     internal fun testShinyFleeRoundTrip(): Boolean {
         check(BuildConfig.HOST_HARNESS) { "Only available in the isolated display test app" }
