@@ -7,7 +7,8 @@ typedef enum { C2D_TopLeft, C2D_TopRight, C2D_BotLeft, C2D_BotRight } C2D_Corner
 typedef struct { u32 color; float blend; } C2D_Tint;
 typedef struct { C2D_Tint corners[4]; } C2D_ImageTint;
 static inline u32 C2D_Color32(u8 r,u8 g,u8 b,u8 a) { return r|((u32)g<<8)|((u32)b<<16)|((u32)a<<24); }
-static inline u32 C2D_Color32f(float r,float g,float b,float a) { return C2D_Color32(r*255,g*255,b*255,a*255); }
+static inline u8 C2D_FloatToU8(float v) { return (u8)((v<0?0:v>1?1:v)*255+0.5f); }
+static inline u32 C2D_Color32f(float r,float g,float b,float a) { return C2D_Color32(C2D_FloatToU8(r),C2D_FloatToU8(g),C2D_FloatToU8(b),C2D_FloatToU8(a)); }
 static inline void C2D_SetImageTint(C2D_ImageTint *t,C2D_Corner c,u32 color,float blend) { t->corners[c]=(C2D_Tint){color,blend}; }
 static inline void C2D_PlainImageTint(C2D_ImageTint *t,u32 c,float blend) { for(int i=0;i<4;i++) C2D_SetImageTint(t,(C2D_Corner)i,c,blend); }
 static inline void C2D_AlphaImageTint(C2D_ImageTint *t,float a) { C2D_PlainImageTint(t,C2D_Color32f(1,1,1,a),0); }

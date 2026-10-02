@@ -2,6 +2,7 @@
 #include <android/native_window.h>
 #include <time.h>
 #include <errno.h>
+#include <ctrshim_apt.h>
 
 static EGLDisplay display=EGL_NO_DISPLAY;
 static EGLContext context=EGL_NO_CONTEXT;
@@ -18,6 +19,19 @@ static struct {
 static GLuint presentProgram,presentVbo,presentVao;
 static double nextVblank;
 static double framePeriod=1.0/59.83;
+static bool listenerRegistered;
+static void destroyWindow(int i);
+
+static void lifecycle(CtrAptEvent event,void *user)
+{
+    (void)user;
+    if(event==CTR_APT_SUSPEND || event==CTR_APT_EXIT) {
+        gpuC2DFlush();
+        for(int i=0;i<CTR_HOST_MAX_WINDOWS;i++) destroyWindow(i);
+    }
+    /* A resumed game starts a fresh pacing interval, with its FBOs retained. */
+    nextVblank=0;
+}
 
 double gpuNow(void)
 { struct timespec now; clock_gettime(CLOCK_MONOTONIC,&now); return now.tv_sec+now.tv_nsec*1e-9; }
@@ -72,7 +86,10 @@ bool gpuInit(void)
         glGenFramebuffers(1,&screens[i].fbo); glBindFramebuffer(GL_FRAMEBUFFER,screens[i].fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,screens[i].texture,0);
     }
-    glBindFramebuffer(GL_FRAMEBUFFER,0); glPixelStorei(GL_UNPACK_ALIGNMENT,1); initialized=true;
+    glBindFramebuffer(GL_FRAMEBUFFER,0); glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+    listenerRegistered=CtrApt_AddListener(lifecycle,NULL);
+    if(!listenerRegistered) goto fail;
+    initialized=true;
     __android_log_print(ANDROID_LOG_INFO,"EmeraldGPU","GLES %s, %s",glGetString(GL_VERSION),glGetString(GL_RENDERER));
     return true;
 fail:
@@ -103,6 +120,7 @@ static void refreshWindow(int i)
 
 void gpuShutdown(void)
 {
+    if(listenerRegistered) { CtrApt_RemoveListener(lifecycle,NULL); listenerRegistered=false; }
     if(display!=EGL_NO_DISPLAY) {
         for(int i=0;i<CTR_HOST_MAX_WINDOWS;i++) destroyWindow(i);
         for(int i=0;i<2;i++) {
@@ -220,3 +238,8 @@ bool gfxIsWide(void) { return false; }
 void gspWaitForVBlank(void) { gpuPresent(); gpuPace(); }
 Result GSPGPU_FlushDataCache(const void *address,u32 size) { (void)address; (void)size; __sync_synchronize(); return 0; }
 Result GSPGPU_InvalidateDataCache(const void *address,u32 size) { (void)address; (void)size; __sync_synchronize(); return 0; }
+
+#ifdef CTR_GPU_TEST
+/* Present-day GPU readback for the isolated conformance binary only. */
+GLuint gpuTestScreenFramebuffer(gfxScreen_t screen) { return screens[screen].fbo; }
+#endif

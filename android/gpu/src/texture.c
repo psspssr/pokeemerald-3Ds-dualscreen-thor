@@ -85,6 +85,21 @@ void C3D_TexDelete(C3D_Tex *texture)
 u32 C3D_CalcColorBufSize(u32 w,u32 h,GPU_COLORBUF format) { return gpuTextureSize(w,h,(GPU_TEXCOLOR)format); }
 u32 C3D_CalcDepthBufSize(u32 w,u32 h,GPU_DEPTHBUF format) { return w*h*(format==GPU_RB_DEPTH16?2:4); }
 
+static void targetStorage(unsigned width,unsigned height,GPU_COLORBUF format)
+{
+    /* Preserve the quantization and one-bit alpha of the 3DS render buffers.
+     * In particular, the composited RGBA5551 depth planes use alpha as a mask. */
+    GLenum internal=GL_RGBA8,base=GL_RGBA,type=GL_UNSIGNED_BYTE;
+    switch(format) {
+    case GPU_RB_RGBA5551: internal=GL_RGB5_A1; type=GL_UNSIGNED_SHORT_5_5_5_1; break;
+    case GPU_RB_RGBA4: internal=GL_RGBA4; type=GL_UNSIGNED_SHORT_4_4_4_4; break;
+    case GPU_RB_RGB565: internal=GL_RGB565; base=GL_RGB; type=GL_UNSIGNED_SHORT_5_6_5; break;
+    case GPU_RB_RGB8: internal=GL_RGB8; base=GL_RGB; break;
+    default: break;
+    }
+    glTexImage2D(GL_TEXTURE_2D,0,internal,width,height,0,base,type,NULL);
+}
+
 static C3D_RenderTarget *createTarget(int width,int height,GPU_COLORBUF color,C3D_DEPTHTYPE depth,GpuTexture *texture)
 {
     if(width<=0 || height<=0 || width>4096 || height>4096 || !gpuInit()) return NULL;
@@ -101,10 +116,14 @@ static C3D_RenderTarget *createTarget(int width,int height,GPU_COLORBUF color,C3
         vramFree(target->frameBuf.depthBuf); free(target); free(record); return NULL;
     }
     record->target=target; record->texture=texture;
-    if(texture) { record->color=texture->id; texture->authoritative=true; }
+    if(texture) {
+        record->color=texture->id; texture->authoritative=true;
+        glBindTexture(GL_TEXTURE_2D,record->color);
+        targetStorage(width,height,color);
+    }
     else {
         glGenTextures(1,&record->color); glBindTexture(GL_TEXTURE_2D,record->color);
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
+        targetStorage(width,height,color);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     }

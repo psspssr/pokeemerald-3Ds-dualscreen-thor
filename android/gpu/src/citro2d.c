@@ -54,7 +54,7 @@ void C2D_TargetClear(C3D_RenderTarget *target,u32 color)
 void C2D_SceneBegin(C3D_RenderTarget *target)
 {
     gpuC2DFlush(); if(!target) return;
-    C3D_FrameDrawOn(target); C2D_SceneSize(target->frameBuf.width,target->frameBuf.height,target->linked); C2D_ViewReset();
+    C3D_FrameDrawOn(target); C2D_SceneSize(target->frameBuf.width,target->frameBuf.height,target->linked);
 }
 void C2D_SceneSize(u32 width,u32 height,bool tilt)
 { gpuC2DFlush(); sceneWidth=tilt?height:width; sceneHeight=tilt?width:height; sceneTilt=tilt; }
