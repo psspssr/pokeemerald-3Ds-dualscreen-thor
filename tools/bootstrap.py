@@ -32,6 +32,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from check_origin import OriginError, check_origin
+
 ROOT = Path(__file__).resolve().parents[1]
 ORIGIN = ROOT / "origin"
 ANDROID = ROOT / "android"
@@ -126,8 +128,6 @@ def main() -> int:
     ap.add_argument("--apk", action="store_true", help="also build the APK (implies --make)")
     ap.add_argument("--release", action="store_true",
                     help="engine-only RomFS and assembleRelease (origin's release: data from a pack)")
-    ap.add_argument("--allow-undefined", action="store_true",
-                    help="link even if the shim/GPU layers leave symbols undefined")
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--python", default=sys.executable, help="Python the build calls (PYTHON=)")
     ap.add_argument("--ndk", default=find_ndk(), help="Android NDK r27 (default: $ANDROID_NDK_HOME, "
@@ -135,6 +135,11 @@ def main() -> int:
     args = ap.parse_args()
     if args.apk:
         args.make = True
+
+    try:
+        check_origin(ROOT)
+    except OriginError as exc:
+        raise SystemExit("bootstrap: %s" % exc) from exc
 
     tree = args.dir.resolve()
     patches = sorted(PATCHES.glob("*.patch"))
@@ -181,8 +186,6 @@ def main() -> int:
             "package-release" if args.release else "package"]
     if args.ndk:
         make.append("NDK=%s" % Path(args.ndk).resolve())
-    if args.allow_undefined:
-        make.append("ALLOW_UNDEFINED=1")
     run(make)
     print("bootstrap: native outputs in %s" % out)
 

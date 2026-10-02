@@ -13,6 +13,12 @@
 
 extern const char __ehdr_start[];
 
+/* The bundle is written at runtime. Its input constants are read-only, so
+ * give the output section an explicitly writable, zero-size input as well.
+ * GNU ld otherwise marks its relative relocations DT_TEXTREL even though
+ * .gamedata already resides in the writable LOAD segment. */
+__asm__(".pushsection .gamedata.writable,\"aw\",%progbits\n.popsection\n");
+
 __attribute__((constructor)) static void CheckLoadAddress(void)
 {
     if ((uintptr_t)__ehdr_start == (uintptr_t)CTR_LOAD_ADDRESS)

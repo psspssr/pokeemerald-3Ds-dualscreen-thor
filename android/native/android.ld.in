@@ -127,6 +127,7 @@ SECTIONS
 
   .gamedata ALIGN(32) @GAMEDATA_TYPE@ :
   {
+    KEEP (*(.gamedata.writable))
     __ctr_gamedata = .;
     *build/root/src/*(.rodata .roda .rodata.* .data.rel.ro .data.rel.ro.*)
     *build/root/data/*(.rodata .roda .rodata.* .data.rel.ro .data.rel.ro.*)

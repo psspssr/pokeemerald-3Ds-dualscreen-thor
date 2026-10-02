@@ -1,12 +1,5 @@
 #pragma once
-#if defined(__3DS__) || defined(_3DS)
 #include <3ds.h>
-#else
-#include <stdbool.h>
-#include <stdint.h>
-typedef uint8_t u8;
-typedef uint32_t u32;
-#endif
 
 #ifndef CITRO3D_NO_DEPRECATION
 #define C3D_DEPRECATED __attribute__ ((deprecated))
