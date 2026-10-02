@@ -1,0 +1,9 @@
+build/
+*.pyc
+__pycache__/
+local.properties
+.gradle/
+android/app/build/
+android/app/.cxx/
+*.apk
+*.keystore

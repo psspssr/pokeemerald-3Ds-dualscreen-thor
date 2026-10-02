@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Emerald Dual Screen</string>
+    <string name="app_full_name">Pokémon Emerald 3Ds Dual Screen for Android</string>
+
+    <!-- Pre-launch -->
+    <string name="extracting">Preparing game files…</string>
+    <string name="extract_failed">Could not prepare the game files: %1$s</string>
+    <string name="retry">Retry</string>
+    <string name="pak_missing_title">Game data pack needed</string>
+    <string name="pak_missing_body"><![CDATA[This app contains no game content. Generate <b>emerald3ds.pak</b> with the builder from the matching Pokémon Emerald 3Ds Dual Screen release, using a dump of your own Pokémon Emerald (USA, Europe) cartridge, then import it here.<br><br>It is stored as<br>%1$s]]></string>
+    <string name="import_pak_button">Import data pack…</string>
+    <string name="import_save_button">Import save…</string>
+    <string name="settings_button">Settings</string>
+    <string name="quit_button">Quit</string>
+    <string name="native_missing">This build has no game library (libemerald.so). Controls and layouts can be tried, but the game cannot start.</string>
+
+    <!-- Menu -->
+    <string name="menu_title">Paused</string>
+    <string name="menu_resume">Resume</string>
+    <string name="menu_settings">Settings</string>
+    <string name="menu_quit">Quit</string>
+    <string name="quit_confirm">Quit the game? Progress since your last in-game save is lost.</string>
+    <string name="toggle_screen">Touch screen</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="cat_display">Display</string>
+    <string name="cat_controls">On-screen controls</string>
+    <string name="cat_input">Gamepad and keyboard</string>
+    <string name="cat_dual">Dual display</string>
+    <string name="cat_data">Data</string>
+    <string name="cat_about">About</string>
+    <string name="pref_layout_portrait">Portrait layout</string>
+    <string name="pref_layout_landscape">Landscape layout</string>
+    <string name="pref_integer_scaling">Integer scaling</string>
+    <string name="pref_integer_scaling_summary">Scale the screens by whole multiples only</string>
+    <string name="pref_filter">Filter</string>
+    <string name="pref_keep_screen_on">Keep screen on</string>
+    <string name="pref_controls_visibility">Show controls</string>
+    <string name="pref_controls_opacity">Opacity</string>
+    <string name="pref_controls_size">Size</string>
+    <string name="pref_circle_pad">Circle pad</string>
+    <string name="pref_circle_pad_summary">Show an analog circle pad as well as the D-pad</string>
+    <string name="pref_haptics">Haptic feedback</string>
+    <string name="pref_gamepad_mapping">Face button mapping</string>
+    <string name="pref_dual_display">Use a second display</string>
+    <string name="pref_dual_display_summary">Show the bottom screen on a second built-in display (AYN Thor and similar)</string>
+    <string name="pref_top_display">Top screen on</string>
+    <string name="pref_dual_controls">On-screen controls in dual-display mode</string>
+    <string name="pref_dual_controls_summary">Touching outside the picture shows the controls</string>
+    <string name="pref_import_pak">Import data pack (emerald3ds.pak)…</string>
+    <string name="pref_import_save">Import save…</string>
+    <string name="pref_import_save_summary">A 3DS emerald3ds.sav works as is. Replaces the current save (a backup is kept).</string>
+    <string name="pref_export_save">Export save…</string>
+    <string name="pref_data_location">Data folder</string>
+    <string name="pref_about">About</string>
+    <string name="pref_version">Version %1$s</string>
+
+    <string name="import_restart_title">Restart needed</string>
+    <string name="import_restart_body">The game is running. It will close now (unsaved progress is lost) and start again with the imported file.</string>
+    <string name="restart_now">Restart now</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="import_done">Imported.</string>
+    <string name="import_bad_pak">That file is not an emerald3ds.pak data pack.</string>
+    <string name="import_bad_save">That file is not a save (expected at most 128 KiB).</string>
+    <string name="import_failed">Import failed: %1$s</string>
+    <string name="export_done">Save exported.</string>
+    <string name="export_none">There is no save yet.</string>
+    <string name="export_failed">Export failed: %1$s</string>
+
+    <string name="about_title">About</string>
+    <string name="about_body"><![CDATA[<b>Emerald Dual Screen for Android</b> %1$s<br><br>
+An Android port of <b>Pokémon Emerald 3Ds Dual Screen</b> by ZallaxDev (MIT licence), github.com/ZallaxDev/pokeemerald-3Ds-dualscreen, which compiles unchanged on top of a re-implementation of the 3DS libraries.<br><br>
+Built on the <b>pret/pokeemerald</b> decompilation (github.com/pret/pokeemerald).<br><br>
+Contains code from devkitPro <b>libctru</b>, <b>citro3d</b> and <b>citro2d</b> (zlib licence).<br><br>
+No game content is included: the game data is generated from your own cartridge dump.<br><br>
+This is an unofficial fan project, not affiliated with or endorsed by Nintendo, Game Freak, Creatures or The Pokémon Company. Pokémon and Pokémon Emerald are trademarks of their respective owners.]]></string>
+</resources>

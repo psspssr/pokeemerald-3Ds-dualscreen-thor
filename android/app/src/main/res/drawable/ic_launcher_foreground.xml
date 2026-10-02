@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A clamshell with two screens and a cut gem on the top one. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Upper shell and top screen (5:3). -->
+    <path
+        android:fillColor="#FFE8F5EE"
+        android:pathData="M30,26h48a4,4 0,0 1,4 4v24a2,2 0,0 1,-2 2h-52a2,2 0,0 1,-2 -2v-24a4,4 0,0 1,4 -4z" />
+    <path
+        android:fillColor="#FF173D2F"
+        android:pathData="M33,29h42v24h-42z" />
+    <!-- Lower shell and bottom screen (4:3). -->
+    <path
+        android:fillColor="#FFCFE8DB"
+        android:pathData="M28,58h52a2,2 0,0 1,2 2v20a4,4 0,0 1,-4 4h-48a4,4 0,0 1,-4 -4v-20a2,2 0,0 1,2 -2z" />
+    <path
+        android:fillColor="#FF173D2F"
+        android:pathData="M41,61h26v19.5h-26z" />
+    <!-- D-pad and buttons on the lower shell. -->
+    <path
+        android:fillColor="#FF0E3B2A"
+        android:pathData="M33,68h2v-2h2v2h2v2h-2v2h-2v-2h-2z" />
+    <path
+        android:fillColor="#FF0E3B2A"
+        android:pathData="M73,67m-1.5,0a1.5,1.5 0,1 0,3 0a1.5,1.5 0,1 0,-3 0M73,73m-1.5,0a1.5,1.5 0,1 0,3 0a1.5,1.5 0,1 0,-3 0M70,70m-1.5,0a1.5,1.5 0,1 0,3 0a1.5,1.5 0,1 0,-3 0M76,70m-1.5,0a1.5,1.5 0,1 0,3 0a1.5,1.5 0,1 0,-3 0" />
+    <!-- Gem: crown, pavilion and a highlight facet. -->
+    <path
+        android:fillColor="#FF2BB673"
+        android:pathData="M48,36h12l4,4l-10,10l-10,-10z" />
+    <path
+        android:fillColor="#FF7FE0AE"
+        android:pathData="M48,36h12l-2,4h-8z" />
+    <path
+        android:fillColor="#FF1C8A55"
+        android:pathData="M44,40h20l-10,10z" />
+    <path
+        android:fillColor="#FF4FD08F"
+        android:pathData="M50,40h8l-4,10z" />
+    <!-- Bottom-screen touch point. -->
+    <path
+        android:fillColor="#FF7FE0AE"
+        android:pathData="M58,72m-2,0a2,2 0,1 0,4 0a2,2 0,1 0,-4 0" />
+</vector>

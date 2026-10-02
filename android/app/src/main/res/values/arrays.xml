@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="layout_portrait_entries">
+        <item>Stacked, both screens full width</item>
+        <item>Stacked, same scale (like the console)</item>
+    </string-array>
+    <string-array name="layout_portrait_values" translatable="false">
+        <item>fill</item>
+        <item>console</item>
+    </string-array>
+
+    <string-array name="layout_landscape_entries">
+        <item>Side by side</item>
+        <item>Large top screen, small bottom screen</item>
+        <item>Top screen only (button shows the bottom screen)</item>
+        <item>Stacked</item>
+    </string-array>
+    <string-array name="layout_landscape_values" translatable="false">
+        <item>side_by_side</item>
+        <item>top_large</item>
+        <item>top_only</item>
+        <item>stacked</item>
+    </string-array>
+
+    <string-array name="filter_entries">
+        <item>Linear (smooth)</item>
+        <item>Nearest (sharp)</item>
+    </string-array>
+    <string-array name="filter_values" translatable="false">
+        <item>linear</item>
+        <item>nearest</item>
+    </string-array>
+
+    <string-array name="controls_visibility_entries">
+        <item>Automatic (hide while a gamepad or keyboard is used)</item>
+        <item>Always</item>
+        <item>Never</item>
+    </string-array>
+    <string-array name="controls_visibility_values" translatable="false">
+        <item>auto</item>
+        <item>always</item>
+        <item>never</item>
+    </string-array>
+
+    <string-array name="gamepad_mapping_entries">
+        <item>By position, like a Nintendo console (bottom = B, right = A)</item>
+        <item>By label (A = A, B = B)</item>
+    </string-array>
+    <string-array name="gamepad_mapping_values" translatable="false">
+        <item>position</item>
+        <item>label</item>
+    </string-array>
+
+    <string-array name="top_display_entries">
+        <item>Main display</item>
+        <item>Second display</item>
+    </string-array>
+    <string-array name="top_display_values" translatable="false">
+        <item>main</item>
+        <item>second</item>
+    </string-array>
+</resources>

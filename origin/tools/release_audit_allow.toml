@@ -1,0 +1,29 @@
+# Explicit exceptions for tools/release_audit.py. Every entry needs a reason.
+
+[large]
+# Files over 1 MiB that are allowed (globs): the release's own executables.
+paths = [
+    "Emerald3DS-v*-Windows/Emerald3DS-Builder.exe",
+    "Emerald3DS-v*-Windows/emerald3ds-builder-cli.exe",
+    "Emerald3DS-v*-Windows/payload/Emerald3DS.3dsx",
+]
+
+[media]
+# Images and binary assets allowed in the repository, with their provenance.
+"3ds_port/assets/voxel/trees/tree_crown.png" = "original art by the Pokémon Emerald 3Ds Dual Screen author"
+"3ds_port/assets/voxel/trees/tree_trunk.png" = "original art by the Pokémon Emerald 3Ds Dual Screen author"
+"3ds_port/assets/voxel/trees/tree_small_crown.png" = "original art by the Pokémon Emerald 3Ds Dual Screen author"
+"3ds_port/assets/voxel/trees/tree_small_trunk.png" = "original art by the Pokémon Emerald 3Ds Dual Screen author"
+
+[local_paths]
+# Files allowed to mention a local path (documentation of the audit itself).
+paths = ["tools/release_audit.py"]
+
+[skip]
+globs = []
+
+[runtime]
+# The builder's PyInstaller runtime: Python, Tcl/Tk, Pillow and their DLLs,
+# shipped unmodified under their own licenses. Checked for ROMs, data packs
+# and secrets, not for size or incidental byte runs.
+globs = ["Emerald3DS-v*-Windows/_internal/*"]

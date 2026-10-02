@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="emerald">#FF2BB673</color>
+    <color name="emerald_light">#FF7FE0AE</color>
+    <color name="emerald_dark">#FF0F5C3A</color>
+    <color name="surface_dark">#FF101614</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="ic_launcher_background">#FF0E3B2A</color>
+</resources>

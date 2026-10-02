@@ -1,0 +1,6 @@
+# The origin commit imported in origin/ (git subtree, squashed).
+# Rewritten by tools/sync_origin.py; do not edit by hand.
+[origin]
+repository = "https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen"
+branch = "main"
+commit = "4c64da2644223668c60e59c7731347baada7295d"

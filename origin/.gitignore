@@ -1,0 +1,43 @@
+# Bootstrapped upstream tree and build outputs
+/build/
+/dist/
+3ds_port/build/
+3ds_port/dist/
+3ds_port/romfs/**
+!3ds_port/romfs/.gitignore
+!3ds_port/romfs/boot.txt
+3ds_port/local.mk
+builder/build/
+builder/dist/
+builder/payload/
+
+# Console and toolchain outputs
+*.3dsx
+*.smdh
+*.elf
+*.map
+*.o
+*.d
+*.exe
+*.shbin
+
+# ROMs, saves, data packs: never commit
+*.gba
+*.agb
+*.nds
+*.3ds
+*.cia
+*.sav
+*.pak
+*.recipe
+
+# Python, logs, editors, agents
+__pycache__/
+*.py[cod]
+*.log
+.vscode/
+.idea/
+.claude/
+.agents/
+session-*.md
+.public-denylist

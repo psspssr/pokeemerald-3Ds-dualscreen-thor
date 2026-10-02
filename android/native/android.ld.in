@@ -1,0 +1,185 @@
+/*
+	libemerald.so: GNU ld's default -shared script for armelf_linux_eabi
+	(binutils 2.42, `ld --verbose -shared`) with origin's one addition from
+	3ds_port/emerald3ds.ld.in. The read-only data of the game translation
+	units (build/root/src, build/root/data) leaves .rodata and is gathered in
+	.gamedata, in the data segment, outside RELRO: the bundle loader
+	(3ds_script_loader.c) writes it at start-up. The image link keeps the
+	section's contents, the shipped library reserves it NOLOAD
+	(@GAMEDATA_TYPE@), exactly as on the console.
+
+	Differences from emerald3ds.ld.in that a shared object needs:
+	- Position-independent code puts constant data that holds pointers in
+	  .data.rel.ro instead of .rodata, so the game units' .data.rel.ro goes to
+	  .gamedata too; that is the data GCC put in .rodata on the console.
+	- The text segment starts at @LOAD_ADDRESS@. The library must be loaded
+	  there (android/native/boot reserves that range and loads it with
+	  ANDROID_DLEXT_RESERVED_ADDRESS): the asset index holds link-time stub
+	  addresses (gen_asset_table.py) that 3ds_assets.c compares with live
+	  pointers, as the 3DSX is always loaded at its link address.
+*/
+OUTPUT_FORMAT("elf32-littlearm", "elf32-bigarm", "elf32-littlearm")
+OUTPUT_ARCH(arm)
+SECTIONS
+{
+  . = SEGMENT_START("text-segment", @LOAD_ADDRESS@) + SIZEOF_HEADERS;
+  .note.gnu.build-id  : { *(.note.gnu.build-id) }
+  .note.android.ident : { KEEP (*(.note.android.ident)) }
+  .hash           : { *(.hash) }
+  .gnu.hash       : { *(.gnu.hash) }
+  .dynsym         : { *(.dynsym) }
+  .dynstr         : { *(.dynstr) }
+  .gnu.version    : { *(.gnu.version) }
+  .gnu.version_d  : { *(.gnu.version_d) }
+  .gnu.version_r  : { *(.gnu.version_r) }
+  .rel.dyn        :
+    {
+      *(.rel.init)
+      *(.rel.text .rel.text.* .rel.gnu.linkonce.t.*)
+      *(.rel.fini)
+      *(.rel.rodata .rel.rodata.* .rel.gnu.linkonce.r.*)
+      *(.rel.data.rel.ro .rel.data.rel.ro.* .rel.gnu.linkonce.d.rel.ro.*)
+      *(.rel.data .rel.data.* .rel.gnu.linkonce.d.*)
+      *(.rel.tdata .rel.tdata.* .rel.gnu.linkonce.td.*)
+      *(.rel.tbss .rel.tbss.* .rel.gnu.linkonce.tb.*)
+      *(.rel.ctors)
+      *(.rel.dtors)
+      *(.rel.got)
+      *(.rel.bss .rel.bss.* .rel.gnu.linkonce.b.*)
+      *(.rel.iplt)
+    }
+  .rel.plt        : { *(.rel.plt) }
+  .init           : { KEEP (*(SORT_NONE(.init))) }
+  .plt            : { *(.plt) }
+  .iplt           : { *(.iplt) }
+  .text           :
+  {
+    *(.text.unlikely .text.*_unlikely .text.unlikely.*)
+    *(.text.exit .text.exit.*)
+    *(.text.startup .text.startup.*)
+    *(.text.hot .text.hot.*)
+    *(SORT(.text.sorted.*))
+    *(.text .stub .text.* .gnu.linkonce.t.*)
+    *(.gnu.warning)
+    *(.glue_7t) *(.glue_7) *(.vfp11_veneer) *(.v4_bx)
+  }
+  .fini           : { KEEP (*(SORT_NONE(.fini))) }
+  PROVIDE (__etext = .);
+  PROVIDE (_etext = .);
+  PROVIDE (etext = .);
+  .ARM.extab   : { *(.ARM.extab* .gnu.linkonce.armextab.*) }
+  .ARM.exidx   :
+    {
+      PROVIDE_HIDDEN (__exidx_start = .);
+      *(.ARM.exidx* .gnu.linkonce.armexidx.*)
+      PROVIDE_HIDDEN (__exidx_end = .);
+    }
+  .eh_frame_hdr   : { *(.eh_frame_hdr) *(.eh_frame_entry .eh_frame_entry.*) }
+  .eh_frame       : ONLY_IF_RO { KEEP (*(.eh_frame)) *(.eh_frame.*) }
+  .gcc_except_table   : ONLY_IF_RO { *(.gcc_except_table .gcc_except_table.*) }
+  .gnu_extab   : ONLY_IF_RO { *(.gnu_extab*) }
+  . = DATA_SEGMENT_ALIGN (CONSTANT (MAXPAGESIZE), CONSTANT (COMMONPAGESIZE));
+  .eh_frame       : ONLY_IF_RW { KEEP (*(.eh_frame)) *(.eh_frame.*) }
+  .gnu_extab      : ONLY_IF_RW { *(.gnu_extab) }
+  .gcc_except_table   : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) }
+  .tdata	  : { *(.tdata .tdata.* .gnu.linkonce.td.*) }
+  .tbss		  : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) }
+  .preinit_array    : { KEEP (*(.preinit_array)) }
+  .init_array    :
+  {
+    KEEP (*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
+    KEEP (*(.init_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .ctors))
+  }
+  .fini_array    :
+  {
+    KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*) SORT_BY_INIT_PRIORITY(.dtors.*)))
+    KEEP (*(.fini_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .dtors))
+  }
+  .data.rel.ro :
+  {
+    EXCLUDE_FILE(*build/root/src/* *build/root/data/*) *(.data.rel.ro.local* .gnu.linkonce.d.rel.ro.local.*)
+    EXCLUDE_FILE(*build/root/src/* *build/root/data/*) *(.data.rel.ro .data.rel.ro.* .gnu.linkonce.d.rel.ro.*)
+    *build/root/src/platform/*(.data.rel.ro .data.rel.ro.*)
+    /* .rodata, here in RELRO rather than in the text segment: assembler-written
+       .rodata (the map descriptors, the script keep table) holds absolute
+       pointers, dynamic relocations in a position-independent library, and
+       bionic refuses text relocations. In this output section (not one of its
+       own) because GNU ld flags DT_TEXTREL for any output section that only
+       has read-only inputs, whatever segment it lands in. */
+    EXCLUDE_FILE(*build/root/src/* *build/root/data/*) *(.rodata .roda .rodata.* .gnu.linkonce.r.*)
+    /* Port code in the game tree and the port's map descriptors. */
+    *build/root/src/platform/*(.rodata .roda .rodata.*)
+    *(.rodata.port_map_assets)
+    *all.rodata*(*)
+    *(.rodata1)
+  }
+  .dynamic        : { *(.dynamic) }
+  . = DATA_SEGMENT_RELRO_END (0, .);
+  .got            : { *(.got.plt) *(.igot.plt) *(.got) *(.igot) }
+  .data           :
+  {
+    PROVIDE (__data_start = .);
+    *(.data .data.* .gnu.linkonce.d.*)
+    SORT(CONSTRUCTORS)
+  }
+  .data1          : { *(.data1) }
+  PROVIDE (_edata = .); PROVIDE (edata = .);
+
+  .gamedata ALIGN(32) @GAMEDATA_TYPE@ :
+  {
+    __ctr_gamedata = .;
+    *build/root/src/*(.rodata .roda .rodata.* .data.rel.ro .data.rel.ro.*)
+    *build/root/data/*(.rodata .roda .rodata.* .data.rel.ro .data.rel.ro.*)
+    . = ALIGN(4);
+    __ctr_gamedata_end = .;
+  }
+
+  . = ALIGN(ALIGNOF(NEXT_SECTION));
+  PROVIDE (__bss_start = .);
+  PROVIDE (__bss_start__ = .);
+  .bss            :
+  {
+   *(.dynbss)
+   *(.bss .bss.* .gnu.linkonce.b.*)
+   *(COMMON)
+   . = ALIGN(. != 0 ? 32 / 8 : 1);
+  }
+  PROVIDE (_bss_end__ = .); PROVIDE (__bss_end__ = .);
+  . = ALIGN(32 / 8);
+  PROVIDE (__end__ = .);
+  PROVIDE (_end = .); PROVIDE (end = .);
+  . = DATA_SEGMENT_END (.);
+  .stab          0 : { *(.stab) }
+  .stabstr       0 : { *(.stabstr) }
+  .comment 0 (INFO) : { *(.comment); LINKER_VERSION; }
+  .debug          0 : { *(.debug) }
+  .line           0 : { *(.line) }
+  .debug_srcinfo  0 : { *(.debug_srcinfo) }
+  .debug_sfnames  0 : { *(.debug_sfnames) }
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+  .debug_info     0 : { *(.debug_info .gnu.linkonce.wi.*) }
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  .debug_line     0 : { *(.debug_line .debug_line.* .debug_line_end) }
+  .debug_frame    0 : { *(.debug_frame) }
+  .debug_str      0 : { *(.debug_str) }
+  .debug_loc      0 : { *(.debug_loc) }
+  .debug_macinfo  0 : { *(.debug_macinfo) }
+  .debug_weaknames 0 : { *(.debug_weaknames) }
+  .debug_funcnames 0 : { *(.debug_funcnames) }
+  .debug_typenames 0 : { *(.debug_typenames) }
+  .debug_varnames  0 : { *(.debug_varnames) }
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .debug_ranges   0 : { *(.debug_ranges) }
+  .debug_addr     0 : { *(.debug_addr) }
+  .debug_line_str 0 : { *(.debug_line_str) }
+  .debug_loclists 0 : { *(.debug_loclists) }
+  .debug_macro    0 : { *(.debug_macro) }
+  .debug_names    0 : { *(.debug_names) }
+  .debug_rnglists 0 : { *(.debug_rnglists) }
+  .debug_str_offsets 0 : { *(.debug_str_offsets) }
+  .debug_sup      0 : { *(.debug_sup) }
+  .gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }
+  .note.gnu.arm.ident 0 : { KEEP (*(.note.gnu.arm.ident)) }
+  /DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) }
+}

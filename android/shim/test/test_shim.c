@@ -1,0 +1,219 @@
+/* Behavioral tests for the real system shim, with only Android I/O replaced. */
+#include <3ds/allocator/linear.h>
+#include <3ds/allocator/vram.h>
+#include <3ds/ndsp/channel.h>
+#include <3ds/services/apt.h>
+#include <3ds/services/hid.h>
+#include <3ds/thread.h>
+#include <3ds/romfs.h>
+#include <ctr_host.h>
+#include <ctrshim.h>
+#include <ctrshim_mem.h>
+#include <assert.h>
+#include <errno.h>
+#include <math.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include "ndsp_backend.h"
+
+static char romfs[512], sdmc[512];
+static CtrHostInput input;
+static pthread_mutex_t hostLock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t hostCond = PTHREAD_COND_INITIALIZER;
+static CtrHostState hostState = CTR_HOST_RUNNING;
+static atomic_int pauses, resumes, exits, exitCode, cleanup;
+
+const char *CtrHost_RomfsDir(void) { return romfs; }
+const char *CtrHost_SdmcDir(void) { return sdmc; }
+void CtrHost_GetInput(CtrHostInput *out) { *out = input; }
+CtrHostState CtrHost_GetState(void)
+{
+    pthread_mutex_lock(&hostLock);
+    CtrHostState state = hostState;
+    pthread_mutex_unlock(&hostLock);
+    return state;
+}
+void CtrHost_SetState(CtrHostState state)
+{
+    pthread_mutex_lock(&hostLock);
+    hostState = state;
+    pthread_cond_broadcast(&hostCond);
+    pthread_mutex_unlock(&hostLock);
+}
+CtrHostState CtrHost_WaitWhilePaused(void)
+{
+    pthread_mutex_lock(&hostLock);
+    while (hostState == CTR_HOST_PAUSED) pthread_cond_wait(&hostCond, &hostLock);
+    CtrHostState state = hostState;
+    pthread_mutex_unlock(&hostLock);
+    return state;
+}
+void CtrHost_NotifyGameExit(int code) { atomic_store(&exitCode, code); atomic_fetch_add(&exits, 1); }
+int __android_log_write(int priority, const char *tag, const char *text)
+{
+    (void)priority; (void)tag; (void)text;
+    return 0;
+}
+static bool AudioOpen(void) { return true; }
+static void AudioClose(void) {}
+static void AudioPause(void) { atomic_fetch_add(&pauses, 1); }
+static void AudioResume(void) { atomic_fetch_add(&resumes, 1); }
+static const CtrNdspBackend backend = {AudioOpen, AudioClose, AudioPause, AudioResume};
+const CtrNdspBackend *CtrNdsp_GetBackend(void) { return &backend; }
+
+static void TestFilesystem(const char *root)
+{
+    char mapped[1024], text[16] = {0};
+    snprintf(romfs, sizeof(romfs), "%s/romfs", root);
+    snprintf(sdmc, sizeof(sdmc), "%s/sdmc", root);
+    assert(CtrShim_MapPath("romfs:/data", mapped, sizeof(mapped)) == NULL && errno == ENODEV);
+    assert(mkdir(romfs, 0700) == 0);
+    assert(romfsInit() == 0);
+    assert(CtrShim_MapPath("romfs:/data", mapped, 4) == NULL && errno == ENAMETOOLONG);
+    assert(strcmp(CtrShim_MapPath("absolute", mapped, sizeof(mapped)), "absolute") == 0);
+    FILE *save = fopen("sdmc:/save.tmp", "wb");
+    assert(save != NULL && fwrite("save-data", 1, 9, save) == 9 && fclose(save) == 0);
+    assert(rename("sdmc:/save.tmp", "sdmc:/game.sav") == 0);
+    struct stat st;
+    assert(stat("sdmc:/game.sav", &st) == 0 && st.st_size == 9);
+    save = fopen("sdmc:/game.sav", "rb");
+    assert(save != NULL && fread(text, 1, sizeof(text), save) == 9 && fclose(save) == 0);
+    assert(strcmp(text, "save-data") == 0);
+    assert(unlink("sdmc:/game.sav") == 0);
+    romfsExit();
+    assert(fopen("romfs:/data", "rb") == NULL && errno == ENODEV);
+    assert(rmdir(romfs) == 0 && rmdir(sdmc) == 0);
+}
+
+static void TestMemory(void)
+{
+    u32 before = linearSpaceFree();
+    void *a = linearMemAlign(1001, 256), *b = linearAlloc(4096);
+    assert(a && b && ((uintptr_t)a & 255) == 0);
+    assert(linearGetSize(a) >= 1001 && linearSpaceFree() < before);
+    memset(a, 0x7b, 1001);
+    CtrMemBlock block;
+    assert(CtrMem_Find((char *)a + 1000, &block) && block.kind == CTR_MEM_LINEAR);
+    CtrMem_Register(CTR_MEM_FRAMEBUFFER, a, 1001, b);
+    assert(CtrMem_Find(a, &block) && block.kind == CTR_MEM_FRAMEBUFFER && block.owner == b);
+    CtrMem_Unregister(a);
+    assert(CtrMem_Find(a, &block) && block.kind == CTR_MEM_LINEAR);
+    assert(osConvertVirtToPhys(a) != 0);
+    linearFree(a); linearFree(b);
+    assert(linearSpaceFree() == before);
+    before = vramSpaceFree();
+    a = vramAllocAt(4096, VRAM_ALLOC_A); b = vramAllocAt(4096, VRAM_ALLOC_B);
+    assert(a && b && vramSpaceFree() == before - 8192);
+    vramFree(a); vramFree(b);
+    assert(vramSpaceFree() == before);
+    assert(linearMemAlign(1, 17) == NULL);
+}
+
+static void TestInput(void)
+{
+    input = (CtrHostInput){.keys = KEY_A | KEY_TOUCH, .circleX = 120, .circleY = 100,
+                           .touchX = 319, .touchY = 239};
+    hidScanInput();
+    assert((hidKeysDown() & (KEY_A | KEY_TOUCH | KEY_CPAD_RIGHT | KEY_CPAD_UP)) ==
+           (KEY_A | KEY_TOUCH | KEY_CPAD_RIGHT | KEY_CPAD_UP));
+    hidScanInput();
+    assert(hidKeysDown() == 0);
+    touchPosition touch;
+    hidTouchRead(&touch);
+    assert(touch.px == 319 && touch.py == 239);
+    input = (CtrHostInput){0}; hidScanInput();
+    assert(hidKeysHeld() == 0 && (hidKeysUp() & KEY_A));
+    hidTouchRead(&touch);
+    assert(touch.px == 0 && touch.py == 0);
+}
+
+static LightEvent gate;
+static LightLock counterLock;
+static unsigned counter;
+static void Worker(void *unused)
+{
+    (void)unused;
+    LightEvent_Wait(&gate);
+    for (int i = 0; i < 10000; ++i) {
+        LightLock_Lock(&counterLock); ++counter; LightLock_Unlock(&counterLock);
+    }
+    threadExit(37);
+}
+static void TestThreads(void)
+{
+    LightEvent_Init(&gate, RESET_STICKY);
+    LightLock_Init(&counterLock);
+    Thread a = threadCreate(Worker, NULL, 8192, 0x30, -1, false);
+    Thread b = threadCreate(Worker, NULL, 8192, 0x30, -1, false);
+    assert(a && b && threadJoin(a, 0) == CTR_RESULT_TIMEOUT);
+    LightEvent_Signal(&gate);
+    assert(threadJoin(a, 2000000000ull) == 0 && threadJoin(b, 2000000000ull) == 0);
+    assert(counter == 20000 && threadGetExitCode(a) == 37 && threadGetExitCode(b) == 37);
+    threadFree(a); threadFree(b);
+    LightEvent_Init(&gate, RESET_ONESHOT);
+    assert(LightEvent_WaitTimeout(&gate, 1000000) != 0);
+    LightEvent_Signal(&gate);
+    assert(LightEvent_TryWait(&gate) && !LightEvent_TryWait(&gate));
+    RecursiveLock recursive;
+    RecursiveLock_Init(&recursive);
+    RecursiveLock_Lock(&recursive); assert(RecursiveLock_TryLock(&recursive) == 0);
+    RecursiveLock_Unlock(&recursive); RecursiveLock_Unlock(&recursive);
+}
+
+static void *PauseLoop(void *unused) { (void)unused; assert(aptMainLoop()); return NULL; }
+static void TestAudioAndLifecycle(void)
+{
+    assert(ndspInit() == 0);
+    int16_t pcm[] = {32767, -32768, 16384, -16384};
+    ndspWaveBuf wave = {.data_pcm16 = pcm, .nsamples = 2};
+    float out[8];
+    ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
+    ndspChnSetRate(0, 48000);
+    ndspChnSetInterp(0, NDSP_INTERP_NONE);
+    ndspChnWaveBufAdd(0, &wave);
+    assert(wave.status == NDSP_WBUF_QUEUED);
+    CtrNdsp_Render(out, 4, 48000);
+    assert(fabsf(out[2] - 32767.0f / 32768.0f) < 0.0001f && out[3] == -1.0f);
+    assert(out[4] == 0.5f && out[5] == -0.5f && wave.status == NDSP_WBUF_DONE);
+    float guard = 123;
+    CtrNdsp_Render(&guard, -1, 48000);
+    assert(guard == 123);
+    CtrHost_SetState(CTR_HOST_PAUSED);
+    pthread_t thread;
+    assert(pthread_create(&thread, NULL, PauseLoop, NULL) == 0);
+    for (int i = 0; i < 1000 && atomic_load(&pauses) == 0; ++i) usleep(1000);
+    assert(atomic_load(&pauses) == 1);
+    CtrHost_SetState(CTR_HOST_RUNNING);
+    pthread_join(thread, NULL);
+    assert(atomic_load(&resumes) == 1);
+    ndspExit();
+    CtrHost_SetState(CTR_HOST_EXITING);
+    assert(!aptMainLoop());
+}
+
+extern int __wrap_atexit(void (*function)(void));
+static void Cleanup(void) { atomic_fetch_add(&cleanup, 1); }
+static void *ExitThread(void *unused) { (void)unused; CtrShim_Exit(17); }
+static void TestExit(void)
+{
+    assert(__wrap_atexit(Cleanup) == 0);
+    pthread_t thread;
+    assert(pthread_create(&thread, NULL, ExitThread, NULL) == 0);
+    pthread_join(thread, NULL);
+    assert(atomic_load(&cleanup) == 1 && atomic_load(&exits) == 1 && atomic_load(&exitCode) == 17);
+}
+
+int main(void)
+{
+    char root[] = "/tmp/emerald-shim-XXXXXX";
+    assert(mkdtemp(root));
+    TestFilesystem(root); TestMemory(); TestInput(); TestThreads(); TestAudioAndLifecycle(); TestExit();
+    assert(rmdir(root) == 0);
+    puts("shim: filesystem, memory, input, synchronization, threads, PCM, lifecycle and exit passed");
+    return 0;
+}
