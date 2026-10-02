@@ -128,12 +128,25 @@ jobs:
           mkdir -p "$ANDROID_AVD_HOME"
           echo no | avdmanager create avd --force --name thor-ci --path "$ANDROID_AVD_HOME/thor-ci.avd" --package 'system-images;android-34;default;x86_64' --device pixel_2
           test -f "$ANDROID_AVD_HOME/thor-ci.ini"
+          python3 - "$ANDROID_AVD_HOME/thor-ci.avd/config.ini" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          fields = {}
+          for line in path.read_text().splitlines():
+              if '=' in line:
+                  key, value = line.split('=', 1)
+                  fields[key.strip()] = value.strip()
+          fields.update({'hw.lcd.width': '720', 'hw.lcd.height': '1280',
+                         'hw.lcd.density': '320', 'hw.initialOrientation': 'portrait'})
+          path.write_text(''.join(f'{key}={value}\n' for key, value in fields.items()))
+          PY
           "$EMERALD_EMULATOR" -accel-check
           "$EMERALD_EMULATOR" -list-avds
           cp "$ANDROID_HOME/system-images/android-34/default/x86_64/source.properties" emulator-image.properties
           # A smaller primary phone panel reduces software-composition load.
           # The test's separate Thor bottom display remains exactly 1240x1080.
-          "$EMERALD_EMULATOR" -avd thor-ci -port 5554 -accel on -cores 2 -memory 2048 -skin 720x1280 -dpi-device 320 -no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -gpu swiftshader > emulator.log 2>&1 &
+          "$EMERALD_EMULATOR" -avd thor-ci -port 5554 -accel on -cores 2 -memory 2048 -skin 720x1280 -no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -gpu swiftshader > emulator.log 2>&1 &
           emulator_pid=$!
           deadline=$((SECONDS + 300))
           while ((SECONDS < deadline)); do
