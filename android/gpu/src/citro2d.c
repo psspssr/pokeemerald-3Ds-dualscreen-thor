@@ -57,11 +57,14 @@ void C2D_SceneBegin(C3D_RenderTarget *target)
     C3D_FrameDrawOn(target); C2D_SceneSize(target->frameBuf.width,target->frameBuf.height,target->linked);
 }
 void C2D_SceneSize(u32 width,u32 height,bool tilt)
-{ gpuC2DFlush(); sceneWidth=tilt?height:width; sceneHeight=tilt?width:height; sceneTilt=tilt; }
-void C2D_ViewReset(void) { gpuC2DFlush(); Mtx_Identity(&view); }
-void C2D_ViewRestore(const C3D_Mtx *matrix) { gpuC2DFlush(); view=*matrix; }
-void C2D_ViewTranslate(float x,float y) { gpuC2DFlush(); Mtx_Translate(&view,x,y,0,true); }
-void C2D_ViewScale(float x,float y) { gpuC2DFlush(); Mtx_Scale(&view,x,y,1); }
+{ sceneWidth=tilt?height:width; sceneHeight=tilt?width:height; sceneTilt=tilt; }
+/* View/projection transforms are baked into each vertex before it is queued.
+ * Changing them does not change pending geometry, so sprites with distinct
+ * matrices can share a draw when their texture and fragment state agree. */
+void C2D_ViewReset(void) { Mtx_Identity(&view); }
+void C2D_ViewRestore(const C3D_Mtx *matrix) { view=*matrix; }
+void C2D_ViewTranslate(float x,float y) { Mtx_Translate(&view,x,y,0,true); }
+void C2D_ViewScale(float x,float y) { Mtx_Scale(&view,x,y,1); }
 
 static Vertex2D vertex(float x,float y,float depth,float u,float v,C2D_Tint tint)
 {

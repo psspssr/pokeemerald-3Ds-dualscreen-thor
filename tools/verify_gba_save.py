@@ -5,7 +5,9 @@ Checks the standard 14-sector rotating slots, footer signatures/counters,
 section checksums, fixed trainer/world/storage sizes and encrypted Pokemon
 checksums. A 64 KiB file is treated as a truncated flash image (missing bytes
 erased); normal exports are 128 KiB. A valid backup slot permits recovery
-from an interrupted newer save. This does not replace a real GBA load test.
+from an interrupted newer save. Also recognizes mGBA's 16-byte RTC suffix
+(plausible BCD clock fields; the format has no magic signature). This does
+not replace a real GBA load test.
 """
 import argparse
 import hashlib
@@ -39,8 +41,24 @@ def pokemon_check(mon: bytes, label: str) -> None:
 
 
 def verify(data: bytes) -> dict:
+    original = data
+    rtc = None
+    if len(data) == 131072 + 16:
+        trailer = data[-16:]
+        clock = trailer[:7]
+        if any((value & 15) > 9 or (value >> 4) > 9 for value in clock):
+            raise ValueError('16-byte suffix does not contain plausible mGBA BCD clock fields')
+        values = [(value >> 4) * 10 + (value & 15) for value in clock]
+        if any(clock) and not (1 <= values[1] <= 12 and 1 <= values[2] <= 31 and
+                               values[3] <= 6 and values[4] <= 23 and
+                               values[5] <= 59 and values[6] <= 59):
+            raise ValueError('16-byte suffix contains an invalid mGBA clock value')
+        rtc = {'format': 'mGBA-compatible RTC (no format signature)',
+               'clock_bcd_hex': clock.hex(), 'control': trailer[7],
+               'last_latch': int.from_bytes(trailer[8:], 'little')}
+        data = data[:131072]
     if len(data) not in (65536, 131072):
-        raise ValueError('expected a raw 64 KiB or 128 KiB .sav, without emulator save-state headers')
+        raise ValueError('expected 64 KiB/128 KiB raw .sav or 128 KiB plus a 16-byte mGBA RTC suffix')
     full = data.ljust(131072, b'\xff')
     slots, valid = [], []
     for slot in range(2):
@@ -85,7 +103,9 @@ def verify(data: bytes) -> dict:
         pokemon_check(world[0x238 + index * 100:0x238 + (index + 1) * 100], f'party {index}')
     for index in range(14 * 30):
         pokemon_check(storage[4 + index * 80:4 + (index + 1) * 80], f'box slot {index}')
-    return {'size': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'slots': slots,
+    return {'size': len(original), 'sha256': hashlib.sha256(original).hexdigest(),
+            'flash_size': len(data), 'flash_sha256': hashlib.sha256(data).hexdigest(),
+            'rtc_suffix': rtc, 'slots': slots,
             'selected_slot': slot, 'save_counter': counter,
             'player_name_hex': trainer[:8].hex(), 'gender': trainer[8],
             'trainer_id': int.from_bytes(trainer[10:14], 'little'), 'party_count': party_count,

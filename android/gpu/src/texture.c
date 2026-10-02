@@ -47,7 +47,7 @@ GLuint gpuTextureId(C3D_Tex *texture)
     GpuTexture *record=gpuFindTexture(texture);
     if(!record) return 0;
     glBindTexture(GL_TEXTURE_2D,record->id); gpuSetTextureParams(texture);
-    if(!record->authoritative) {
+    if(!record->authoritative && (!record->uploaded || memcmp(record->shadow,texture->data,texture->size))) {
         /* Origin edits atlas tiles directly, without a TexFlush per glyph.
          * PICA stores an eight-pixel-high tile row contiguously. Compare those
          * rows, then combine adjacent changed rows into one upload. Updating

@@ -48,6 +48,12 @@ int main(int argc,char **argv)
     C2D_DrawRectSolid(8,0,0,8,8,C2D_Color32(0,255,0,255));
     C2D_DrawRectSolid(0,8,0,8,8,C2D_Color32(0,0,255,255));
     pixel(2,13,255,0,0,255); pixel(13,13,0,255,0,255); pixel(2,2,0,0,255,255);
+    C2D_ViewReset();
+    C2D_DrawRectSolid(0,0,0,8,16,C2D_Color32(255,0,0,255));
+    C2D_ViewTranslate(8,0);
+    C2D_DrawRectSolid(0,0,0,8,16,C2D_Color32(0,255,0,255));
+    C2D_ViewReset();
+    pixel(2,2,255,0,0,255); pixel(13,2,0,255,0,255);
     C3D_Tex texture={0}; assert(C3D_TexInit(&texture,8,8,GPU_RGBA5551));
     for(unsigned y=0;y<8;y++) for(unsigned x=0;x<8;x++) ((u16 *)texture.data)[morton(x,y)]=y<4?(x<4?0xf801:0x07c1):(x<4?0x003f:0xffff);
     Tex3DS_SubTexture sub={8,8,0,1,1,0}; C2D_Image image={&texture,&sub};
@@ -174,6 +180,15 @@ int main(int argc,char **argv)
             C2D_DrawImageAt((C2D_Image){&atlas,&glyph},0,0,0,NULL,1,1); C2D_Flush(); glFinish();
         }
         printf("BENCH 1024-square atlas, one modified tile, 60 upload/draw/finish iterations: %.3f ms/update\n",(gpuNow()-start)*1000/60);
+        start=gpuNow();
+        for(int i=0;i<60;i++) {
+            for(int sprite=0;sprite<17;sprite++) {
+                C2D_ViewReset(); C2D_ViewTranslate(sprite%2,sprite%3);
+                C2D_DrawImageAt((C2D_Image){&atlas,&glyph},0,0,0,NULL,1,1);
+            }
+            C2D_Flush(); glFinish();
+        }
+        printf("BENCH 17 independently transformed sprites sharing an unchanged atlas: %.3f ms/frame\n",(gpuNow()-start)*1000/60);
         C3D_TexDelete(&atlas);
     }
     C2D_Fini(); C3D_Fini(); shaderProgramFree(&program); DVLB_Free(binary); gfxExit(); return 0;

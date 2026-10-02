@@ -45,6 +45,19 @@ class GbaSaveTests(unittest.TestCase):
         data[14 * 4096:28 * 4096] = image(counter=0, slot=1)[14 * 4096:28 * 4096]
         self.assertEqual(verify(bytes(data))['selected_slot'], 1)
 
+    def test_mgba_rtc_suffix(self):
+        trailer = bytes.fromhex('26100205123319406f88bf6a00000000')
+        result = verify(bytes(image()) + trailer)
+        self.assertEqual(result['size'], 131088)
+        self.assertEqual(result['flash_size'], 131072)
+        self.assertEqual(result['rtc_suffix']['control'], 0x40)
+        self.assertEqual(result['save_counter'], 1)
+
+    def test_unknown_suffix_rejected(self):
+        for trailer in (b'\x00', b'\xff' * 16, bytes(32)):
+            with self.assertRaises(ValueError):
+                verify(bytes(image()) + trailer)
+
 
 if __name__ == '__main__':
     unittest.main()

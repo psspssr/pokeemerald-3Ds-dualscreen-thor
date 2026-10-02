@@ -69,6 +69,8 @@ def translate(source: str) -> tuple[str, list[tuple[str, int]]]:
                     if not match:
                         raise ValueError("invalid uniform declaration")
                     name, count = match[1], int(match[2] or 1)
+                    if len(name.encode()) >= 64:
+                        raise ValueError("uniform name exceeds container's 63-byte limit")
                     if not count or register + count > 96 or name in symbols:
                         raise ValueError("invalid uniform register allocation")
                     symbols[name] = f"u[{register}]"

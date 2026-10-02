@@ -101,6 +101,10 @@ class ShaderTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "register allocation"):
             picasso.compile_shader(".fvec projection[97]\n")
 
+    def test_uniform_name_cannot_be_silently_truncated(self):
+        with self.assertRaisesRegex(ValueError, "63-byte limit"):
+            picasso.compile_shader(".fvec " + "long_name"*8 + "\n")
+
     def test_partial_write_retains_destination_mask(self):
         source = ".out p position\n.alias a v0\n.proc main\nmov p.xyz, a\nmov p.w, a.wwww\nend\n.end\n"
         glsl, _ = picasso.translate(source)
