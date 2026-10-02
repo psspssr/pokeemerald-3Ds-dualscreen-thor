@@ -22,14 +22,14 @@ import uuid
 from check_origin import ROOT, OriginError, check_origin, fetch_ref, git, write_lock
 
 
-def require_clean(root: Path) -> str:
+def require_clean(root: Path) -> tuple[str, str]:
     status = git(root, "status", "--porcelain=v1", "--untracked-files=all").stdout
     if status:
         raise OriginError("commit or stash local changes before importing upstream:\n" + status)
     branch = git(root, "symbolic-ref", "--quiet", "--short", "HEAD", check=False)
     if branch.returncode:
         raise OriginError("check out a local branch before importing upstream")
-    return git(root, "rev-parse", "HEAD").stdout.strip()
+    return branch.stdout.strip(), git(root, "rev-parse", "HEAD").stdout.strip()
 
 
 def check_ref(root: Path, ref: str) -> None:
@@ -80,7 +80,7 @@ def synchronize(root: Path, *, ref: str | None = None, dry_run: bool = False,
 
         with tempfile.TemporaryDirectory(prefix="emerald-origin-update-") as temporary:
             staging = Path(temporary) / "tree"
-            git(root, "worktree", "add", "--detach", str(staging), before)
+            git(root, "worktree", "add", "--detach", str(staging), before[1])
             try:
                 git(staging, "subtree", "merge", "--prefix=origin", new, "--squash",
                     "-m", f"Import upstream origin {new[:12]}")

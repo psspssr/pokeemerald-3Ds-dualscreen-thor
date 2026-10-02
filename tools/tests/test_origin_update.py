@@ -159,6 +159,17 @@ class OriginUpdateTest(unittest.TestCase):
             self.sync()
         self.assert_original_checkout()
 
+    def test_switching_branch_at_same_commit_does_not_update_wrong_branch(self):
+        (self.repo / "tools/check_shim_coverage.py").write_text(
+            "import subprocess\nsubprocess.run(" + repr(["git", "-C", str(self.repo), "switch", "-qc", "other"])
+            + ", check=True)\n")
+        self.before = self.commit(self.repo, "simulate concurrent branch switch during check")
+        with self.assertRaisesRegex(OriginError, "branch changed"):
+            self.sync()
+        self.assert_original_checkout()
+        self.assertEqual(self.before, git(self.repo, "rev-parse", "main").stdout.strip())
+        self.assert_no_temporary_refs_or_worktrees()
+
 
 if __name__ == "__main__":
     unittest.main()
