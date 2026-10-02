@@ -10,8 +10,15 @@ plugins {
 val nativeOut: File = (findProperty("emerald.nativeOut") as String? ?: "../../build/android-out")
     .let { if (File(it).isAbsolute) File(it) else file(it) }
     .canonicalFile
-val allowMissingNative = (findProperty("emerald.allowMissingNative") as String?).toBoolean()
 val nativeLibrary = File(nativeOut, "jniLibs/armeabi-v7a/libemerald.so")
+val harnessOut = layout.buildDirectory.dir("host-harness")
+
+val buildHostHarness by tasks.registering(Exec::class) {
+    workingDir = rootDir
+    commandLine("sh", "../host/test/build_fake.sh", harnessOut.get().asFile.absolutePath)
+    inputs.files(fileTree("../host") { include("src/**", "include/**", "test/*.c", "test/*.sh") })
+    outputs.dir(harnessOut)
+}
 
 android {
     namespace = "com.emerald3ds.android"
@@ -28,19 +35,36 @@ android {
             abiFilters += "armeabi-v7a"
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "HOST_HARNESS", "false")
     }
 
     buildTypes {
+        create("harness") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".harness"
+            versionNameSuffix = "-host-harness"
+            matchingFallbacks += "debug"
+            buildConfigField("boolean", "HOST_HARNESS", "true")
+            resValue("string", "app_name", "Emerald display test")
+            ndk.abiFilters += "x86_64"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
+    testBuildType = "harness"
 
     sourceSets {
-        getByName("main") {
-            jniLibs.srcDir(File(nativeOut, "jniLibs"))
-            assets.srcDir(File(nativeOut, "assets"))
+        for (variant in listOf("debug", "release")) {
+            getByName(variant) {
+                jniLibs.srcDir(File(nativeOut, "jniLibs"))
+                assets.srcDir(File(nativeOut, "assets"))
+            }
+        }
+        getByName("harness") {
+            jniLibs.srcDir(harnessOut.map { it.dir("jniLibs") })
+            assets.srcDir(harnessOut.map { it.dir("assets") })
         }
     }
 
@@ -76,18 +100,20 @@ dependencies {
 
 val checkEmeraldNative by tasks.registering {
     val library = nativeLibrary
-    val allowMissing = allowMissingNative
     doLast {
-        if (!library.isFile) {
+        if (!library.isFile || !File(library.parentFile, "libemeraldboot.so").isFile) {
             val message = "libemerald.so not found at $library.\n" +
                 "Build it with `python3 tools/bootstrap.py --make` (or point -Pemerald.nativeOut=<dir> at a\n" +
-                "directory holding jniLibs/armeabi-v7a/libemerald.so and assets/romfs/), or pass\n" +
-                "-Pemerald.allowMissingNative=true to build the UI without the game."
-            if (allowMissing) logger.warn("warning: $message") else throw GradleException(message)
+                "directory holding both libemerald.so and libemeraldboot.so in jniLibs/armeabi-v7a and assets/romfs/).\n" +
+                "Use assembleHarness to test the app with the separate native display test renderer."
+            throw GradleException(message)
         }
     }
 }
 
-tasks.named("preBuild") {
-    dependsOn(checkEmeraldNative)
+tasks.configureEach {
+    when (name) {
+        "preDebugBuild", "preReleaseBuild" -> dependsOn(checkEmeraldNative)
+        "preHarnessBuild" -> dependsOn(buildHostHarness)
+    }
 }

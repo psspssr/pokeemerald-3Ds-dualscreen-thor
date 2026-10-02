@@ -67,7 +67,8 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     private var surfaceHeight = 0
     private var safe = Rect()
     private var bottomToggled = false
-    private var presentation: GamePresentation? = null
+    internal var presentation: GamePresentation? = null
+        private set
     private var dualActive = false
     private var resumed = false
     private var menuShown = false
@@ -127,6 +128,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     override fun onDestroy() {
         displayManager.unregisterDisplayListener(this)
         dismissPresentation()
+        if (!exiting) handler.removeCallbacksAndMessages(null)
         if (current?.get() === this) current = null
         super.onDestroy()
     }
@@ -153,10 +155,12 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         relayout()
         if (phase == Phase.NEED_PAK) proceed()
         if (!menuShown) NativeBridge.setState(NativeBridge.STATE_RUNNING)
+        updateInputEnabled()
     }
 
     override fun onPause() {
         resumed = false
+        updateInputEnabled()
         NativeBridge.setState(NativeBridge.STATE_PAUSED)
         overlay.releaseAll()
         presentation?.touchView?.releaseAll()
@@ -190,13 +194,15 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         when {
             NativeBridge.isStarted() -> showGame()
             files.needsExtraction() -> extract()
-            !NativeBridge.loaded -> {
-                findViewById<View>(R.id.banner).visibility = View.VISIBLE
-                showGame()
-            }
+            !NativeBridge.loaded -> showError(getString(R.string.native_missing))
             else -> {
-                files.applyPendingImports()
-                if (files.pakFile.isFile) startGame() else showNeedPak()
+                try {
+                    files.applyPendingImports()
+                    if (BuildConfig.HOST_HARNESS || files.pakFile.isFile || files.hasEmbeddedGameData()) startGame()
+                    else showNeedPak()
+                } catch (e: IOException) {
+                    showError(getString(R.string.import_failed, e.message))
+                }
             }
         }
     }
@@ -277,6 +283,12 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         relayout()
     }
 
+    private fun updateInputEnabled() {
+        val enabled = resumed && phase == Phase.RUNNING && !menuShown && !exiting
+        overlay.inputEnabled = enabled
+        presentation?.touchView?.inputEnabled = enabled
+    }
+
     // ── Surfaces and layout ──────────────────────────────────────────────
 
     override fun surfaceCreated(holder: SurfaceHolder) {}
@@ -331,6 +343,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
                 Rect(), showToggle = false, allowed = false,
             )
         }
+        updateInputEnabled()
         Log.d(TAG, "layout ${w}x$h dual=$dual top=${layout.top}@${layout.topWindow} bottom=${layout.bottom}@${layout.bottomWindow}")
     }
 
@@ -364,10 +377,18 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         if (display != null) {
             val p = GamePresentation(this, display, this)
             try {
-                p.show()
+                p.setOnDismissListener {
+                    if (presentation === p) {
+                        presentation = null
+                        p.touchView.releaseAll()
+                        relayout()
+                    }
+                }
                 presentation = p
+                p.show()
                 Log.i(TAG, "second display ${display.displayId}: ${display.name}")
             } catch (e: WindowManager.InvalidDisplayException) {
+                presentation = null
                 Log.w(TAG, "cannot use display ${display.displayId}", e)
             }
         }
@@ -375,11 +396,12 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     private fun dismissPresentation() {
-        presentation?.let {
+        val old = presentation
+        presentation = null
+        old?.let {
             it.touchView.releaseAll()
             it.dismiss()
         }
-        presentation = null
         if (::overlay.isInitialized) relayout()
     }
 
@@ -414,6 +436,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         }
         if (menuShown || exiting) return
         menuShown = true
+        updateInputEnabled()
         NativeBridge.setState(NativeBridge.STATE_PAUSED)
         overlay.releaseAll()
         physical.clear()
@@ -429,7 +452,8 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             }
             .setOnDismissListener {
                 menuShown = false
-                if (resumed) NativeBridge.setState(NativeBridge.STATE_RUNNING)
+                updateInputEnabled()
+                if (resumed && !exiting) NativeBridge.setState(NativeBridge.STATE_RUNNING)
                 enterImmersive()
             }
             .show()

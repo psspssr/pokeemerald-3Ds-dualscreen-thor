@@ -12,6 +12,9 @@ import android.view.SurfaceView
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * The screen shown on a second display (the AYN Thor's bottom panel): native
@@ -27,7 +30,9 @@ class GamePresentation(
         fun onSecondSurfaceChanged(width: Int, height: Int)
     }
 
-    lateinit var touchView: ControlsOverlayView
+    val touchView by lazy { ControlsOverlayView(context, InputHub.SRC_PRESENTATION, hasControls = false) }
+
+    internal lateinit var surfaceView: SurfaceView
         private set
 
     var surfaceWidth = 0
@@ -40,12 +45,20 @@ class GamePresentation(
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
         val surface = SurfaceView(context)
+        surfaceView = surface
         surface.holder.addCallback(this)
-        touchView = ControlsOverlayView(context, InputHub.SRC_PRESENTATION, hasControls = false)
         val match = ViewGroup.LayoutParams.MATCH_PARENT
         root.addView(surface, FrameLayout.LayoutParams(match, match))
         root.addView(touchView, FrameLayout.LayoutParams(match, match))
         setContentView(root)
+        window?.let {
+            it.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            WindowCompat.setDecorFitsSystemWindows(it, false)
+            WindowInsetsControllerCompat(it, root).apply {
+                hide(WindowInsetsCompat.Type.systemBars())
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        }
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}
@@ -58,6 +71,7 @@ class GamePresentation(
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        touchView.releaseAll()
         surfaceWidth = 0
         surfaceHeight = 0
         NativeBridge.setSurface(NativeBridge.WINDOW_SECOND, null)

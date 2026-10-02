@@ -9,6 +9,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.VibrationEffect
+import android.os.Build
 import android.os.Vibrator
 import android.util.SparseArray
 import android.view.MotionEvent
@@ -40,6 +41,11 @@ class ControlsOverlayView(
     }
 
     var listener: Listener? = null
+    var inputEnabled = false
+        set(value) {
+            if (!value) releaseAll()
+            field = value
+        }
 
     private enum class Kind { BUTTON, DPAD, CIRCLE, TOGGLE }
 
@@ -114,6 +120,7 @@ class ControlsOverlayView(
         settings: AppSettings, top: Rect?, bottom: Rect?, safe: Rect,
         showToggle: Boolean, allowed: Boolean,
     ) {
+        if (topRect != top || bottomRect != bottom) releaseAll()
         this.settings = settings
         topRect = top
         bottomRect = bottom
@@ -244,6 +251,7 @@ class ControlsOverlayView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!inputEnabled) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = event.actionIndex
@@ -379,7 +387,10 @@ class ControlsOverlayView(
     private fun haptic() {
         if (settings?.haptics != true) return
         val v = vibrator ?: return
-        if (v.hasVibrator()) v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+        if (v.hasVibrator()) v.vibrate(
+            if (Build.VERSION.SDK_INT >= 29) VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+            else VibrationEffect.createOneShot(10, VibrationEffect.DEFAULT_AMPLITUDE)
+        )
     }
 
     override fun onDraw(canvas: Canvas) {

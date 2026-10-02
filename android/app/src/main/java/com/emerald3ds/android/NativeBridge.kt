@@ -25,6 +25,7 @@ object NativeBridge {
     const val WINDOW_SECOND = 1
 
     val loaded: Boolean = try {
+        if (!BuildConfig.HOST_HARNESS) System.loadLibrary("emeraldboot")
         System.loadLibrary("emerald")
         true
     } catch (e: UnsatisfiedLinkError) {

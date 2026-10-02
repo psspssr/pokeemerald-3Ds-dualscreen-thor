@@ -27,6 +27,8 @@ class GameFiles(private val context: Context) {
         dataDir.mkdirs()
     }
 
+    fun hasEmbeddedGameData(): Boolean = File(romfsDir, "data.embedded").isFile
+
     private fun currentStamp(): String {
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
         val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else 0L
@@ -92,10 +94,15 @@ class GameFiles(private val context: Context) {
             val target = File(dataDir, kind.fileName)
             if (kind == Kind.SAVE && target.isFile) {
                 val backup = File(dataDir, SAVE_NAME + ".bak")
-                backup.delete()
-                target.renameTo(backup)
+                val backupTemp = File(dataDir, SAVE_NAME + ".bak.tmp")
+                try {
+                    target.copyTo(backupTemp, overwrite = true)
+                    if (!backupTemp.renameTo(backup)) throw IOException("could not back up existing save")
+                } finally {
+                    backupTemp.delete()
+                }
             }
-            if (!pending.renameTo(target)) Log.e(TAG, "could not move $pending to $target")
+            if (!pending.renameTo(target)) throw IOException("could not apply imported ${kind.fileName}")
             else Log.i(TAG, "imported ${kind.fileName}")
         }
     }
@@ -107,26 +114,34 @@ class GameFiles(private val context: Context) {
     fun stageImport(uri: Uri, kind: Kind) {
         ensureDirs()
         val temp = File(dataDir, kind.fileName + ".tmp")
-        val input = context.contentResolver.openInputStream(uri) ?: throw IOException("cannot open")
-        input.use { stream -> temp.outputStream().use { stream.copyTo(it) } }
-        val ok = when (kind) {
-            Kind.PAK -> temp.length() >= 64 && temp.inputStream().use { s ->
-                val magic = ByteArray(8)
-                s.read(magic) == 8 && magic.contentEquals(PAK_MAGIC)
+        try {
+            val input = context.contentResolver.openInputStream(uri) ?: throw IOException("cannot open")
+            input.use { stream -> temp.outputStream().use { out ->
+                val buffer = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val n = stream.read(buffer)
+                    if (n < 0) break
+                    total += n
+                    if (kind == Kind.SAVE && total > SAVE_MAX_BYTES)
+                        throw IOException(context.getString(R.string.import_bad_save))
+                    out.write(buffer, 0, n)
+                }
+            } }
+            val ok = when (kind) {
+                Kind.PAK -> temp.length() >= 64 && temp.inputStream().use { s ->
+                    val magic = ByteArray(8)
+                    s.read(magic) == 8 && magic.contentEquals(PAK_MAGIC)
+                }
+                Kind.SAVE -> temp.length() in 1..SAVE_MAX_BYTES
             }
-            Kind.SAVE -> temp.length() in 1..SAVE_MAX_BYTES
-        }
-        if (!ok) {
+            if (!ok) throw IOException(
+                    context.getString(if (kind == Kind.PAK) R.string.import_bad_pak else R.string.import_bad_save)
+                )
+            // Same-directory rename replaces a previous pending import atomically.
+            if (!temp.renameTo(pendingFile(kind))) throw IOException("could not stage import")
+        } finally {
             temp.delete()
-            throw IOException(
-                context.getString(if (kind == Kind.PAK) R.string.import_bad_pak else R.string.import_bad_save)
-            )
-        }
-        val pending = pendingFile(kind)
-        pending.delete()
-        if (!temp.renameTo(pending)) {
-            temp.delete()
-            throw IOException("rename failed")
         }
     }
 

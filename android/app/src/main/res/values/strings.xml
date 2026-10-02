@@ -8,12 +8,12 @@
     <string name="extract_failed">Could not prepare the game files: %1$s</string>
     <string name="retry">Retry</string>
     <string name="pak_missing_title">Game data pack needed</string>
-    <string name="pak_missing_body"><![CDATA[This app contains no game content. Generate <b>emerald3ds.pak</b> with the builder from the matching Pokémon Emerald 3Ds Dual Screen release, using a dump of your own Pokémon Emerald (USA, Europe) cartridge, then import it here.<br><br>It is stored as<br>%1$s]]></string>
+    <string name="pak_missing_body"><![CDATA[This app needs <b>emerald3ds.pak</b> generated for this Android build. Follow the data-pack instructions supplied with the build, using a dump of your own Pokémon Emerald (USA, Europe) cartridge, then import it here.<br><br>It is stored as<br>%1$s]]></string>
     <string name="import_pak_button">Import data pack…</string>
     <string name="import_save_button">Import save…</string>
     <string name="settings_button">Settings</string>
     <string name="quit_button">Quit</string>
-    <string name="native_missing">This build has no game library (libemerald.so). Controls and layouts can be tried, but the game cannot start.</string>
+    <string name="native_missing">The game could not start. Install a complete build for a device with 32-bit ARM support.</string>
 
     <!-- Menu -->
     <string name="menu_title">Paused</string>

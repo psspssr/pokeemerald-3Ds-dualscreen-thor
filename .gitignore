@@ -3,6 +3,7 @@ build/
 __pycache__/
 local.properties
 .gradle/
+.kotlin/
 android/app/build/
 android/app/.cxx/
 *.apk

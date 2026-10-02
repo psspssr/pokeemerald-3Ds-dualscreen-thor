@@ -84,12 +84,12 @@ class SettingsActivity : AppCompatActivity() {
         private fun import(uri: android.net.Uri, kind: GameFiles.Kind) {
             try {
                 files.stageImport(uri, kind)
+                if (!NativeBridge.isStarted()) files.applyPendingImports()
             } catch (e: IOException) {
                 toast(getString(R.string.import_failed, e.message))
                 return
             }
             if (!NativeBridge.isStarted()) {
-                files.applyPendingImports()
                 toast(getString(R.string.import_done))
                 return
             }

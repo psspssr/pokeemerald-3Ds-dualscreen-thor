@@ -10,7 +10,9 @@
 #include <android/log.h>
 #include <android/native_window.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 #include <time.h>
+#include <jni.h>
 
 #include "ctr_host.h"
 
@@ -31,6 +33,27 @@ typedef struct
 } FakeWindow;
 
 static FakeWindow sWindows[CTR_HOST_MAX_WINDOWS];
+static atomic_uint sFrames[CTR_HOST_MAX_WINDOWS];
+
+/* Only this test library exports diagnostics; no test hooks in the game. */
+JNIEXPORT jintArray JNICALL Java_com_emerald3ds_android_HostProbe_snapshot(JNIEnv *env, jclass cls)
+{
+    (void)cls;
+    CtrHostInput input;
+    CtrHostLayout layout;
+    CtrHost_GetInput(&input);
+    CtrHost_GetLayout(&layout);
+    jint values[] = {
+        CtrHost_GetState(), input.keys, input.circleX, input.circleY, input.touchX, input.touchY,
+        layout.topWindow, layout.bottomWindow,
+        layout.top.x, layout.top.y, layout.top.w, layout.top.h,
+        layout.bottom.x, layout.bottom.y, layout.bottom.w, layout.bottom.h,
+        atomic_load(&sFrames[0]), atomic_load(&sFrames[1]),
+    };
+    jintArray result = (*env)->NewIntArray(env, sizeof(values) / sizeof(values[0]));
+    if (result) (*env)->SetIntArrayRegion(env, result, 0, sizeof(values) / sizeof(values[0]), values);
+    return result;
+}
 
 static long long NowMs(void)
 {
@@ -77,17 +100,13 @@ static void DropSurface(FakeWindow *w)
 static int UpdateSurface(int index)
 {
     FakeWindow *w = &sWindows[index];
-    uint32_t generation;
-    struct ANativeWindow *window = CtrHost_AcquireWindowAt(index, &generation);
+    uint32_t generation = CtrHost_WindowGenerationAt(index);
 
     if (generation == w->generation)
-    {
-        if (window)
-            ANativeWindow_release(window);
         return w->surface != EGL_NO_SURFACE;
-    }
-    w->generation = generation;
     DropSurface(w);
+    struct ANativeWindow *window = CtrHost_AcquireWindowAt(index, &generation);
+    w->generation = generation;
     if (!window)
     {
         LOG("window %d removed (generation %u)", index, generation);
@@ -124,7 +143,7 @@ static void Draw(int index, const CtrHostLayout *layout, const CtrHostInput *inp
     if (!eglMakeCurrent(sDisplay, surface, surface, sContext))
         return;
     /* Two displays at different refresh rates: never block on one's vsync. */
-    eglSwapInterval(sDisplay, index == 0 ? 1 : 0);
+    eglSwapInterval(sDisplay, 0);
     eglQuerySurface(sDisplay, surface, EGL_WIDTH, &winW);
     eglQuerySurface(sDisplay, surface, EGL_HEIGHT, &winH);
     glViewport(0, 0, winW, winH);
@@ -157,7 +176,7 @@ static void Draw(int index, const CtrHostLayout *layout, const CtrHostInput *inp
             Fill(winH, px - dot / 2, py - dot / 2, dot, dot, 0xFF3030);
         }
     }
-    eglSwapBuffers(sDisplay, surface);
+    if (eglSwapBuffers(sDisplay, surface)) atomic_fetch_add(&sFrames[index], 1);
 }
 
 int main(void)
@@ -178,6 +197,8 @@ int main(void)
     }
     for (;;)
     {
+        struct timespec frameStart;
+        clock_gettime(CLOCK_MONOTONIC, &frameStart);
         CtrHostInput input;
         CtrHostLayout layout;
         CtrHostState state = CtrHost_GetState();
@@ -218,11 +239,10 @@ int main(void)
                 Draw(i, &layout, &input);
                 drawn = 1;
             }
-        if (!drawn)
-        {
-            struct timespec ts = { 0, 16000000 };
-            nanosleep(&ts, NULL);
-        }
+        (void)drawn;
+        frameStart.tv_nsec += 16714023; /* 59.83 Hz, independent of either display. */
+        if (frameStart.tv_nsec >= 1000000000) { frameStart.tv_sec++; frameStart.tv_nsec -= 1000000000; }
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &frameStart, NULL);
     }
     LOG("fake game exit");
     for (int i = 0; i < CTR_HOST_MAX_WINDOWS; i++)

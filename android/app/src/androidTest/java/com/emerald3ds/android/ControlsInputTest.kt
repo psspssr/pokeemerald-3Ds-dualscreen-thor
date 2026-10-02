@@ -11,25 +11,26 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Assume.assumeTrue
+import androidx.preference.PreferenceManager
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
  * Injects real multi-pointer touch events (through UiAutomation, like a
- * finger) and checks the input sent to the game. Needs the data pack check to
- * pass, so it writes a placeholder pack when none is present.
+ * finger) and checks the input sent to the separate native host harness.
+ * Never writes a placeholder data pack into the real game's storage.
  */
 @RunWith(AndroidJUnit4::class)
 class ControlsInputTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
     @Before
-    fun preparePak() {
-        val files = GameFiles(instrumentation.targetContext)
-        files.ensureDirs()
-        if (!files.pakFile.isFile) {
-            files.pakFile.writeBytes(byteArrayOf(0x45, 0x4D, 0x33, 0x44, 0x50, 0x41, 0x4B, 0x00) + ByteArray(120))
-        }
+    fun prepare() {
+        assumeTrue(BuildConfig.HOST_HARNESS)
+        PreferenceManager.getDefaultSharedPreferences(instrumentation.targetContext).edit()
+            .clear().putBoolean("dual_display", false).putString("controls_visibility", "always").commit()
+        instrumentation.runOnMainSync { InputHub.clear() }
     }
 
     private fun overlay(scenario: ActivityScenario<GameActivity>): ControlsOverlayView {
