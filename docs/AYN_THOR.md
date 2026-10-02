@@ -10,11 +10,15 @@ supported with single-display layouts.
 | | AYN Thor |
 |---|---|
 | SoC | Snapdragon 8 Gen 2 (Base, Pro, Max) or Snapdragon 865 (Lite) |
-| 32-bit ARM | Yes: supported ABIs `arm64-v8a, armeabi-v7a, armeabi` |
+| 32-bit ARM | Required: confirm `armeabi-v7a` in `adb shell getprop ro.product.cpu.abilist` on the device |
 | OS | Android 13 |
 | Top screen | 6" AMOLED 1920x1080, 120 Hz, touch — Android's **primary** display |
 | Bottom screen | 3.92" AMOLED 1240x1080, 60 Hz, touch — a **secondary** display |
 | Controls | D-pad, two analog sticks, ABXY, L1/R1, L2/R2, Start/Select, Home/Back |
+
+AYN lists the panel sizes, Android version and model chipsets on its
+[Thor product page](https://www.ayntec.com/products/ayn-thor). CPU model alone
+does not verify the firmware's 32-bit support or certify this game's performance.
 
 ## How the port uses it
 
@@ -36,7 +40,7 @@ Dual-display mode is the default when a second built-in display is present:
   is 3DS B, right is A, left is Y, top is X); left stick is the circle pad;
   L1/R1 are L/R; L2/R2 unused. A label-based mapping is in Settings for
   controllers set to the Xbox layout.
-- **Refresh**: both screens are drawn every emulated VBlank (59.83 Hz).
+- **Refresh target**: both screens are drawn every emulated VBlank (59.83 Hz).
   Each display has its own EGL surface; neither waits on the other's vsync,
   so the 120 Hz top panel and the 60 Hz bottom panel stay in step with the game.
 - **Lifecycle**: closing the lid or switching apps pauses the game; the
@@ -49,3 +53,12 @@ Dual-display mode is the default when a second built-in display is present:
 Some devices report the bottom screen as the primary display and the top as
 the secondary one (AYANEO Pocket DS, Retroid's dual-screen add-on). Settings
 → Display has "Top screen on: main display / second display" for them.
+
+## Testing
+
+The app instrumentation tests create a Thor-sized 1240×1080 presentation
+display and exercise the bottom window, touch mapping and display removal.
+They use the separate display-test renderer on an x86_64 emulator. Follow
+[BUILDING.md](BUILDING.md) for these tests and the real ARM game build.
+Physical lid behavior, panel timing, thermal performance and sustained game
+frame rate require testing on Thor hardware.

@@ -15,9 +15,11 @@ identifier they use and checks it against the Android layer:
                unit but not defined in the built library
                (build/upstream/3ds_port/emerald3ds.elf, via nm)
 
-When the native objects have been built, "undefined" is exact: every
-undefined symbol of a native object that neither the library nor the NDK
-libraries define. Before that, it is estimated from call sites in the source.
+With --headers-only this is an advisory source check, not link or behavior
+validation. With all native objects, the symbol check compares their undefined
+symbols with the library and NDK exports. Before that, it is estimated from
+call sites in the source. The native build's check_link.py remains authoritative
+for the final ELF, relocation and load-address requirements.
 SDK identifiers are recognised by libctru/citro naming (C3D_*, gfx*, svc*,
 KEY_*, ...); see SDK_PATTERN.
 """
@@ -26,12 +28,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+NDK_VERSION = "27.2.12479018"
 
 SDK_UPPER = (r"(?:C3D|C3Di|C2D|C2Di|Tex3DS|GPU|GPUCMD|GX|GSP|GSPGPU|DVLB|DVLE|DVLP|NDSP|APT|APTHOOK|"
              r"HID|KEY|GFX|MEMOP|MEMPERM|MEMSTATE|RESLIMIT|RESET|USERBREAK|SYSCLOCK|OS|FS|FSUSER|ARCHIVE|"
@@ -48,20 +52,23 @@ IDENT = re.compile(r"\b[A-Za-z_]\w*\b")
 
 
 def strip_c(text: str) -> str:
-    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
-    text = re.sub(r"//[^\n]*", " ", text)
-    text = re.sub(r'"(?:\\.|[^"\\\n])*"', '""', text)
-    return re.sub(r"'(?:\\.|[^'\\\n])*'", "''", text)
+    # Strings must be recognized before their contents can look like comments
+    # (for example "https://..."). Keep line boundaries for declaration scans.
+    pattern = r'''//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*' '''.rstrip()
+    return re.sub(pattern, lambda m: "\n" * m[0].count("\n") or " ", text, flags=re.S)
 
 
 def native_units(port: Path) -> dict[Path, str]:
     """The native translation units and their objects (relative to 3ds_port),
     read from origin's makefiles."""
     units: dict[str, str] = {}
-    for line in (port / "Makefile").read_text(encoding="utf-8").splitlines():
+    makefile = re.sub(r"\\\n[ \t]*", " ", (port / "Makefile").read_text(encoding="utf-8"))
+    for line in makefile.splitlines():
         m = re.match(r"^SOURCES\s*[:+]?=\s*(.*)$", line)
         if m:
-            for src in m.group(1).split():
+            for src in m.group(1).split("#", 1)[0].split():
+                if not re.fullmatch(r"src/[\w./-]+\.c", src):
+                    raise ValueError(f"cannot resolve native SOURCES entry {src!r}; update this checker")
                 units[src] = re.sub(r"^src/(.*)\.c$", r"build/\1.o", src)
     lines = (port / "full.mk").read_text(encoding="utf-8").splitlines()
     for i, line in enumerate(lines):
@@ -75,20 +82,28 @@ def native_units(port: Path) -> dict[Path, str]:
             recipe.append(follow)
         if any("$(CPPFLAGS) $(CFLAGS)" in r for r in recipe):
             units[m.group(2)] = m.group(1)
+    if not units:
+        raise ValueError("no native units found; origin's Makefile structure may have changed")
     return {port / src: obj for src, obj in units.items()}
 
 
 def local_headers(port: Path, units: list[Path]) -> list[Path]:
-    """Origin headers the native units include that use the SDK themselves."""
+    """Follow quoted includes recursively, including indirect SDK users."""
     found: list[Path] = []
-    for unit in units:
+    pending = list(units)
+    seen = {p.resolve() for p in units}
+    while pending:
+        unit = pending.pop()
         for name in re.findall(r'#\s*include\s+"([^"]+)"', unit.read_text(encoding="utf-8", errors="ignore")):
             for base in (unit.parent, port / "include"):
                 path = base / name
-                if path.exists() and path not in found:
-                    text = path.read_text(encoding="utf-8", errors="ignore")
-                    if re.search(r"#\s*include\s+<(3ds|citro[23]d|tex3ds)", text):
+                if path.is_file():
+                    resolved = path.resolve()
+                    if resolved.is_relative_to(port.resolve()) and resolved not in seen:
+                        seen.add(resolved)
                         found.append(path)
+                        pending.append(path)
+                    break
     return found
 
 
@@ -111,7 +126,9 @@ def self_declared(files: list[Path]) -> set[str]:
     its own __system_allocateHeaps): they need a definition, not a header."""
     names: set[str] = set()
     for path in files:
-        for line in strip_c(path.read_text(encoding="utf-8", errors="ignore")).splitlines():
+        text = strip_c(path.read_text(encoding="utf-8", errors="ignore"))
+        names.update(re.findall(r"#\s*define\s+([A-Za-z_]\w*)", text))
+        for line in text.splitlines():
             if not line or line[0] in " \t#{}":
                 continue
             names.update(re.findall(r"\b([A-Za-z_]\w*)\s*(?=[\[=;,(])", line))
@@ -132,20 +149,36 @@ def header_index(dirs: list[Path]) -> tuple[set[str], set[str]]:
     return tokens, inline
 
 
-def nm(path: Path, *flags: str) -> set[str]:
-    out = subprocess.run(["arm-linux-gnueabi-nm", *flags, str(path)], capture_output=True, text=True,
+def nm(path: Path, *flags: str, tool: str = "arm-linux-gnueabi-nm") -> set[str]:
+    out = subprocess.run([tool, *flags, str(path)], capture_output=True, text=True,
                          errors="ignore")
     if out.returncode != 0:
-        return set()
+        raise RuntimeError(f"{tool} failed for {path}: {out.stderr.strip()}")
     return {line.split()[-1].split("@")[0] for line in out.stdout.splitlines() if line.split()}
 
 
-def ndk_exports(tree: Path) -> set[str]:
-    import glob
+def find_ndk(explicit: Path | None = None) -> Path:
+    if explicit:
+        return explicit
+    for var in ("ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"):
+        if os.environ.get(var):
+            return Path(os.environ[var])
+    for sdk in (os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT"),
+                Path.home() / "Android/Sdk", Path.home() / "android-sdk"):
+        if sdk:
+            candidate = Path(sdk) / "ndk" / NDK_VERSION
+            if candidate.is_dir():
+                return candidate
+    raise ValueError("NDK not found; set --ndk or ANDROID_NDK_HOME for the symbol check")
+
+
+def ndk_exports(ndk: Path, tool: str) -> set[str]:
+    libraries = ndk / "toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/28"
+    if not libraries.is_dir():
+        raise ValueError(f"Android API 28 ARM libraries not found at {libraries}")
     names: set[str] = set()
-    for lib in glob.glob(str(Path.home() / "Android/Sdk/ndk/*/toolchains/llvm/prebuilt/linux-x86_64/sysroot/"
-                             "usr/lib/arm-linux-androideabi/28/*.so")):
-        names |= nm(Path(lib), "-D", "--defined-only")
+    for name in ("libc.so", "libm.so", "libdl.so", "liblog.so", "libandroid.so", "libEGL.so", "libGLESv3.so", "libaaudio.so"):
+        names |= nm(libraries / name, "-D", "--defined-only", tool=tool)
     return names
 
 
@@ -157,6 +190,9 @@ def main() -> int:
                     help="the bootstrapped tree, for the built objects and library")
     ap.add_argument("--lib", type=Path, default=None,
                     help="the unstripped library (default: <tree>/3ds_port/emerald3ds.elf)")
+    ap.add_argument("--headers-only", action="store_true", help="advisory declarations check; skip library/objects")
+    ap.add_argument("--ndk", type=Path, help="NDK root (default: environment or pinned SDK installation)")
+    ap.add_argument("--nm", default="arm-linux-gnueabi-nm", help="ARM-capable nm executable")
     ap.add_argument("--list", action="store_true", help="print the SDK identifiers used and exit")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
@@ -177,20 +213,20 @@ def main() -> int:
     lib = args.lib or args.tree / "3ds_port" / "emerald3ds.elf"
     objects = [args.tree / "3ds_port" / obj for obj in unit_objects.values()]
     missing_objects = [o for o in objects if not o.exists()]
-    defined = nm(lib, "--defined-only") if lib.exists() else set()
+    defined = nm(lib, "--defined-only", tool=args.nm) if lib.exists() and not args.headers_only else set()
 
     undefined: list[str] = []
-    method = "none (library not built)"
-    if lib.exists() and not missing_objects:
+    method = "not checked (--headers-only)" if args.headers_only else "not checked (library not built)"
+    if not args.headers_only and lib.exists() and not missing_objects:
         method = "native objects' undefined symbols vs %s" % lib
-        provided = defined | ndk_exports(args.tree)
+        provided = defined | ndk_exports(find_ndk(args.ndk), args.nm)
         need = set()
         for o in objects:
-            need |= nm(o, "-u")
+            need |= nm(o, "-u", tool=args.nm)
         undefined = sorted(n for n in need if n not in provided)
-    elif lib.exists():
+    elif not args.headers_only and lib.exists():
         method = "call sites in the source vs %s (%d native objects not built)" % (lib, len(missing_objects))
-        undefined = sorted(n for n in called if n not in inline and n not in defined)
+        undefined = sorted(n for n in called if n not in inline and n not in defined and n not in own)
 
     report = {
         "native_units": [str(u.relative_to(args.origin)) for u in units],
@@ -199,6 +235,7 @@ def main() -> int:
         "undefined": undefined,
         "undefined_method": method,
         "native_objects_missing": [str(o.relative_to(args.tree)) for o in missing_objects],
+        "headers_only": args.headers_only,
     }
     if args.json:
         print(json.dumps(report, indent=1))
@@ -211,11 +248,15 @@ def main() -> int:
         print("  undefined in the library [%s]: %d" % (method, len(undefined)))
         for n in undefined:
             print("    " + n)
-        if missing_objects:
+        if missing_objects and not args.headers_only:
             print("  native objects not built: %s" % ", ".join(o.name for o in missing_objects))
-    gaps = bool(undeclared or undefined or not lib.exists() or missing_objects)
+    gaps = bool(undeclared or undefined or (not args.headers_only and (not lib.exists() or missing_objects)))
     return 1 if gaps else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, RuntimeError) as exc:
+        print(f"check_shim_coverage: {exc}", file=sys.stderr)
+        sys.exit(2)

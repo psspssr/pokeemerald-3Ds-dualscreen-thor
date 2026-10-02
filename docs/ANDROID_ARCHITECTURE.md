@@ -8,10 +8,10 @@ bridge, *and origin's 3DS native backend* (`3ds_video.c`, `ctr_voxel.c`,
 underneath it: libctru, Citro3D and Citro2D are re-implemented for Android on
 OpenGL ES 3.0, AAudio, pthreads and app storage.
 
-That is what makes the port 1:1 (the same code draws the same pictures, runs
-the same bottom-screen UI and voxel overworld, and writes the same save file)
-and what keeps new origin commits cheap to take: `tools/sync_origin.py` pulls
-them into `origin/` and the build picks them up.
+This preserves upstream's game logic, bottom-screen UI and save format while
+keeping platform changes outside its tree. Rendering parity still requires
+runtime comparison. `tools/sync_origin.py` imports new versions into `origin/`
+and records their exact commit and tree; the build then picks them up.
 
 ```
  origin/ (git subtree, never edited)          android/ (this port)
@@ -33,8 +33,9 @@ them into `origin/` and the build picks them up.
 - ABI: **armeabi-v7a only**. Origin's data pipeline is 32-bit by design (asset
   stubs are looked up by `(u32)ptr`, script bytecode and MP2K songs carry
   32-bit pointers relocated by `3ds_script_loader.c`). A 32-bit ARM build has
-  the same pointer size, alignment and endianness as the 3DS's ARM11, so all
-  of it works as is. 64-bit-only devices (some 2023+ flagships) cannot run it.
+  the same pointer size, alignment and endianness as the 3DS's ARM11. The
+  native link and loader preserve the addresses used by generated data.
+  64-bit-only devices cannot run the game build.
 - `minSdkVersion 28` (fopencookie in bionic, AAudio), `targetSdkVersion 35`.
 - GLES 3.0.
 - Primary device: **AYN Thor** (dual display, see `docs/AYN_THOR.md`): the
@@ -50,7 +51,7 @@ them into `origin/` and the build picks them up.
    here is a bug report waiting to be sent upstream).
 3. It copies `android/` to `build/upstream/android/` and builds the decomp
    tools (`make tools generated`).
-4. `make -C build/upstream/android/native` includes origin's
+4. `make -C build/upstream/3ds_port -f ../android/native/Makefile` includes origin's
    `3ds_port/Makefile` (hence `full.mk`) with `DEVKITPRO`/`DEVKITARM` pointing
    at `android/toolchain/` (generated wrappers):
    - `arm-none-eabi-gcc` → NDK clang `--target=armv7a-linux-androideabi28`,
@@ -69,8 +70,14 @@ them into `origin/` and the build picks them up.
      shared object, keeping `.gamedata`).
    - RomFS outputs (`romfs/**`) are produced by origin's rules and packaged
      as APK assets under `romfs/`.
-5. Gradle (`android/app`) packages `libemerald.so` into `jniLibs/armeabi-v7a`
+5. Gradle (`android/app`) packages `libemerald.so` and its fixed-address loader
+   `libemeraldboot.so` into `jniLibs/armeabi-v7a`
    and the RomFS into `assets/romfs/`.
+
+The independent Gradle `harness` build type compiles `android/host/test/fake_game.c`
+for ARM and x86_64 and uses package ID `com.emerald3ds.android.harness`. It exercises
+the app/host contract without the full game or its data. Debug and release game
+builds require the real native outputs; test results identify which variant ran.
 
 ## Runtime
 
@@ -89,6 +96,9 @@ them into `origin/` and the build picks them up.
   textures and drawn into rectangles the app chooses (portrait: stacked like
   the console; landscape: side by side or large top). Touches on the bottom
   rectangle become `KEY_TOUCH` + `hidTouchRead`.
+- Engine-only releases require a pack generated for that Android executable's
+  ABI. Upstream 3DS packs have different executable pointer values. Save files
+  retain their original format and are independent of the data-pack ABI.
 
 ## Component ownership
 

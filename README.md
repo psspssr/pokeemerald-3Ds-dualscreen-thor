@@ -9,12 +9,17 @@
 
 ---
 
-This is not a rewrite. The 3DS port ("origin") is included unmodified in
+The 3DS port ("origin") is included unmodified in
 [`origin/`](origin/) and compiled as is — the decompilation, origin's patches,
 its bottom-screen UI, its GPU compositor and its voxel renderer. Underneath it,
 this repository re-implements the 3DS system libraries (libctru, Citro3D,
-Citro2D) for Android on OpenGL ES 3, AAudio and app storage. Same code, same
-pictures, same save file.
+Citro2D) for Android on OpenGL ES 3, AAudio and app storage. The goal is to
+preserve upstream behavior and its save format while adapting display and input.
+
+Development and testing happen on `main` in
+[`psspssr/pokeemerald-3Ds-dualscreen-thor`](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor).
+The [build guide](docs/BUILDING.md) distinguishes the full ARM game from the
+separate emulator display/input harness and explains the runtime checks.
 
 Because origin is never edited, its new commits are taken with one command
 (see [Updating from origin](docs/UPDATING_FROM_ORIGIN.md)).
@@ -31,7 +36,7 @@ Because origin is never edited, its new commits are taken with one command
   (map, party, bag, Pokédex, PokéNav, save, options), driven by your finger.
 - **Controls.** On-screen D-pad, circle pad and buttons; physical gamepads and
   keyboards, mapped by position like a Nintendo console by default.
-- **Voxel overworld.** Origin's Citro3D renderer, running on OpenGL ES.
+- **Voxel overworld.** Origin's Citro3D renderer through the OpenGL ES backend.
   Enable it in **OPTION → VOXEL 3D** on the bottom screen.
 - **3DS saves.** The save is the same 128 KiB file the 3DS version writes
   (`/3ds/emerald3ds/emerald3ds.sav`); import or export it from Settings.
@@ -42,6 +47,10 @@ Because origin is never edited, its new commits are taken with one command
   (`armeabi-v7a`) apps. Origin's data pipeline uses 32-bit pointers, as the
   3DS does; phones that dropped 32-bit support cannot run it.
 - OpenGL ES 3.0.
+
+Check actual device support with `adb shell getprop ro.product.cpu.abilist`;
+it must include `armeabi-v7a`. A data pack must match the Android build's ABI;
+stock 3DS data packs are not interchangeable with Android packs.
 
 ## Building
 
