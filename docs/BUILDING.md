@@ -61,8 +61,9 @@ build. `--clean` rebuilds that generated tree and discards its local edits.
 Development APKs embed generated game data for local testing. The authorized
 first **private prerelease** packages that full native/data output in a signed,
 non-debuggable Gradle release APK; follow [RELEASING.md](RELEASING.md).
-The repository remains private. CI still uploads only diagnostics, not APKs
-or generated game data.
+The repository remains private. Normal push/PR validation uploads diagnostics.
+The separate release workflow uploads a signed APK only after a GitHub release
+is published; see [automatic releases](RELEASING.md).
 
 ## Engine-only build and data packs
 

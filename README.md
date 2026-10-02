@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.1">Download Android preview</a> ·
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.2">Download Android preview</a> ·
   <a href="#build-and-play">Build and play</a> ·
   <a href="docs/AYN_THOR.md">Thor setup</a> ·
   <a href="docs/VALIDATION.md">Test results</a> ·
@@ -66,6 +66,7 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 | **Physical controls** | Gamepad and keyboard support, with a Nintendo-style positional layout by default and an alternative Xbox-style mapping. |
 | **Portable saves** | Import and export standard Emerald `.sav` files. Keep Android and voxel preferences separately from your game progress. |
 | **Optional quality of life** | 2×/4× fast-forward, boosted wild shiny odds, shared party EXP, rotating save backups and shiny-escape confirmation. Every option starts off. |
+| **Mystery events** | Unlock the four event islands, receive offline Jirachi/Celebi gifts, or restore missing Regi dolls. Choose each action yourself. |
 
 ## Compatibility
 
@@ -83,7 +84,7 @@ The real ARM game has been tested on an Android emulator through the opening seq
 
 ## Build and play
 
-Download the signed **[0.1.0-alpha.1 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.1)** and install `emerald-thor-0.1.0-alpha.1-armeabi-v7a.apk` on a compatible device. This private preview includes matching game data and can start immediately. Downloads currently require access to this repository. If replacing a development APK, export your save first: release and debug signing keys differ.
+Download the signed **[0.1.0-alpha.2 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.2)** and install `emerald-thor-0.1.0-alpha.2-armeabi-v7a.apk` on a compatible device. This private preview includes matching game data and can start immediately. Downloads currently require access to this repository. If replacing a development APK, export your save first: release and debug signing keys differ.
 
 To build from source:
 
@@ -101,7 +102,7 @@ Install the resulting development APK on a compatible device:
 adb install -r android/app/build/outputs/apk/debug/emerald3ds-android-debug.apk
 ```
 
-The build fetches the pinned upstream engine, generates its data, compiles the Android port and packages the app. CI publishes diagnostics; signed preview downloads are prepared and tested separately. Engine-only packaging and matching data packs are covered in the [build guide](docs/BUILDING.md#engine-only-build-and-data-packs).
+The build fetches the pinned upstream engine, generates its data, compiles the Android port and packages the app. Pushes and pull requests run validation; publishing a GitHub release triggers the separate signed-APK workflow. Engine-only packaging and matching data packs are covered in the [build guide](docs/BUILDING.md#engine-only-build-and-data-packs).
 
 ## Bring your save
 
@@ -114,6 +115,32 @@ Game-created saves use the standard **128 KiB raw `.sav` format**, with no Andro
 Open **Settings → Gameplay → Quality of life**. Fast-forward has a **2× / 4×** selector; once enabled, **R2 toggles** it and **L2 holds** it. Keyboard Tab and the pause menu are available too. Audio is muted while accelerating.
 
 Shiny-odds boosts affect new ordinary wild encounters, shared EXP rewards eligible benched Pokémon, and optional backups retain five completed in-game saves. A separate switch asks for confirmation before fleeing a shiny. All features are disabled by default and keep the GBA save format intact. [Behavior and safeguards →](docs/QUALITY_OF_LIFE.md)
+
+## Choose your Mystery events
+
+Open **Settings → Gameplay → Mystery events** to inspect an event and activate it individually. The menu checks your current adventure and shows whether each option is available, already unlocked or completed. Nothing is granted automatically.
+
+| Option | What it unlocks |
+|---|---|
+| **Eon Ticket** | Southern Island: the other Latias/Latios and Soul Dew. |
+| **Mystic Ticket** | Navel Rock: Lugia and Ho-Oh. |
+| **Aurora Ticket** | Birth Island: Deoxys and its triangle puzzle. |
+| **Old Sea Map** | Faraway Island: Mew and its hide-and-seek encounter. |
+| **Jirachi / Celebi gifts** | Level-5 Pokémon with your Original Trainer, delivered to an empty party slot. |
+| **Regi Doll set** | Missing Regirock, Regice and Registeel decorations. |
+
+<table>
+  <tr>
+    <td width="50%" align="center"><a href="docs/images/mystery-events.png"><img src="docs/images/mystery-events.png" width="360" alt="Actual Android Mystery events menu showing all seven optional actions and their current availability"></a></td>
+    <td width="50%" align="center"><a href="docs/images/mystery-deoxys.png"><img src="docs/images/mystery-deoxys.png" width="360" alt="Aurora Ticket details explaining Birth Island, Deoxys and the Champion requirement before activation"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Pick an event</strong><br>See the options and your current progress.</td>
+    <td align="center"><strong>Activate when ready</strong><br>Read the requirements before changing your adventure.</td>
+  </tr>
+</table>
+
+Use a saved adventure with the Pokédex and stand still in the overworld. After activation, **save normally in the game**. Island travel retains the original Champion/ferry requirements, puzzles and encounter progress. Jirachi/Celebi are offline gifts; missing dolls may be restored again after deletion or trading. [Full behavior and save compatibility →](docs/MYSTERY_EVENTS.md) · [Screenshot provenance](docs/images/mystery-events-captures.json)
 
 ## Follow upstream
 
@@ -133,6 +160,10 @@ python3 tools/sync_origin.py && python3 tools/bootstrap.py --make --apk -j4
 
 The updater checks source integrity and reports newly required 3DS APIs. New upstream revisions still need build and gameplay validation. See the [update guide](docs/UPDATING_FROM_ORIGIN.md) for version selection, safeguards and the acceptance checklist.
 
+## Automated APK releases
+
+Publishing a new GitHub release with a tag such as `v0.1.0-alpha.2` starts the release workflow. It runs validation, builds and signs the playable ARMv7 APK, and attaches it with checksums and a build manifest. The app version follows the tag; its Android build number increases automatically. Ordinary pushes, pull requests, draft releases and tag pushes do not publish APKs. [Release setup and retry guide →](docs/RELEASING.md)
+
 ## Project guides
 
 | Guide | Details |
@@ -141,6 +172,7 @@ The updater checks source integrity and reports newly required 3DS APIs. New ups
 | [Release an APK](docs/RELEASING.md) | Stable signing, exact-artifact testing and verified GitHub uploads. |
 | [AYN Thor](docs/AYN_THOR.md) | Display routing, scaling, controls and hardware checks. |
 | [Quality of life](docs/QUALITY_OF_LIFE.md) | Opt-in speed, shiny odds, party EXP, backup and encounter settings. |
+| [Mystery events](docs/MYSTERY_EVENTS.md) | Event islands, offline gifts, decorations and existing-progress checks. |
 | [Validation](docs/VALIDATION.md) | Real-game results, save interchange and performance measurements. |
 | [Architecture](docs/ANDROID_ARCHITECTURE.md) | How the 3DS engine runs on Android. |
 | [Update upstream](docs/UPDATING_FROM_ORIGIN.md) | Preview, import and validate new versions. |

@@ -1,0 +1,30 @@
+{
+  "captured_at": "2026-10-02",
+  "code_commit": "3f0a2cae7a7ab47797c766867f167b22b919a2e0",
+  "apk_sha256": "76e864800ff2b4808e05a8f7e7e2e9b5915ac03531fe0c6e49cf502d59c80564",
+  "environment": "Android API30 emulator, real ARMv7 game with a normally played and saved adventure",
+  "layout": "Android Settings in portrait at1080x1920",
+  "capture": "Unmodified adb screencap PNGs; actual native event status, no mock UI or pixel editing",
+  "images": [
+    {
+      "file": "mystery-events.png",
+      "source": "mystery-events/menu-before.png",
+      "scene": "Seven individual Mystery Events actions with live availability in a loaded adventure",
+      "dimensions": [
+        1080,
+        1920
+      ],
+      "sha256": "233f6ebf6309145219c4ea95e0aee69a8d26ba93b3338bd8cfa1619ef917f0e5"
+    },
+    {
+      "file": "mystery-deoxys.png",
+      "source": "mystery-events/deoxys-details.png",
+      "scene": "Aurora Ticket details and explicit activation for Birth Island access",
+      "dimensions": [
+        1080,
+        1920
+      ],
+      "sha256": "d590e937fcf1d747bee0289159f93dc5c791571599d405f2de0dfb0e3e6fd768"
+    }
+  ]
+}
