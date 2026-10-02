@@ -26,6 +26,7 @@ class GameFiles(private val context: Context) {
     val pakFile = File(dataDir, PAK_NAME)
     val saveFile = File(dataDir, SAVE_NAME)
     val backupsDir = File(dataDir, "backups")
+    private val exportRecovery = File(context.filesDir, EXPORT_RECOVERY_NAME)
 
     fun saveBackups(): List<File> = backupsDir.listFiles().orEmpty()
         .filter { it.isFile && it.length() == SAVE_MAX_BYTES &&
@@ -109,11 +110,14 @@ class GameFiles(private val context: Context) {
 
     fun hasPendingImports(): Boolean = Kind.entries.any { pendingFile(it).isFile }
 
+    fun hasExportRecovery(): Boolean = exportRecovery.isFile
+
     /**
      * Moves imported files into place. Only called before the game starts in
      * this process, so the game never sees a file change under it.
      */
     fun applyPendingImports() {
+        recoverInterruptedExport()
         for (kind in Kind.entries) {
             val pending = pendingFile(kind)
             if (!pending.isFile) continue
@@ -227,9 +231,41 @@ class GameFiles(private val context: Context) {
     }
 
     fun exportSave(uri: Uri) {
+        recoverInterruptedExport()
         if (!saveFile.isFile) throw FileNotFoundException(context.getString(R.string.export_none))
-        val output = context.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("cannot open")
-        output.use { out -> saveFile.inputStream().use { it.copyTo(out) } }
+        val snapshot = saveFile.readBytes()
+        // A provider may alias the live save and fail after truncating it.
+        // Publish a complete private recovery copy before opening its stream.
+        writeAtomically(exportRecovery, snapshot)
+        try {
+            val output = context.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("cannot open")
+            output.use { it.write(snapshot) }
+        } finally {
+            recoverInterruptedExport()
+        }
+    }
+
+    private fun recoverInterruptedExport() {
+        if (!exportRecovery.isFile) return
+        val snapshot = exportRecovery.readBytes()
+        val intact = runCatching { saveFile.readBytes().contentEquals(snapshot) }.getOrDefault(false)
+        if (!intact) writeAtomically(saveFile, snapshot)
+        // Keep recovery available if restoration fails. Startup calls this
+        // before native loads a save or applies a newly staged import.
+        if (!exportRecovery.delete()) throw IOException("could not finish save export recovery")
+    }
+
+    private fun writeAtomically(target: File, bytes: ByteArray) {
+        val temp = File(target.parentFile, target.name + ".tmp")
+        try {
+            temp.outputStream().use { output ->
+                output.write(bytes)
+                output.fd.sync()
+            }
+            if (!temp.renameTo(target)) throw IOException("could not replace ${target.name}")
+        } finally {
+            temp.delete()
+        }
     }
 
     companion object {
@@ -243,6 +279,7 @@ class GameFiles(private val context: Context) {
         private const val SAVE_MAX_BYTES = 128L * 1024L
         private const val MGBA_RTC_BYTES = 16
         internal const val MGBA_RTC_ARCHIVE = "last-imported-mgba-rtc.bin"
+        internal const val EXPORT_RECOVERY_NAME = "save-export-recovery.bin"
         private val PAK_MAGIC = byteArrayOf(0x45, 0x4D, 0x33, 0x44, 0x50, 0x41, 0x4B, 0x00) // "EM3DPAK\0"
     }
 }

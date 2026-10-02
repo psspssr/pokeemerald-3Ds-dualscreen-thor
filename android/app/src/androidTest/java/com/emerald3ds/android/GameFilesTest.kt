@@ -2,11 +2,23 @@ package com.emerald3ds.android
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.ContentProvider
+import android.content.ContentResolver
+import android.content.ContentValues
+import android.content.res.AssetFileDescriptor
+import android.database.Cursor
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import androidx.test.filters.SdkSuppress
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.FileOutputStream
 import java.io.IOException
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -67,6 +79,149 @@ class GameFilesTest {
         }
         files.applyPendingImports()
         assertArrayEquals(recovery, files.saveFile.readBytes())
+    }
+
+    @Test fun exportingToSameFileOrPathAliasPreservesSave() {
+        val original = ByteArray(128 * 1024) { (it % 251).toByte() }
+        files.saveFile.writeBytes(original)
+        val alias = File(files.saveFile.parentFile, "../emerald3ds/${GameFiles.SAVE_NAME}")
+        assertEquals(files.saveFile.canonicalFile, alias.canonicalFile)
+        for (destination in listOf(files.saveFile, alias)) {
+            files.exportSave(Uri.fromFile(destination))
+            assertArrayEquals("export destination may refer to the existing save", original, files.saveFile.readBytes())
+        }
+    }
+
+    private class ExportProvider(private val open: () -> AssetFileDescriptor) : ContentProvider() {
+        override fun onCreate() = true
+        override fun getType(uri: Uri) = "application/octet-stream"
+        override fun openAssetFile(uri: Uri, mode: String) = open()
+        override fun query(uri: Uri, projection: Array<out String>?, selection: String?,
+                           selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
+        override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+        override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
+        override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
+    }
+
+    @SdkSuppress(minSdkVersion = 29)
+    private fun providerFiles(open: () -> AssetFileDescriptor): GameFiles {
+        val resolver = ContentResolver.wrap(ExportProvider(open))
+        return GameFiles(object : ContextWrapper(app) {
+            override fun getFilesDir() = files.romfsDir.parentFile!!
+            override fun getExternalFilesDir(type: String?) = files.sdmcDir.parentFile!!
+            override fun getContentResolver() = resolver
+        })
+    }
+
+    @SdkSuppress(minSdkVersion = 29)
+    private fun failingAliasExport(failure: String) {
+        val original = ByteArray(128 * 1024) { (it % 251).toByte() }
+        files.saveFile.writeBytes(original)
+        val throughProvider = providerFiles {
+            val descriptor = ParcelFileDescriptor.open(files.saveFile,
+                ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_TRUNCATE)
+            if (failure == "open") {
+                descriptor.close()
+                throw FileNotFoundException("provider failed after opening its destination")
+            }
+            object : AssetFileDescriptor(descriptor, 0, UNKNOWN_LENGTH) {
+                override fun createOutputStream(): FileOutputStream =
+                    object : ParcelFileDescriptor.AutoCloseOutputStream(descriptor) {
+                        private val buffered = ByteArrayOutputStream()
+                        override fun write(bytes: ByteArray) = write(bytes, 0, bytes.size)
+                        override fun write(bytes: ByteArray, offset: Int, count: Int) {
+                            if (failure == "close") buffered.write(bytes, offset, count)
+                            else {
+                                super.write(bytes, offset, minOf(count, 17))
+                                throw IOException("provider failed after a partial write")
+                            }
+                        }
+                        override fun close() {
+                            if (failure == "close") {
+                                val bytes = buffered.toByteArray()
+                                super.write(bytes, 0, minOf(bytes.size, 17))
+                            }
+                            super.close()
+                            if (failure == "close") throw IOException("provider failed flushing on close")
+                        }
+                    }
+            }
+        }
+        try {
+            throughProvider.exportSave(Uri.parse("content://export-test/live-save"))
+            fail("provider failure was reported as a successful export")
+        } catch (_: IOException) { }
+        assertArrayEquals("$failure failure damaged the live save", original, files.saveFile.readBytes())
+        assertFalse(File(files.romfsDir.parentFile, GameFiles.EXPORT_RECOVERY_NAME).exists())
+    }
+
+    @Test @SdkSuppress(minSdkVersion = 29)
+    fun providerOpenFailureAfterTruncationPreservesSave() = failingAliasExport("open")
+
+    @Test @SdkSuppress(minSdkVersion = 29)
+    fun providerPartialWriteFailurePreservesAliasedSave() = failingAliasExport("write")
+
+    @Test @SdkSuppress(minSdkVersion = 29)
+    fun providerCloseFailurePreservesAliasedSave() = failingAliasExport("close")
+
+    @Test @SdkSuppress(minSdkVersion = 29)
+    fun ordinaryPipeProviderStillReceivesWholeSave() {
+        val original = ByteArray(128 * 1024) { (it % 251).toByte() }
+        files.saveFile.writeBytes(original)
+        val pipe = ParcelFileDescriptor.createPipe()
+        val worker = Executors.newSingleThreadExecutor()
+        try {
+            val received = worker.submit<ByteArray> {
+                ParcelFileDescriptor.AutoCloseInputStream(pipe[0]).use { it.readBytes() }
+            }
+            providerFiles { AssetFileDescriptor(pipe[1], 0, AssetFileDescriptor.UNKNOWN_LENGTH) }
+                .exportSave(Uri.parse("content://export-test/pipe"))
+            assertArrayEquals(original, received.get(5, TimeUnit.SECONDS))
+            assertArrayEquals(original, files.saveFile.readBytes())
+        } finally {
+            pipe.forEach { it.close() }
+            worker.shutdownNow()
+        }
+    }
+
+    @Test fun interruptedExportRecoversBeforeApplyingAnotherImport() {
+        val original = ByteArray(128 * 1024) { 6 }
+        val replacement = ByteArray(128 * 1024) { 9 }
+        val recovery = File(files.romfsDir.parentFile, GameFiles.EXPORT_RECOVERY_NAME)
+        recovery.writeBytes(original)
+        files.saveFile.writeBytes(byteArrayOf(1, 2, 3))
+        files.applyPendingImports()
+        assertArrayEquals(original, files.saveFile.readBytes())
+        assertFalse(recovery.exists())
+        recovery.writeBytes(original)
+        files.saveFile.writeBytes(byteArrayOf(1, 2, 3))
+        files.stageImport(input("replacement.sav", replacement), GameFiles.Kind.SAVE)
+        files.applyPendingImports()
+        assertArrayEquals(replacement, files.saveFile.readBytes())
+        assertArrayEquals(original, File(files.dataDir, GameFiles.SAVE_NAME + ".bak").readBytes())
+        assertFalse(recovery.exists())
+    }
+
+    @Test fun incompleteRecoveryIsNeverAppliedAndFailedRestoreKeepsCompleteCopy() {
+        val original = ByteArray(128 * 1024) { 8 }
+        val recovery = File(files.romfsDir.parentFile, GameFiles.EXPORT_RECOVERY_NAME)
+        val partial = File(recovery.parentFile, recovery.name + ".tmp")
+        files.saveFile.writeBytes(original)
+        partial.writeBytes(byteArrayOf(1, 2, 3))
+        files.applyPendingImports()
+        assertArrayEquals(original, files.saveFile.readBytes())
+        recovery.writeBytes(original)
+        assertTrue(files.saveFile.delete())
+        assertTrue(files.saveFile.mkdir()) // Force atomic replacement to fail.
+        try {
+            files.applyPendingImports()
+            fail("failed restoration was accepted")
+        } catch (_: IOException) { }
+        assertArrayEquals(original, recovery.readBytes())
+        assertTrue(files.saveFile.delete())
+        files.applyPendingImports()
+        assertArrayEquals(original, files.saveFile.readBytes())
+        assertFalse(recovery.exists())
     }
 
     @Test fun restoringBackupStagesItAndRejectsOutsideOrTruncatedFiles() {

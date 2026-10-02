@@ -20,6 +20,7 @@ object InputHub {
     private val keys = IntArray(SOURCES)
     private val circleX = IntArray(SOURCES)
     private val circleY = IntArray(SOURCES)
+    private val circleActive = BooleanArray(SOURCES)
     private val touching = BooleanArray(SOURCES)
     private val touchX = IntArray(SOURCES)
     private val touchY = IntArray(SOURCES)
@@ -45,10 +46,11 @@ object InputHub {
         push()
     }
 
-    fun setCircle(source: Int, x: Int, y: Int) {
-        if (circleX[source] == x && circleY[source] == y) return
+    fun setCircle(source: Int, x: Int, y: Int, active: Boolean = x != 0 || y != 0) {
+        if (circleX[source] == x && circleY[source] == y && circleActive[source] == active) return
         circleX[source] = x
         circleY[source] = y
+        circleActive[source] = active
         push()
     }
 
@@ -67,6 +69,7 @@ object InputHub {
         keys.fill(0)
         circleX.fill(0)
         circleY.fill(0)
+        circleActive.fill(false)
         touching.fill(false)
         touchOwner = -1
         push()
@@ -77,7 +80,7 @@ object InputHub {
         for (v in keys) k = k or v
         var cx = circleX[SRC_OVERLAY]
         var cy = circleY[SRC_OVERLAY]
-        if (cx == 0 && cy == 0) {
+        if (!circleActive[SRC_OVERLAY]) {
             cx = circleX[SRC_AXES]
             cy = circleY[SRC_AXES]
         }

@@ -69,12 +69,22 @@ class GameFilesModel(application: Application) : AndroidViewModel(application) {
         worker.execute {
             val result = try { State(action, false, ready = work()) }
             catch (e: Exception) { State(action, false, error = e.message ?: e.javaClass.simpleName) }
+            val recoveryPending = files.hasExportRecovery()
             main.post {
                 // A slow document provider may outlive Settings. Keep the
                 // game paused until its save has been copied completely.
-                if (holdsPause)
-                    mutablePauseHolds.value = (mutablePauseHolds.value ?: 1) - 1
-                if (!cleared) mutableState.value = result
+                // An unsuccessful restore must retain a hold as well: later
+                // startup recovery must not roll back newer gameplay saves.
+                if (holdsPause || recoveryPauseHeld != recoveryPending) {
+                    val previousRecoveryHold = if (recoveryPauseHeld) 1 else 0
+                    recoveryPauseHeld = recoveryPending
+                    mutablePauseHolds.value = (mutablePauseHolds.value ?: 0) -
+                        (if (holdsPause) 1 else 0) - previousRecoveryHold +
+                        (if (recoveryPending) 1 else 0)
+                }
+                if (!cleared) mutableState.value = if (recoveryPending)
+                    result.copy(ready = false, error = getApplication<Application>().getString(R.string.export_recovery_pending))
+                else result
             }
         }
     }
@@ -97,6 +107,7 @@ class GameFilesModel(application: Application) : AndroidViewModel(application) {
         private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "game-files") }
         private val main = Handler(Looper.getMainLooper())
         private val mutablePauseHolds = MutableLiveData(0)
+        private var recoveryPauseHeld = false
         val pauseHolds: LiveData<Int> = mutablePauseHolds
         val exportPending: Boolean get() = (mutablePauseHolds.value ?: 0) > 0
     }

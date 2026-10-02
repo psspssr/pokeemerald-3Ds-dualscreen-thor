@@ -71,6 +71,7 @@
     <string name="export_done">Save exported.</string>
     <string name="export_none">There is no save yet.</string>
     <string name="export_failed">Export failed: %1$s</string>
+    <string name="export_recovery_pending">The game is paused to protect your save. Retry export or restart the app to finish recovery.</string>
 
     <string name="about_title">About</string>
     <string name="about_body"><![CDATA[<b>Emerald Dual Screen for Android</b> %1$s<br><br>

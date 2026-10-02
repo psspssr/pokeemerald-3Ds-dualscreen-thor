@@ -31,7 +31,7 @@ class PhysicalInput(private val callbacks: Callbacks) {
     private val fastAxes = mutableMapOf<Int, Pair<Boolean, Boolean>>()
     private var fastToggleDown = false
     private var fastHoldDown = false
-    private var fastToggleNeedsRelease = false
+    private val fastToggleNeedsRelease = mutableSetOf<Int>()
     private var fastSuspendedAt = Long.MIN_VALUE
 
     // Track physical keys individually: left/right Shift and multiple
@@ -85,12 +85,12 @@ class PhysicalInput(private val callbacks: Callbacks) {
             // A fresh digital press is an explicit edge, unlike replayed
             // joystick state after a pause/dialog. A release may have reached
             // the dialog while game input was suspended.
-            if (down && code == KeyEvent.KEYCODE_BUTTON_R2 && fastToggleNeedsRelease && event.downTime > fastSuspendedAt) {
-                fastToggleNeedsRelease = false
-                fastToggleDown = false
-            }
+            if (down && code == KeyEvent.KEYCODE_BUTTON_R2 && event.downTime > fastSuspendedAt)
+                fastToggleNeedsRelease.remove(event.deviceId)
             val identity = event.deviceId to code
             if (down) fastKeys.add(identity) else fastKeys.remove(identity)
+            if (!down && code == KeyEvent.KEYCODE_BUTTON_R2 && fastAxes[event.deviceId]?.second != true)
+                fastToggleNeedsRelease.remove(event.deviceId)
             updateFastTriggers()
             if (down) callbacks.onPhysicalInput()
             return true
@@ -154,9 +154,11 @@ class PhysicalInput(private val callbacks: Callbacks) {
         fun trigger(value: Float, wasDown: Boolean): Boolean =
             if (fastForwardEnabled) value >= 0.55f || (wasDown && value > 0.4f) else value > 0.5f
         val l2 = trigger(leftTrigger, previousTriggers.first)
-        val r2 = trigger(rightTrigger, previousTriggers.second)
+        val r2 = trigger(rightTrigger, previousTriggers.second || event.deviceId in fastToggleNeedsRelease)
         if (fastForwardEnabled) {
             fastAxes[event.deviceId] = l2 to r2
+            if (!r2 && (event.deviceId to KeyEvent.KEYCODE_BUTTON_R2) !in fastKeys)
+                fastToggleNeedsRelease.remove(event.deviceId)
             updateFastTriggers()
         } else {
             if (l2) axes = axes or CtrKeys.ZL
@@ -188,6 +190,7 @@ class PhysicalInput(private val callbacks: Callbacks) {
     fun removeDevice(deviceId: Int) {
         fastKeys.removeAll { it.first == deviceId }
         fastAxes.remove(deviceId)
+        fastToggleNeedsRelease.remove(deviceId)
         updateFastTriggers()
         gamepadKeys.keys.removeAll { it.first == deviceId }
         keyboardKeys.keys.removeAll { it.first == deviceId }
@@ -208,10 +211,10 @@ class PhysicalInput(private val callbacks: Callbacks) {
     private fun updateFastTriggers() {
         // Some controllers send both key and axis events for one trigger.
         // Merge them before detecting an edge, so R2 toggles exactly once.
-        val toggle = fastKeys.any { it.second == KeyEvent.KEYCODE_BUTTON_R2 } || fastAxes.values.any { it.second }
+        val toggle = fastKeys.any { it.second == KeyEvent.KEYCODE_BUTTON_R2 && it.first !in fastToggleNeedsRelease } ||
+            fastAxes.any { (device, axes) -> axes.second && device !in fastToggleNeedsRelease }
         val hold = fastKeys.any { it.second != KeyEvent.KEYCODE_BUTTON_R2 } || fastAxes.values.any { it.first }
-        if (!toggle) fastToggleNeedsRelease = false
-        if (toggle && !fastToggleDown && !fastToggleNeedsRelease) callbacks.onFastForwardToggle()
+        if (toggle && !fastToggleDown) callbacks.onFastForwardToggle()
         fastToggleDown = toggle
         if (hold != fastHoldDown) {
             fastHoldDown = hold
@@ -220,7 +223,11 @@ class PhysicalInput(private val callbacks: Callbacks) {
     }
 
     private fun clearFastTriggers() {
-        fastToggleNeedsRelease = fastToggleNeedsRelease || fastToggleDown
+        // Keep the identity of each held trigger through a pause. A neutral
+        // sample from another controller cannot release it, and its first
+        // resumed axis sample must still use the pressed hysteresis threshold.
+        fastKeys.filter { it.second == KeyEvent.KEYCODE_BUTTON_R2 }.forEach { fastToggleNeedsRelease.add(it.first) }
+        fastAxes.filterValues { it.second }.keys.forEach(fastToggleNeedsRelease::add)
         fastSuspendedAt = SystemClock.uptimeMillis()
         fastKeys.clear()
         fastAxes.clear()

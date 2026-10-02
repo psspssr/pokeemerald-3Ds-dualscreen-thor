@@ -1,6 +1,7 @@
 package com.emerald3ds.android
 
 import android.graphics.PointF
+import android.graphics.RectF
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -170,6 +171,38 @@ class ControlsInputTest {
             scenario.moveToState(Lifecycle.State.RESUMED)
             waitForLayout(overlay(scenario))
             assertTrue(overlay(scenario).controlsVisible)
+        }
+    }
+
+    @Test
+    fun centeredVirtualCircleKeepsOwnershipUntilFingerRelease() {
+        PreferenceManager.getDefaultSharedPreferences(instrumentation.targetContext)
+            .edit().putBoolean("circle_pad", true).commit()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            val view = overlay(scenario)
+            waitForLayout(view)
+            lateinit var bounds: RectF
+            instrumentation.runOnMainSync {
+                bounds = view.circlePadBounds()
+                InputHub.setCircle(InputHub.SRC_AXES, CtrKeys.CIRCLE_MAX, 0)
+            }
+            assertTrue(!bounds.isEmpty)
+            assertEquals(CtrKeys.CPAD_RIGHT, sentKeys())
+            val center = screen(view, bounds.centerX(), bounds.centerY())
+            val left = screen(view, bounds.left + bounds.width() * 0.1f, bounds.centerY())
+            val down = SystemClock.uptimeMillis()
+            try {
+                inject(down, MotionEvent.ACTION_DOWN, listOf(center))
+                assertEquals("centered virtual stick must override the held physical stick", 0, sentKeys())
+                inject(down, MotionEvent.ACTION_MOVE, listOf(left))
+                assertEquals(CtrKeys.CPAD_LEFT, sentKeys())
+                inject(down, MotionEvent.ACTION_MOVE, listOf(center))
+                assertEquals(0, sentKeys())
+            } finally {
+                inject(down, MotionEvent.ACTION_UP, listOf(center))
+            }
+            assertEquals("physical stick resumes after the virtual finger releases", CtrKeys.CPAD_RIGHT, sentKeys())
+            instrumentation.runOnMainSync { InputHub.clear() }
         }
     }
 }

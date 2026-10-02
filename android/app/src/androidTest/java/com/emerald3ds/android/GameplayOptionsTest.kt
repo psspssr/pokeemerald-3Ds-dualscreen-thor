@@ -137,4 +137,78 @@ class GameplayOptionsTest {
             }
         }
     }
+
+    @Test fun heldAnalogR2RequiresFullReleaseAfterPause() {
+        instrumentation.runOnMainSync {
+            var toggles = 0
+            val input = PhysicalInput(object : PhysicalInput.Callbacks {
+                override fun onPhysicalInput() {}
+                override fun onMenuKey() {}
+                override fun onToggleBottomScreen() {}
+                override fun onFastForwardToggle() { toggles++ }
+            })
+            input.fastForwardEnabled = true
+            axes(input, 0f, 0.6f)
+            assertEquals(1, toggles)
+            input.clear()
+            // Still inside the pressed side of the hysteresis band. This
+            // is the same physical hold being replayed after the menu.
+            axes(input, 0f, 0.5f)
+            axes(input, 0f, 0.6f)
+            assertEquals("R2 toggled without reaching its release threshold", 1, toggles)
+            axes(input, 0f, 0.39f)
+            axes(input, 0f, 0.6f)
+            assertEquals(2, toggles)
+            input.clear()
+        }
+    }
+
+    @Test fun anotherControllersNeutralFrameCannotRearmHeldR2() {
+        instrumentation.runOnMainSync {
+            var toggles = 0
+            val input = PhysicalInput(object : PhysicalInput.Callbacks {
+                override fun onPhysicalInput() {}
+                override fun onMenuKey() {}
+                override fun onToggleBottomScreen() {}
+                override fun onFastForwardToggle() { toggles++ }
+            })
+            input.fastForwardEnabled = true
+            axes(input, 0f, 1f, device = 7)
+            input.clear()
+            axes(input, 0f, 0f, device = 8)
+            axes(input, 0f, 1f, device = 7)
+            assertEquals("another controller rearmed the held trigger", 1, toggles)
+            input.removeDevice(7)
+            axes(input, 0f, 1f, device = 8)
+            assertEquals(2, toggles)
+            input.clear()
+        }
+    }
+
+    @Test fun unrelatedKeyReleaseCannotRearmButFreshDigitalR2Can() {
+        instrumentation.runOnMainSync {
+            var toggles = 0
+            val input = PhysicalInput(object : PhysicalInput.Callbacks {
+                override fun onPhysicalInput() {}
+                override fun onMenuKey() {}
+                override fun onToggleBottomScreen() {}
+                override fun onFastForwardToggle() { toggles++ }
+            })
+            input.fastForwardEnabled = true
+            val previousPress = key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            input.clear()
+            key(input, KeyEvent.KEYCODE_BUTTON_L2, false)
+            assertTrue(input.onKey(KeyEvent(previousPress)))
+            assertEquals(1, toggles)
+            // Its physical release may have reached the dialog instead of
+            // the game. A fresh key downTime is still a reliable new edge.
+            SystemClock.sleep(2)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            axes(input, 0f, 1f)
+            assertEquals(2, toggles)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
+            axes(input, 0f, 0f)
+            input.clear()
+        }
+    }
 }

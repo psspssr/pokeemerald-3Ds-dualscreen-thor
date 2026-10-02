@@ -92,6 +92,7 @@ class ControlsOverlayView(
     private var pressedKeys = 0
     private var circleX = 0
     private var circleY = 0
+    private var circleHeld = false
 
     private var settings: AppSettings? = null
     private var topRect: Rect? = null
@@ -237,6 +238,8 @@ class ControlsOverlayView(
 
     internal fun bottomScreenBounds(): Rect? = bottomRect?.let { Rect(it) }
 
+    internal fun circlePadBounds(): RectF = RectF(circle.bounds)
+
     private fun activeControls(): List<Control> =
         if (!controlsVisible) emptyList()
         else buttons + listOfNotNull(dpad, circle.takeIf { !it.bounds.isEmpty }, toggle.takeIf { showToggle })
@@ -345,6 +348,7 @@ class ControlsOverlayView(
         var keys = 0
         var cx = 0
         var cy = 0
+        var held = false
         for (k in 0 until pointers.size()) {
             when (val b = pointers.valueAt(k)) {
                 is Binding.Button -> keys = keys or (b.control?.key ?: 0)
@@ -352,19 +356,21 @@ class ControlsOverlayView(
                 is Binding.Circle -> {
                     cx = b.x
                     cy = b.y
+                    held = true
                 }
                 else -> {}
             }
         }
-        val circleChanged = cx != circleX || cy != circleY
+        val circleChanged = cx != circleX || cy != circleY || held != circleHeld
         if (keys == pressedKeys && !circleChanged) return
         if (keys and pressedKeys.inv() != 0) haptic()
         pressedKeys = keys
         circleX = cx
         circleY = cy
+        circleHeld = held
         if (hasControls) {
             InputHub.setKeys(inputSource, keys)
-            InputHub.setCircle(inputSource, cx, cy)
+            InputHub.setCircle(inputSource, cx, cy, held)
         }
         invalidate()
     }
