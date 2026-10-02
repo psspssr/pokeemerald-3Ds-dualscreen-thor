@@ -1,12 +1,12 @@
 # Android port architecture
 
 This repository ports [Pokémon Emerald 3Ds Dual Screen](https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen)
-("origin") to Android **without forking it**. Every source file of origin —
-the pret/pokeemerald decompilation with origin's patches, origin's game-side
-bridge, *and origin's 3DS native backend* (`3ds_video.c`, `ctr_voxel.c`,
-`3ds_audio.c`, ...) — is compiled unchanged. What changes is the platform
-underneath it: libctru, Citro3D and Citro2D are re-implemented for Android on
-OpenGL ES 3.0, AAudio, pthreads and app storage.
+("origin") to Android while retaining an exact, unmodified upstream snapshot
+in `origin/`. The pret engine, upstream game-side bridge and 3DS native backend
+(`3ds_video.c`, `ctr_voxel.c`, `3ds_audio.c`, ...) compile through Android
+implementations of libctru, Citro3D and Citro2D on OpenGL ES 3.0, AAudio,
+pthreads and app storage. Small, tracked overlays in `patches/android/` apply
+only to generated sources for scoped visual fixes and opt-in gameplay hooks.
 
 This preserves upstream's game logic, bottom-screen UI and save format while
 keeping platform changes outside its tree. Rendering parity still requires
@@ -47,8 +47,11 @@ and records their exact commit and tree; the build then picks them up.
 1. `tools/bootstrap.py` runs **origin's own** `origin/tools/bootstrap.py
    --dir build/upstream`: pinned pret/pokeemerald + origin's patches + origin's
    `3ds_port/`, `tools/`, `builder/` overlaid.
-2. It applies `patches/android/*.patch` (an empty series is the goal; any patch
-   here is a bug report waiting to be sent upstream).
+2. It checks and applies `patches/android/*.patch` in filename order, rejecting
+   context drift and preserving warm-build timestamps when the series is
+   unchanged. The current overlays clip wrapped field windows, keep battle
+   level-up panels above the message box, and connect the optional QoL
+   rules/save backups implemented under `android/native/`.
 3. It copies `android/` to `build/upstream/android/` and builds the decomp
    tools (`make tools generated`).
 4. `make -C build/upstream/3ds_port -f ../android/native/Makefile` includes origin's
@@ -108,6 +111,7 @@ builds require the real native outputs; test results identify which variant ran.
 | `android/shim/` | libctru: `<3ds.h>` and `3ds/*.h` (minus `3ds/gpu/`), svc/os/threads/sync, APT, HID, romfs/sdmc path mapping, NDSP on AAudio, console, linear/VRAM heaps, `--wrap` file functions, `exit`. |
 | `android/gpu/` | `<citro3d.h>`, `<citro2d.h>`, `<tex3ds.h>`, `3ds/gpu/*.h`, GSP/GX/gfx (framebuffers, transfers, `gspWaitForVBlank`), EGL, presentation, frame pacing, PICA shader runtime. |
 | `android/toolchain/`, `android/native/`, `tools/` | Toolchain wrappers, build, bootstrap, origin sync, shim coverage check. |
+| `android/native/src/qol_*.c`, `patches/android/` | Optional gameplay rules and completed-save backups, with narrow hooks in generated game code. |
 | `android/app/` | Gradle project, activity, controls, settings, file import/export. |
 
 ## GPU emulation rules (android/gpu)

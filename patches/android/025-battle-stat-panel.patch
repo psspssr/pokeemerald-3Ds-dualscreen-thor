@@ -1,0 +1,79 @@
+--- a/3ds_port/src/3ds_video.c
++++ b/3ds_port/src/3ds_video.c
+@@ -45,7 +45,7 @@
+ /*
+  * Magnification of the frame being composed: a screen point is
+  * (gba + view) * zoom + offset. The battle scene is composed at
+- * CTR_BATTLE_ZOOM and its text box at 1 (DrawBattleTextLayer).
++ * CTR_BATTLE_ZOOM and its UI at 1 (DrawBattleUiLayer).
+  */
+ static float sZoom = 1.0f, sOffX, sOffY;
+ /* Size of the surface being composed: the screen, or the battle scene's. */
+@@ -1376,7 +1376,16 @@
+  * composed is carried from the scene's coordinates to the box's through the
+  * screen, drawn there, and put back.
+  */
+-static void DrawBattleTextLayer(unsigned bg)
++/* Cmd_drawlvlupbox puts BG1's stat window in front of BG0's message.
++ * It extends to GBA row160, beyond the scene's row112 crop. Keep that
++ * foreground window out of the magnified scene and draw it as UI instead.
++ * Normal battle animation layers retain their original scene treatment. */
++static bool BattleStatLayer(void)
++{
++    return sBattle && (Reg(0) & 0x200u) && (Reg(8) & 3u) == 1u && (Reg(10) & 3u) == 0u;
++}
++
++static void DrawBattleUiLayer(unsigned bg)
+ {
+     int viewX = sViewX, viewY = sViewY;
+     float zoom = sZoom, offX = sOffX, offY = sOffY;
+@@ -1387,13 +1396,17 @@
+     sZoom = 1.0f;
+     sOffX = sOffY = 0.0f;
+     sLayerShift = shift * sShiftZoom;
+-    sViewX = CTR_BATTLE_X;
+-    sViewY = CTR_BATTLE_Y;
++    bool stats = bg == 1 && BattleStatLayer();
++    /* The 96x104 stat panel fits above the unchanged 48-row message band.
++     * Its outer frame ends at GBA (240,160); leave eight pixels of space. */
++    sViewX = stats ? CTR_GAME_WIDTH - 240 - 8 : CTR_BATTLE_X;
++    sViewY = stats ? CTR_GAME_HEIGHT - 48 - 160 - 8 : CTR_BATTLE_Y;
+     sClipX0 = (int)roundf((clipX0 + viewX) * zoom + offX) - sViewX;
+     sClipX1 = (int)roundf((clipX1 + viewX) * zoom + offX) - sViewX;
+     sClipY0 = (int)roundf((clipY0 + viewY) * zoom + offY) - sViewY;
+     sClipY1 = (int)roundf((clipY1 + viewY) * zoom + offY) - sViewY;
+-    DrawBattleText(bg);
++    if (stats) DrawBattleCut(bg, 144, 240, 56, 160, 0);
++    else DrawBattleText(bg);
+     C2D_Flush();
+     sZoom = zoom;
+     sOffX = offX;
+@@ -2987,7 +3000,7 @@
+             if (sFieldUi && bg == 0 && !sFieldBanner) sLayerShift += CTR_FIELD_UI_SHIFT / sShiftZoom;
+             if (((mode == 1 && bg == 2) || mode == 2) && sNavBand && !lines) DrawNavBackmostAffine(bg);
+             else if ((mode == 1 && bg == 2) || mode == 2) DrawAffineBg(bg);
+-            else if (sBattle && bg == 0) DrawBattleTextLayer(bg);
++            else if (sBattle && (bg == 0 || (bg == 1 && BattleStatLayer()))) DrawBattleUiLayer(bg);
+             else if (!DrawLineBg(bg) && !DrawFieldBgTex(bg) && !DrawStageBgTex(bg) && !DrawBandBgTex(bg))
+                 DrawTextBg(bg);
+             sLayerShift = shift;
+@@ -3460,7 +3473,7 @@
+     C2D_TargetClear(sScene, 0);
+     C2D_SceneBegin(sScene);
+     Blend(5, false, false);
+-    sLayerExclude = 1;
++    sLayerExclude = 1u | (BattleStatLayer() ? 2u : 0u);
+     if (!(Reg(0) & 128)) Compose();
+     sLayerExclude = 0;
+     C2D_Flush();
+@@ -3703,8 +3716,8 @@
+     C2D_SceneBegin(sLogical);
+     Blend(5, false, false);
+     StageUnderlay();
+-    /* After a scene composed on its own, only the text box is left. */
+-    if (scene) sLayerExclude = 63 & ~(1u | 32u);
++    /* Compose the message and any foreground stat window as unscaled UI. */
++    if (scene) sLayerExclude = 63 & ~(1u | 32u | (BattleStatLayer() ? 2u : 0u));
+     if (!(Reg(0) & 128))
+     {
+         if (target != sBottom) Compose();
