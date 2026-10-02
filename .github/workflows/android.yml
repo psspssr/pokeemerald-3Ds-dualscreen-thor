@@ -3,6 +3,11 @@ name: Android
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'NOTICE.md'
+      - 'LICENSE'
   pull_request:
   workflow_dispatch:
 
