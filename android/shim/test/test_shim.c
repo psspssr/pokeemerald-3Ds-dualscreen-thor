@@ -27,10 +27,12 @@ static pthread_mutex_t hostLock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t hostCond = PTHREAD_COND_INITIALIZER;
 static CtrHostState hostState = CTR_HOST_RUNNING;
 static atomic_int pauses, resumes, exits, exitCode, cleanup;
+static atomic_uint gameSpeed = 1;
 
 const char *CtrHost_RomfsDir(void) { return romfs; }
 const char *CtrHost_SdmcDir(void) { return sdmc; }
 void CtrHost_GetInput(CtrHostInput *out) { *out = input; }
+unsigned CtrHost_GameSpeed(void) { return atomic_load(&gameSpeed); }
 CtrHostState CtrHost_GetState(void)
 {
     pthread_mutex_lock(&hostLock);
@@ -166,6 +168,7 @@ static void TestThreads(void)
 }
 
 static void *PauseLoop(void *unused) { (void)unused; assert(aptMainLoop()); return NULL; }
+static void CountAudioFrame(void *data) { ++*(unsigned *)data; }
 static void TestAudioAndLifecycle(void)
 {
     assert(ndspInit() == 0);
@@ -183,6 +186,51 @@ static void TestAudioAndLifecycle(void)
     float guard = 123;
     CtrNdsp_Render(&guard, -1, 48000);
     assert(guard == 123);
+    /* A pending normal-speed loop must be discarded on entering fast-forward.
+     * Producers complete buffers immediately, rather than filling their ring
+     * or accumulating delayed playback while the game keeps mixing. */
+    wave = (ndspWaveBuf){.data_pcm16 = pcm, .nsamples = 2, .looping = true};
+    ndspChnWaveBufAdd(0, &wave);
+    assert(ndspChnIsPlaying(0));
+    atomic_store(&gameSpeed, 4);
+    unsigned audioFrames = 0;
+    ndspSetCallback(CountAudioFrame, &audioFrames);
+    float muted[400];
+    CtrNdsp_Render(muted, 200, NDSP_SAMPLE_RATE);
+    for (unsigned i = 0; i < 400; ++i) assert(muted[i] == 0.0f);
+    assert(wave.status == NDSP_WBUF_DONE && !ndspChnIsPlaying(0) && audioFrames > 0);
+    for (unsigned speed = 2; speed <= 4; ++speed)
+    {
+        atomic_store(&gameSpeed, speed);
+        for (unsigned tick = 0; tick < 32; ++tick)
+        {
+            wave = (ndspWaveBuf){.data_pcm16 = pcm, .nsamples = 2};
+            ndspChnWaveBufAdd(0, &wave);
+            assert(wave.status == NDSP_WBUF_DONE && !ndspChnIsPlaying(0));
+        }
+    }
+    /* Resumption emits only newly submitted audio, including the usual
+     * initial silent sample; old loop and interpolator samples cannot leak. */
+    atomic_store(&gameSpeed, 1);
+    int16_t fresh[] = {8192, 8192, 8192, 8192};
+    wave = (ndspWaveBuf){.data_pcm16 = fresh, .nsamples = 2};
+    ndspChnWaveBufAdd(0, &wave);
+    CtrNdsp_Render(out, 4, 48000);
+    assert(out[0] == 0.0f && out[1] == 0.0f);
+    assert(out[2] == 0.25f && out[3] == 0.25f && out[4] == 0.25f && out[5] == 0.25f);
+    assert(wave.status == NDSP_WBUF_DONE);
+    ndspSetCallback(NULL, NULL);
+    /* Entering acceleration between output callbacks must also release the
+     * old queue as soon as the game submits another frame. */
+    wave.looping = true;
+    ndspChnWaveBufAdd(0, &wave);
+    atomic_store(&gameSpeed, 4);
+    ndspWaveBuf incoming = {.data_pcm16 = pcm, .nsamples = 2};
+    ndspChnWaveBufAdd(0, &incoming);
+    assert(wave.status == NDSP_WBUF_DONE && incoming.status == NDSP_WBUF_DONE);
+    atomic_store(&gameSpeed, 1);
+    CtrNdsp_Render(out, 4, 48000);
+    for (unsigned i = 0; i < 8; ++i) assert(out[i] == 0.0f);
     CtrHost_SetState(CTR_HOST_PAUSED);
     pthread_t thread;
     assert(pthread_create(&thread, NULL, PauseLoop, NULL) == 0);
@@ -214,6 +262,6 @@ int main(void)
     assert(mkdtemp(root));
     TestFilesystem(root); TestMemory(); TestInput(); TestThreads(); TestAudioAndLifecycle(); TestExit();
     assert(rmdir(root) == 0);
-    puts("shim: filesystem, memory, input, synchronization, threads, PCM, lifecycle and exit passed");
+    puts("shim: filesystem, memory, input, synchronization, threads, PCM/fast-forward mute/recovery, lifecycle and exit passed");
     return 0;
 }

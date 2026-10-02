@@ -19,6 +19,7 @@
 #include <3ds/services/dsp.h>
 #include <pthread.h>
 #include <string.h>
+#include <ctr_host.h>
 
 #include "ctrshim_apt.h"
 #include "ndsp_backend.h"
@@ -61,6 +62,7 @@ static void *sCallbackData;
 static double sFrameSamples;
 static volatile u32 sFrameCount;
 static bool sAdpcmReported;
+static bool sAccelerated;
 
 static void InitLock(void)
 {
@@ -113,6 +115,23 @@ static void DropQueue(Channel *chn)
     chn->frac = 0.0;
     chn->aL = chn->aR = chn->bL = chn->bR = 0.0f;
     chn->active = false;
+}
+
+/* Fast-forward still runs the game's mixer for each simulation tick, but
+ * playing that backlog at normal speed would delay sound by seconds. Discard
+ * transport buffers while accelerated, and clear resampler history on both
+ * edges so returning to 1x starts with current audio. Called under sLock. */
+static bool RefreshSpeedPolicy(void)
+{
+    bool accelerated = CtrHost_GameSpeed() > 1;
+
+    if (accelerated != sAccelerated)
+    {
+        for (int id = 0; id < CHANNEL_COUNT; ++id)
+            DropQueue(&sChannels[id]);
+        sAccelerated = accelerated;
+    }
+    return accelerated;
 }
 
 /* The next source frame, or false if the queue is empty. */
@@ -224,11 +243,12 @@ void CtrNdsp_Render(float *out, int frames, int rate)
     if (rate <= 0)
         return;
     Lock();
+    bool muted = RefreshSpeedPolicy();
     for (int id = 0; id < CHANNEL_COUNT; ++id)
     {
         Channel *chn = &sChannels[id];
 
-        if (!chn->paused && (chn->head != NULL || chn->active))
+        if (!muted && !chn->paused && (chn->head != NULL || chn->active))
             MixChannel(chn, out, frames, rate);
     }
     for (int i = 0; i < frames; ++i)
@@ -294,6 +314,7 @@ Result ndspInit(void)
         sClipping = NDSP_CLIP_SOFT;
         sOutputCount = 2;
         sFrameSamples = 0.0;
+        sAccelerated = false;
         Unlock();
         sBackend = CtrNdsp_GetBackend();
         if (sBackend == NULL || !sBackend->open())
@@ -558,19 +579,28 @@ void ndspChnWaveBufAdd(int id, ndspWaveBuf *buf)
     if (chn == NULL || buf == NULL || buf->nsamples == 0)
         return;
     Lock();
+    bool muted = RefreshSpeedPolicy();
     if (buf->status == NDSP_WBUF_QUEUED || buf->status == NDSP_WBUF_PLAYING)
     {
         Unlock();
         return;
     }
     buf->next = NULL;
+    seq = chn->seqNext ? chn->seqNext : 1;
+    buf->sequence_id = seq;
+    chn->seqNext = seq + 1;
+    if (muted)
+    {
+        /* Complete immediately: the producer's bounded ring remains usable
+         * even when several game ticks run between audio callbacks. */
+        SetStatus(buf, NDSP_WBUF_DONE);
+        Unlock();
+        return;
+    }
     SetStatus(buf, NDSP_WBUF_QUEUED);
     for (link = &chn->head; *link != NULL; link = &(*link)->next)
         ;
     *link = buf;
-    seq = chn->seqNext ? chn->seqNext : 1;
-    buf->sequence_id = seq;
-    chn->seqNext = seq + 1;
     /* From silence the first output frame fades in from zero to the first
      * sample rather than starting on it with a click. */
     if (!chn->active)

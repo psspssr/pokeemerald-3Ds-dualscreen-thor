@@ -42,6 +42,7 @@ bool gpuInit(void);
 void gpuShutdown(void);
 void gpuPresent(void);
 void gpuPace(void);
+bool gpuShouldRender(void);
 void gpuApplyState(void);
 void gpuFlushScreens(void);
 void gpuTransferToScreen(GpuTarget *target,gfxScreen_t screen,unsigned width,unsigned height);

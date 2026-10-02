@@ -17,6 +17,8 @@ static JavaVM *sVm;
 static jclass sBridgeClass;
 static jmethodID sOnGameExit;
 static jmethodID sVibrate;
+static jmethodID sShinyFleePrompt;
+static jmethodID sBackupFailure;
 static pthread_key_t sDetachKey;
 static atomic_bool sExitNotified;
 
@@ -69,6 +71,10 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     sVibrate = (*env)->GetStaticMethodID(env, sBridgeClass, "vibrate", "(I)V");
     if (!sVibrate)
         (*env)->ExceptionClear(env);
+    sShinyFleePrompt = (*env)->GetStaticMethodID(env, sBridgeClass, "onShinyFleePrompt", "(I)V");
+    if (!sShinyFleePrompt) (*env)->ExceptionClear(env);
+    sBackupFailure = (*env)->GetStaticMethodID(env, sBridgeClass, "onBackupFailure", "(I)V");
+    if (!sBackupFailure) (*env)->ExceptionClear(env);
     return JNI_VERSION_1_6;
 }
 
@@ -99,6 +105,48 @@ void CtrHost_Vibrate(int milliseconds)
 {
     if (milliseconds > 0)
         CallStatic(sVibrate, milliseconds);
+}
+
+bool CtrHost_ShowShinyFleePrompt(uint32_t request)
+{
+    JNIEnv *env = ThreadEnv();
+    if (!env || !sBridgeClass || !sShinyFleePrompt) return false;
+    (*env)->CallStaticVoidMethod(env, sBridgeClass, sShinyFleePrompt, (jint)request);
+    if ((*env)->ExceptionCheck(env))
+    {
+        (*env)->ExceptionDescribe(env);
+        (*env)->ExceptionClear(env);
+        return false;
+    }
+    return true;
+}
+
+void CtrHost_NotifyBackupFailure(void)
+{
+    CallStatic(sBackupFailure, 0);
+}
+
+JNIEXPORT void JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeSetGameplayOptions(JNIEnv *env, jclass cls,
+    jint speed, jint shiny, jboolean shared, jboolean backups, jboolean protect)
+{
+    (void)env; (void)cls;
+    CtrHost_SetGameplayOptions((unsigned)speed, (unsigned)shiny, shared, backups, protect);
+}
+
+JNIEXPORT void JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeAnswerShinyFlee(JNIEnv *env, jclass cls,
+    jint request, jboolean allow)
+{
+    (void)env; (void)cls;
+    CtrHost_AnswerShinyFlee((uint32_t)request, allow);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeIsShinyFleePending(JNIEnv *env, jclass cls, jint request)
+{
+    (void)env; (void)cls;
+    return CtrHost_IsShinyFleePending((uint32_t)request) ? JNI_TRUE : JNI_FALSE;
 }
 
 static void ReadRect(JNIEnv *env, jintArray array, CtrHostRect *out)

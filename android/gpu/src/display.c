@@ -24,7 +24,11 @@ static struct {
 static GLuint presentProgram,presentVbo,presentVao;
 static double nextVblank;
 static double framePeriod=1.0/59.83;
+static GpuFrameSchedule frameSchedule;
 static bool listenerRegistered;
+#ifdef CTR_GPU_TEST
+static unsigned presentCount;
+#endif
 static void destroyWindow(int i);
 
 static void lifecycle(CtrAptEvent event,void *user)
@@ -37,10 +41,18 @@ static void lifecycle(CtrAptEvent event,void *user)
     /* Anchor a resumed game's first frame at resume, not after its drawing.
      * Its FBOs remain intact; a long pause cannot leave stale deadlines. */
     nextVblank=event==CTR_APT_RESUME?gpuNow():0;
+    frameSchedule=(GpuFrameSchedule){0};
 }
 
 double gpuNow(void)
 { struct timespec now; clock_gettime(CLOCK_MONOTONIC,&now); return now.tv_sec+now.tv_nsec*1e-9; }
+bool gpuShouldRender(void)
+{
+    unsigned speed=CtrHost_GameSpeed();
+    if(speed<1 || speed>4) speed=1;
+    if(frameSchedule.speed && frameSchedule.speed!=speed) nextVblank=gpuNow();
+    return gpuFrameDue(&frameSchedule,speed);
+}
 void gpuPace(void)
 {
     double now=gpuNow();
@@ -150,6 +162,7 @@ void gpuShutdown(void)
     }
     memset(screens,0,sizeof(screens)); memset(windows,0,sizeof(windows));
     display=EGL_NO_DISPLAY; pbuffer=EGL_NO_SURFACE; context=EGL_NO_CONTEXT; initialized=false; nextVblank=0;
+    frameSchedule=(GpuFrameSchedule){0};
 }
 
 void gpuFlushScreens(void)
@@ -208,6 +221,9 @@ static void drawScreen(int screen,CtrHostRect rect,int width,int height,int filt
 void gpuPresent(void)
 {
     if(!initialized) return;
+#ifdef CTR_GPU_TEST
+    ++presentCount;
+#endif
     gpuC2DFlush(); gpuFlushScreens();
     CtrHostLayout layout; CtrHost_GetLayout(&layout);
     for(int i=0;i<CTR_HOST_MAX_WINDOWS;i++) {
@@ -259,7 +275,9 @@ void gfxSet3D(bool enable) { stereo=enable; }
 bool gfxIs3D(void) { return stereo; }
 void gfxSetWide(bool enable) { (void)enable; }
 bool gfxIsWide(void) { return false; }
-void gspWaitForVBlank(void) { gpuPresent(); gpuPace(); }
+/* Origin's held-top menus bypass FrameBegin/FrameEnd. They share the same
+ * simulation-tick grouping so menu animations and input also accelerate. */
+void gspWaitForVBlank(void) { if(gpuInit() && gpuShouldRender()) { gpuPresent(); gpuPace(); } }
 Result GSPGPU_FlushDataCache(const void *address,u32 size)
 {
     __sync_synchronize();
@@ -283,4 +301,5 @@ Result GSPGPU_InvalidateDataCache(const void *address,u32 size) { (void)address;
 /* Present-day GPU readback for the isolated conformance binary only. */
 GLuint gpuTestScreenFramebuffer(gfxScreen_t screen) { return screens[screen].fbo; }
 double gpuTestPacingDeadline(void) { return nextVblank; }
+unsigned gpuTestPresentCount(void) { return presentCount; }
 #endif

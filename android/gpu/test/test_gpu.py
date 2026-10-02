@@ -9,6 +9,9 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
+class FrameSchedule(ctypes.Structure):
+    _fields_ = [("speed", ctypes.c_uint), ("remaining", ctypes.c_uint)]
+
 spec = importlib.util.spec_from_file_location("picasso", ROOT / "tools/picasso2glsl.py")
 picasso = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(picasso)
@@ -28,6 +31,8 @@ class CpuBackendTests(unittest.TestCase):
         cls.lib.gpuDecodeTexture.restype = ctypes.c_bool
         cls.lib.gpuPacingDeadline.argtypes = [ctypes.c_double, ctypes.c_double, ctypes.c_double]
         cls.lib.gpuPacingDeadline.restype = ctypes.c_double
+        cls.lib.gpuFrameDue.argtypes = [ctypes.POINTER(FrameSchedule), ctypes.c_uint]
+        cls.lib.gpuFrameDue.restype = ctypes.c_bool
 
     @classmethod
     def tearDownClass(cls):
@@ -117,6 +122,36 @@ class CpuBackendTests(unittest.TestCase):
         self.assertAlmostEqual(deadline - resume - 0.006, period - 0.006)
         # Work that already exceeds the resumed frame budget doesn't sleep.
         self.assertLessEqual(self.lib.gpuPacingDeadline(resume + 0.080, resume, period), resume + 0.080)
+
+    def test_speed_groups_simulation_ticks_without_extra_presentations(self):
+        for speed in (1, 2, 3, 4):
+            with self.subTest(speed=speed):
+                schedule = FrameSchedule()
+                shown = [tick for tick in range(600 * speed)
+                         if self.lib.gpuFrameDue(ctypes.byref(schedule), speed)]
+                self.assertEqual(shown, list(range(0, 600 * speed, speed)))
+                # Every group consumes one unchanged display-frame deadline.
+                previous = 1000.0
+                for _ in shown:
+                    previous = self.lib.gpuPacingDeadline(previous + 0.006, previous, 1 / 59.83)
+                self.assertAlmostEqual(previous, 1000 + 600 / 59.83, places=9)
+
+    def test_speed_changes_and_resume_show_an_immediate_frame(self):
+        schedule = FrameSchedule()
+        for speed in (4, 2, 3, 1, 4):
+            self.assertTrue(self.lib.gpuFrameDue(ctypes.byref(schedule), speed))
+            self.assertEqual(schedule.remaining, speed - 1)
+        # Lifecycle clears the schedule; no pre-pause skip survives resumption.
+        schedule = FrameSchedule()
+        self.assertTrue(self.lib.gpuFrameDue(ctypes.byref(schedule), 4))
+        self.assertFalse(self.lib.gpuFrameDue(ctypes.byref(schedule), 4))
+
+    def test_invalid_speed_falls_back_to_normal_cadence(self):
+        schedule = FrameSchedule()
+        for speed in (0, 5, 100):
+            for _ in range(5):
+                self.assertTrue(self.lib.gpuFrameDue(ctypes.byref(schedule), speed))
+                self.assertEqual(schedule.speed, 1)
 
 
 class ShaderTests(unittest.TestCase):

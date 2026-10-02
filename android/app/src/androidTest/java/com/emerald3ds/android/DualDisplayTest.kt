@@ -3,6 +3,7 @@ package com.emerald3ds.android
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
@@ -207,6 +208,29 @@ class DualDisplayTest {
             assertEquals(0, s[14] % 320)
             assertEquals(0, s[15] % 240)
         }
+    }
+
+    @Test fun topLargeLayoutKeepsBothScreensAtWholePixelScales() {
+        val settings = AppSettings.load(context).copy(
+            landscapeLayout = AppSettings.LANDSCAPE_TOP_LARGE,
+            integerScaling = true,
+        )
+        fun layout(width: Int, height: Int, safe: Rect, integer: Boolean = true) =
+            ScreenLayout.single(width, height, safe, settings.copy(integerScaling = integer), 0, false, false)
+
+        val fullHd = layout(1920, 1080, Rect())
+        assertEquals(Rect(160, 60, 1760, 1020), fullHd.top)
+        assertEquals(Rect(1600, 0, 1920, 240), fullHd.bottom)
+
+        val inset = layout(2560, 1440, Rect(37, 11, 29, 19))
+        assertEquals(Rect(284, 116, 2284, 1316), inset.top)
+        assertEquals(Rect(1891, 11, 2531, 491), inset.bottom)
+
+        // Fractional fill is unchanged when disabled; windows too small for
+        // 1x must still downscale so the touch screen remains within bounds.
+        assertEquals(Rect(1315, 0, 1920, 454), layout(1920, 1080, Rect(), false).bottom)
+        val tiny = layout(360, 180, Rect()).bottom!!
+        assertEquals(Rect(259, 0, 360, 76), tiny)
     }
 
     @Test fun positionalButtonsAndKeyboardReachNativeWithoutStuckInput() {

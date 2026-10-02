@@ -46,6 +46,10 @@ static CtrHostLayout sLayout;
 static CtrHostInput sInput;
 static CtrHostState sState = CTR_HOST_RUNNING;
 static bool sPauseAcknowledged;
+static unsigned sGameSpeed = 1, sShinyMultiplier = 1;
+static bool sSharedExperience, sSaveBackups, sProtectShinies;
+static uint32_t sPromptSequence, sPromptPending;
+static bool sPromptAllow;
 
 static void CopyPath(char *dst, const char *src)
 {
@@ -225,6 +229,103 @@ void CtrHost_GetInput(CtrHostInput *out)
     pthread_mutex_unlock(&sLock);
 }
 
+void CtrHost_SetGameplayOptions(unsigned speed, unsigned shinyMultiplier,
+                               bool sharedExperience, bool saveBackups, bool protectShinies)
+{
+    if (speed < 1 || speed > 4) speed = 1;
+    if (!shinyMultiplier || shinyMultiplier > 64 || (shinyMultiplier & (shinyMultiplier - 1)))
+        shinyMultiplier = 1;
+    pthread_mutex_lock(&sLock);
+    sGameSpeed = speed;
+    sShinyMultiplier = shinyMultiplier;
+    sSharedExperience = sharedExperience;
+    sSaveBackups = saveBackups;
+    sProtectShinies = protectShinies;
+    pthread_mutex_unlock(&sLock);
+}
+
+unsigned CtrHost_GameSpeed(void)
+{
+    pthread_mutex_lock(&sLock);
+    unsigned value = sState == CTR_HOST_RUNNING ? sGameSpeed : 1;
+    pthread_mutex_unlock(&sLock);
+    return value;
+}
+
+unsigned CtrHost_ShinyMultiplier(void)
+{
+    pthread_mutex_lock(&sLock);
+    unsigned value = sShinyMultiplier;
+    pthread_mutex_unlock(&sLock);
+    return value;
+}
+
+bool CtrHost_SharedExperience(void)
+{
+    pthread_mutex_lock(&sLock);
+    bool value = sSharedExperience;
+    pthread_mutex_unlock(&sLock);
+    return value;
+}
+
+bool CtrHost_SaveBackups(void)
+{
+    pthread_mutex_lock(&sLock);
+    bool value = sSaveBackups;
+    pthread_mutex_unlock(&sLock);
+    return value;
+}
+
+bool CtrHost_ProtectShinies(void)
+{
+    pthread_mutex_lock(&sLock);
+    bool value = sProtectShinies;
+    pthread_mutex_unlock(&sLock);
+    return value;
+}
+
+void CtrHost_AnswerShinyFlee(uint32_t request, bool allow)
+{
+    pthread_mutex_lock(&sLock);
+    if (request && sPromptPending == request)
+    {
+        sPromptAllow = allow && sState == CTR_HOST_RUNNING;
+        sPromptPending = 0;
+        pthread_cond_broadcast(&sCond);
+    }
+    pthread_mutex_unlock(&sLock);
+}
+
+bool CtrHost_IsShinyFleePending(uint32_t request)
+{
+    pthread_mutex_lock(&sLock);
+    bool pending = request && sPromptPending == request && sState == CTR_HOST_RUNNING;
+    pthread_mutex_unlock(&sLock);
+    return pending;
+}
+
+bool CtrHost_ConfirmShinyFlee(void)
+{
+    pthread_mutex_lock(&sLock);
+    if (sState != CTR_HOST_RUNNING || sPromptPending)
+    {
+        pthread_mutex_unlock(&sLock);
+        return false;
+    }
+    if (!++sPromptSequence) ++sPromptSequence;
+    uint32_t request = sPromptPending = sPromptSequence;
+    sPromptAllow = false;
+    pthread_mutex_unlock(&sLock);
+    if (!CtrHost_ShowShinyFleePrompt(request))
+        CtrHost_AnswerShinyFlee(request, false);
+    pthread_mutex_lock(&sLock);
+    while (sPromptPending == request && sState == CTR_HOST_RUNNING)
+        pthread_cond_wait(&sCond, &sLock);
+    bool allow = sPromptAllow && sState == CTR_HOST_RUNNING;
+    pthread_mutex_unlock(&sLock);
+    return allow;
+}
+
 void CtrHost_SetState(CtrHostState state)
 {
     pthread_mutex_lock(&sLock);
@@ -235,7 +336,11 @@ void CtrHost_SetState(CtrHostState state)
         sPauseAcknowledged = false;
         /* Keys held when the activity went away must not stay held. */
         if (state != CTR_HOST_RUNNING)
+        {
             memset(&sInput, 0, sizeof(sInput));
+            sPromptPending = 0;
+            sPromptAllow = false;
+        }
         pthread_cond_broadcast(&sCond);
     }
     pthread_mutex_unlock(&sLock);

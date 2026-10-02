@@ -77,8 +77,8 @@ object ScreenLayout {
         return when (settings.landscapeLayout) {
             AppSettings.LANDSCAPE_TOP_LARGE -> {
                 val top = fitCentered(area, TW, H, integer)
-                val bh = ah * 0.42f
-                val bottom = rect(area.right - bh * BW / H, area.top.toFloat(), bh * BW / H, bh)
+                val sb = scale(min(aw / BW, ah * 0.42f / H), integer)
+                val bottom = rect(area.right - BW * sb, area.top.toFloat(), BW * sb, H * sb)
                 Result(top, bottom)
             }
             AppSettings.LANDSCAPE_TOP_ONLY ->

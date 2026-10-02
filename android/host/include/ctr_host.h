@@ -70,6 +70,19 @@ void CtrHost_SetWindowAt(int index, struct ANativeWindow *window);
 void CtrHost_SetLayout(const CtrHostLayout *layout);
 void CtrHost_SetInput(const CtrHostInput *input);
 void CtrHost_SetState(CtrHostState state);
+/* Optional gameplay rules are never stored in the GBA save. Speed is the
+ * currently active multiplier, not the configured shortcut's target speed. */
+void CtrHost_SetGameplayOptions(unsigned speed, unsigned shinyMultiplier,
+                               bool sharedExperience, bool saveBackups, bool protectShinies);
+unsigned CtrHost_GameSpeed(void);
+unsigned CtrHost_ShinyMultiplier(void);
+bool CtrHost_SharedExperience(void);
+bool CtrHost_SaveBackups(void);
+bool CtrHost_ProtectShinies(void);
+/* Game thread only. Pause/exit, missing UI and dismissal all mean Stay. */
+bool CtrHost_ConfirmShinyFlee(void);
+void CtrHost_AnswerShinyFlee(uint32_t request, bool allow);
+bool CtrHost_IsShinyFleePending(uint32_t request);
 /* Starts the game thread (origin's main()). Called once. */
 bool CtrHost_StartGame(void);
 
@@ -107,6 +120,9 @@ uint32_t CtrHost_WindowGenerationAt(int index);
 void CtrHost_NotifyGameExit(int status);
 /* A short rumble, for future use; may be a no-op. */
 void CtrHost_Vibrate(int milliseconds);
+/* JNI posts these to the UI thread. No gameplay state is changed by them. */
+bool CtrHost_ShowShinyFleePrompt(uint32_t request);
+void CtrHost_NotifyBackupFailure(void);
 
 #ifdef __cplusplus
 }

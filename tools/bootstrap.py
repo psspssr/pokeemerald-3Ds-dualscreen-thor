@@ -9,10 +9,11 @@
 1. Runs origin's own bootstrap (origin/tools/bootstrap.py --dir build/upstream):
    pinned pret/pokeemerald, origin's patches, origin's 3ds_port/, tools/ and
    builder/ overlaid.
-2. Applies patches/android/*.patch, in order, on top of that. A patch (or a
-   file of one) that is already in place is skipped, so re-running is cheap;
-   when the series itself changes, the tree is reset through origin's
-   bootstrap first (digest marker build/upstream/.emerald-android-patches).
+2. Checks and applies patches/android/*.patch in filename order, in a small
+   temporary tree containing only their source files. Recorded before/after
+   hashes make repeat builds exact; unexpected local edits or shifted patch
+   contexts stop the build. Changed patches refresh the generated sources
+   through origin's bootstrap and invalidate the native configuration stamp.
 3. Mirrors android/ (minus app/) to build/upstream/android/ and tools/ to
    build/upstream/android/tools/.
 4. With --make: `make tools generated` (the decomp's host tools), then
@@ -27,9 +28,12 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from check_origin import OriginError, check_origin
@@ -42,6 +46,11 @@ PATCHES = ROOT / "patches" / "android"
 ANDROID_PARTS = ["toolchain", "native", "shim", "gpu", "host"]
 ORIGIN_MARKER = ".emerald3ds-patches"
 MARKER = ".emerald-android-patches"
+MARKER_VERSION = 2
+
+
+class PatchError(RuntimeError):
+    pass
 
 
 def run(cmd, cwd=None, env=None):
@@ -49,49 +58,186 @@ def run(cmd, cwd=None, env=None):
     subprocess.run([str(c) for c in cmd], cwd=cwd, check=True, env=env)
 
 
-def quiet(cmd, cwd) -> bool:
-    return subprocess.run([str(c) for c in cmd], cwd=cwd, capture_output=True).returncode == 0
+def validate_source_path(rel: str) -> None:
+    parts = rel.split("/")
+    if (not re.fullmatch(r"[A-Za-z0-9_./+-]+", rel)
+            or any(part in ("", ".", "..", ".git", "build", "romfs", "android") for part in parts)
+            or parts[0].startswith(".emerald")):
+        raise PatchError("unsafe or unsupported Android patch path: %s" % rel)
 
 
-def patch_files(patch: Path) -> tuple[list[str], list[str]]:
-    """Paths a patch touches, and the ones it creates."""
-    touched, created = [], []
-    lines = patch.read_text(encoding="utf-8", errors="replace").splitlines()
-    for i, line in enumerate(lines):
-        if line.startswith("+++ b/"):
-            path = line[6:].split("\t")[0]
-            touched.append(path)
-            if i > 0 and lines[i - 1].startswith("--- /dev/null"):
-                created.append(path)
-    return touched, created
+def source_path(tree: Path, rel: str) -> Path:
+    """Patches are source-only: no escapes, symlinks or generated build state."""
+    validate_source_path(rel)
+    path = tree
+    for part in rel.split("/"):
+        path = path / part
+        if path.is_symlink():
+            raise PatchError("Android patch path is a symlink: %s" % rel)
+    if path.exists() and not path.is_file():
+        raise PatchError("Android patch path is not a regular file: %s" % rel)
+    return path
+
+
+def patch_files(patch: Path) -> list[str]:
+    """Ask Git for every path, accepting unified/git text diffs and file modes.
+
+    Binary patches, renames and symlinks are unnecessary for engine hooks and
+    rejected. Git's own parser accounts for every file, including deletions.
+    """
+    try:
+        text = patch.read_text(encoding="utf-8")
+    except UnicodeError as exc:
+        raise PatchError("%s: Android patches must be UTF-8 text" % patch.name) from exc
+    for line in text.splitlines():
+        if line.startswith(("GIT binary patch", "Binary files ", "rename ", "copy ")):
+            raise PatchError("%s: only regular-file text changes are supported" % patch.name)
+        if re.match(r"(?:new file|deleted file|old|new) mode ", line):
+            if line.rsplit(" ", 1)[-1] not in ("100644", "100755"):
+                raise PatchError("%s: symlink/submodule modes are unsupported" % patch.name)
+        if line.startswith("diff --git "):
+            match = re.fullmatch(r"diff --git a/(\S+) b/(\S+)", line)
+            if not match or match[1] != match[2]:
+                raise PatchError("%s: renamed or quoted paths are unsupported" % patch.name)
+    result = subprocess.run(["git", "apply", "--numstat", "-z", str(patch.resolve())],
+                            cwd=ROOT, capture_output=True)
+    if result.returncode:
+        raise PatchError("%s: invalid patch: %s" % (patch.name, result.stderr.decode().strip()))
+    paths = []
+    for record in result.stdout.split(b"\0"):
+        if not record:
+            continue
+        fields = record.split(b"\t", 2)
+        if len(fields) != 3 or not fields[2]:
+            raise PatchError("%s: unsupported path record" % patch.name)
+        rel = fields[2].decode("utf-8")
+        validate_source_path(rel)
+        if rel in paths:
+            raise PatchError("%s: duplicate diff for %s" % (patch.name, rel))
+        paths.append(rel)
+    if not paths:
+        raise PatchError("%s: patch contains no source changes" % patch.name)
+    return paths
 
 
 def digest(patches: list[Path]) -> str:
     h = hashlib.sha256()
     for p in patches:
-        h.update(p.name.encode())
+        h.update(p.name.encode() + b"\0")
         h.update(p.read_bytes())
+        h.update(b"\0")
     return h.hexdigest()
 
 
-def apply_patches(tree: Path, patches: list[Path]) -> None:
-    """Apply each file of each patch unless it is already applied. Files under
-    the overlaid directories are restored by every bootstrap run, files of
-    the decomp are not, so the decision is made per file."""
-    for patch in patches:
-        touched, _ = patch_files(patch)
-        applied = skipped = 0
-        for path in dict.fromkeys(touched):
-            include = "--include=" + path
-            if quiet(["git", "apply", "--check", "--whitespace=nowarn", include, patch], tree):
-                run(["git", "apply", "--whitespace=nowarn", include, patch], cwd=tree)
-                applied += 1
-            elif quiet(["git", "apply", "--check", "-R", "--whitespace=nowarn", include, patch], tree):
-                skipped += 1
+def file_state(tree: Path, rel: str) -> dict | None:
+    path = source_path(tree, rel)
+    if not path.exists():
+        return None
+    return {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "mode": 0o755 if path.stat().st_mode & stat.S_IXUSR else 0o644}
+
+
+def read_patch_state(tree: Path) -> dict | None:
+    marker = tree / MARKER
+    if not marker.exists():
+        return None
+    try:
+        have = json.loads(marker.read_text())
+        # Older builds used the empty series; there is nothing to undo.
+        if have == {"digest": hashlib.sha256(b"").hexdigest(), "created": []}:
+            return None
+        if have["version"] != MARKER_VERSION or not isinstance(have["files"], dict):
+            raise ValueError("unknown version")
+        for rel, images in have["files"].items():
+            source_path(tree, rel)
+            if set(images) != {"before", "after"}:
+                raise ValueError("invalid image record")
+            for image in images.values():
+                if image is not None and (set(image) != {"sha256", "mode"}
+                        or not re.fullmatch(r"[0-9a-f]{64}", image["sha256"])
+                        or image["mode"] not in (0o644, 0o755)):
+                    raise ValueError("invalid file state")
+        if not all(isinstance(have[key], str) for key in ("digest", "origin")):
+            raise ValueError("invalid identity")
+        return have
+    except (ValueError, KeyError, TypeError) as exc:
+        raise PatchError("unverifiable Android patch state; rebuild this generated tree with --clean") from exc
+
+
+def check_applied_sources(tree: Path, have: dict) -> None:
+    for rel, images in have["files"].items():
+        if file_state(tree, rel) != images["after"]:
+            raise PatchError("generated source %s changed after patching; preserve any edits, then use --clean" % rel)
+
+
+def strict_apply(tree: Path, patch: Path, extra: tuple[str, ...] | list[str] = ()) -> None:
+    command = ["git", "apply", "--verbose", "--whitespace=nowarn", *extra, str(patch.resolve())]
+    check = subprocess.run(command[:2] + ["--check"] + command[2:], cwd=tree,
+                           capture_output=True, text=True)
+    detail = check.stdout + check.stderr
+    if check.returncode or re.search(r"\(offset [+-]?\d+ lines?\)", detail):
+        raise PatchError("%s does not match the generated upstream exactly; rebase the patch:\n%s"
+                         % (patch.name, detail.strip()))
+    applied = subprocess.run(command, cwd=tree, capture_output=True, text=True)
+    if applied.returncode:
+        raise PatchError("%s failed: %s" % (patch.name, applied.stderr.strip()))
+
+
+def apply_patches(tree: Path, patches: list[Path], previous: dict | None = None,
+                  preserve_times: dict[str, tuple[int, int]] | None = None) -> dict:
+    """Validate the whole ordered series before replacing any source file.
+
+    Origin recopies its overlay on every run, while patched pret files remain.
+    Exact recorded hashes distinguish these cases. Reverse only verified final
+    files in the temporary tree, then apply the complete series once to its base.
+    """
+    paths = sorted({rel for patch in patches for rel in patch_files(patch)})
+    if previous and set(paths) != set(previous["files"]):
+        raise PatchError("Android patch file list differs from its recorded state; use --clean")
+    if not paths:
+        return {}
+    with tempfile.TemporaryDirectory(prefix="emerald-android-patches-", dir=tree.parent) as name:
+        stage = Path(name)
+        subprocess.run(["git", "init", "-q", stage], check=True)
+        reverse = []
+        for rel in paths:
+            current = file_state(tree, rel)
+            if previous:
+                images = previous["files"][rel]
+                if current == images["after"] and current != images["before"]:
+                    reverse.append("--include=" + rel)
+                elif current != images["before"]:
+                    raise PatchError("generated source %s matches neither recorded image; use --clean" % rel)
+            if current is not None:
+                target = stage / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(tree / rel, target)
+        if reverse:
+            for patch in reversed(patches):
+                strict_apply(stage, patch, ["--reverse", *reverse])
+        before = {rel: file_state(stage, rel) for rel in paths}
+        if previous and any(before[rel] != previous["files"][rel]["before"] for rel in paths):
+            raise PatchError("Android patch base differs from its recorded source; use --clean")
+        for patch in patches:
+            strict_apply(stage, patch)
+            print("bootstrap: checked %s" % patch.name)
+        images = {rel: {"before": before[rel], "after": file_state(stage, rel)} for rel in paths}
+        if previous and images != previous["files"]:
+            raise PatchError("Android patch result differs from its recorded state; use --clean")
+        for rel, image in images.items():
+            if file_state(tree, rel) == image["after"]:
+                continue  # Preserve source timestamps on a warm build.
+            target = source_path(tree, rel)
+            if image["after"] is None:
+                target.unlink()
             else:
-                raise SystemExit("bootstrap: %s does not apply to %s (neither forward nor reversed)"
-                                 % (patch.name, path))
-        print("bootstrap: %s: %d file(s) applied, %d already in place" % (patch.name, applied, skipped))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(stage / rel, target)
+                if preserve_times and rel in preserve_times:
+                    # Origin recopies its overlay even on a warm build. Its
+                    # patched result is identical: retain the previous mtime.
+                    os.utime(target, ns=preserve_times[rel])
+        return images
 
 
 def mirror(src: Path, dst: Path, keep: tuple[str, ...] = ()) -> None:
@@ -137,32 +283,50 @@ def main() -> int:
         args.make = True
 
     try:
-        check_origin(ROOT)
+        origin = check_origin(ROOT)
     except OriginError as exc:
         raise SystemExit("bootstrap: %s" % exc) from exc
 
     tree = args.dir.resolve()
     patches = sorted(PATCHES.glob("*.patch"))
     marker = tree / MARKER
-    want = {"digest": digest(patches), "created": sorted({c for p in patches for c in patch_files(p)[1]})}
-    have = json.loads(marker.read_text()) if marker.exists() else None
-    stale = have is not None and have.get("digest") != want["digest"]
-    if stale and (tree / ORIGIN_MARKER).exists():
-        # The series changed: let origin's bootstrap reset the tree, and drop
-        # the files the previous series created so the new one applies.
-        print("bootstrap: patches/android changed, resetting the tree")
-        (tree / ORIGIN_MARKER).unlink()
-        for rel in have.get("created", []):
-            if (tree / rel).exists():
-                (tree / rel).unlink()
+    want = {"version": MARKER_VERSION, "digest": digest(patches), "origin": origin["commit"]}
+    # Reject unsupported patches before any generated source is refreshed.
+    for patch in patches:
+        patch_files(patch)
+    have = None if args.clean else read_patch_state(tree)
+    previous_times = {}
+    if have:
+        check_applied_sources(tree, have)
+        for rel, images in have["files"].items():
+            if images["after"] is not None:
+                info = (tree / rel).stat()
+                previous_times[rel] = (info.st_atime_ns, info.st_mtime_ns)
+    stale = have is not None and any(have[key] != want[key] for key in ("digest", "origin"))
+    if stale:
+        # This is only the disposable build tree. Origin resets its tracked
+        # pret files and recopies its overlay; remove our previous additions.
+        print("bootstrap: Android patches/upstream changed, refreshing generated sources")
+        (tree / ORIGIN_MARKER).unlink(missing_ok=True)
+        marker.unlink(missing_ok=True)
+        for rel, images in have["files"].items():
+            if images["before"] is None:
+                source_path(tree, rel).unlink(missing_ok=True)
+    if stale or args.clean or (have is None and patches):
+        # Source copies preserve mtimes; never reuse objects made with an old
+        # hook/configuration even if a restored upstream file is older.
+        (tree / "3ds_port/build/config").unlink(missing_ok=True)
 
     cmd = [args.python, ORIGIN / "tools" / "bootstrap.py", "--dir", tree, "--python", args.python]
     if args.clean:
         cmd.append("--clean")
     run(cmd)
 
-    apply_patches(tree, patches)
-    marker.write_text(json.dumps(want, indent=1) + "\n")
+    want["files"] = apply_patches(tree, patches, have if not stale else None,
+                                 previous_times if not stale else None)
+    temporary = marker.with_name(marker.name + ".tmp")
+    temporary.write_text(json.dumps(want, indent=1, sort_keys=True) + "\n")
+    temporary.replace(marker)
 
     (tree / "android").mkdir(exist_ok=True)
     for part in ANDROID_PARTS:
@@ -200,4 +364,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except PatchError as exc:
+        sys.exit("bootstrap: %s" % exc)

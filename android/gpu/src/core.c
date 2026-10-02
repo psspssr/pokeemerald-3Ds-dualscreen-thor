@@ -154,6 +154,9 @@ bool C3D_FrameBegin(u8 flags)
 {
     (void)flags;
     if(!gpuInit() || CtrHost_GetState()==CTR_HOST_EXITING) return false;
+    /* Logic, input, audio synthesis and VBlank have already advanced. Only
+     * skip the picture; the next submitted frame keeps the 59.83 Hz clock. */
+    if(!gpuShouldRender()) return false;
     frameStart=gpuNow();
     for(GpuTarget *t=gpuTargets;t;t=t->next) t->target->used=false;
     gpuC2DResetFrame(); return true;

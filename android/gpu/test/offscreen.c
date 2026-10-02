@@ -7,8 +7,10 @@
 #include <ctrshim_apt.h>
 
 static CtrHostState state=CTR_HOST_RUNNING;
+static unsigned gameSpeed=1;
 extern GLuint gpuTestScreenFramebuffer(gfxScreen_t screen);
 extern double gpuTestPacingDeadline(void);
+extern unsigned gpuTestPresentCount(void);
 static CtrAptListener gpuListener;
 bool CtrApt_AddListener(CtrAptListener listener,void *user) { (void)user;gpuListener=listener;return true; }
 void CtrApt_RemoveListener(CtrAptListener listener,void *user) { (void)listener;(void)user;gpuListener=NULL; }
@@ -22,6 +24,7 @@ bool CtrMem_Find(const void *p,CtrMemBlock *out) { (void)p;(void)out;return fals
 void CtrMem_SetOwner(void *p,void *owner) { (void)p;(void)owner; }
 void CtrHost_GetLayout(CtrHostLayout *layout) { memset(layout,0,sizeof(*layout)); }
 CtrHostState CtrHost_GetState(void) { return state; }
+unsigned CtrHost_GameSpeed(void) { return gameSpeed; }
 void CtrHost_SetState(CtrHostState s) { state=s; }
 uint32_t CtrHost_WindowGenerationAt(int index) { (void)index;return 0; }
 struct ANativeWindow *CtrHost_AcquireWindowAt(int index,uint32_t *generation) { (void)index;*generation=0;return NULL; }
@@ -224,8 +227,33 @@ int main(int argc,char **argv)
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_BOTTOM));
     pixel(100,20,0,0,0,255); pixel(100,200,0,0,0,255);
     pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255);
+    /* Both origin present paths must advance the same simulation tick group:
+     * the ordinary FrameBegin/End and held-top menus' gspWaitForVBlank. */
+    unsigned before=gpuTestPresentCount(),skipped=0;
+    gameSpeed=4;
+    for(unsigned tick=0;tick<8;tick++) {
+        if(C3D_FrameBegin(0)) C3D_FrameEnd(0); else skipped++;
+    }
+    assert(skipped==6 && gpuTestPresentCount()==before+2);
+    gameSpeed=3; before=gpuTestPresentCount();
+    for(unsigned tick=0;tick<6;tick++) gspWaitForVBlank();
+    assert(gpuTestPresentCount()==before+2);
+    gameSpeed=4; assert(C3D_FrameBegin(0)); C3D_FrameEnd(0);
+    before=gpuTestPresentCount(); gspWaitForVBlank();
+    assert(gpuTestPresentCount()==before);
+    gameSpeed=2; gspWaitForVBlank();
+    assert(gpuTestPresentCount()==before+1);
+    gpuListener(CTR_APT_SUSPEND,NULL); gpuListener(CTR_APT_RESUME,NULL);
+    gspWaitForVBlank(); assert(gpuTestPresentCount()==before+2);
+    gameSpeed=1;
+    for(unsigned tick=0;tick<3;tick++) {
+        assert(C3D_FrameBegin(0)); C3D_FrameEnd(0);
+    }
+    assert(gpuTestPresentCount()==before+5);
+    glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_BOTTOM));
+    pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
-    printf("PASS %d GLES pixel assertions: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display\n",checks);
+    printf("PASS %d GLES pixel assertions and fast-forward presentation scheduling: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display\n",checks);
     if(argc==3) {
         /* Upstream's atlas is 1024x1024, but a typed glyph can change one
          * 8x8 tile. Measure that real update pattern separately from VBlank. */
