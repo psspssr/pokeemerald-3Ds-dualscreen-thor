@@ -98,6 +98,36 @@ int main(int argc,char **argv)
     C2D_DrawImageAt((C2D_Image){&rowsTexture,&rowsSub},0,0,0,NULL,1,1);
     pixel(2,13,0,0,255,255); pixel(2,2,0,255,0,255);
 
+    /* Building pages use PageTexInit: a hand-built descriptor pointing inside
+     * a shared VRAM arena. They never call TexInit or TexDelete. */
+    u16 *arena=vramAlloc(2048); assert(arena); arena[0]=0x5aa5;
+    C3D_Tex manual={.data=arena+64,.fmt=GPU_RGBA5551,.size=16*16*2,.width=16,.height=16};
+    for(unsigned i=0;i<256;i++) ((u16 *)manual.data)[i]=0xF83F;
+    Tex3DS_SubTexture manualSub={16,16,0,1,1,0};
+    C2D_DrawImageAt((C2D_Image){&manual,&manualSub},0,0,0,NULL,1,1);
+    pixel(2,13,255,0,255,255); pixel(2,2,255,0,255,255);
+    /* Reuse the same descriptor with a different slice and dimensions. */
+    memset(&manual,0,sizeof(manual));
+    manual=(C3D_Tex){.data=arena+384,.fmt=GPU_RGBA5551,.size=16*8*2,.width=16,.height=8};
+    for(unsigned i=0;i<128;i++) ((u16 *)manual.data)[i]=0x07C1;
+    manualSub=(Tex3DS_SubTexture){16,8,0,1,1,0};
+    C2D_DrawImageAt((C2D_Image){&manual,&manualSub},0,0,0,NULL,1,2);
+    pixel(2,13,0,255,0,255); pixel(2,2,0,255,0,255);
+    /* A format change must also invalidate the GL storage and CPU shadow. */
+    manual=(C3D_Tex){.data=arena+576,.fmt=GPU_RGB565,.size=8*16*2,.width=8,.height=16};
+    for(unsigned i=0;i<128;i++) ((u16 *)manual.data)[i]=0xF800;
+    manualSub=(Tex3DS_SubTexture){8,16,0,1,1,0};
+    C2D_DrawImageAt((C2D_Image){&manual,&manualSub},0,0,0,NULL,2,1);
+    pixel(2,13,255,0,0,255); pixel(2,2,255,0,0,255);
+    manual.fmt=GPU_RGBA5551;
+    for(unsigned i=0;i<128;i++) ((u16 *)manual.data)[i]=0x003F;
+    C2D_DrawImageAt((C2D_Image){&manual,&manualSub},0,0,0,NULL,2,1);
+    pixel(2,13,0,0,255,255);
+    assert(arena[0]==0x5aa5);
+    /* Match origin shutdown: release the whole arena and clear descriptors,
+     * then let C3D_Fini delete GPU records. It must not free an arena slice. */
+    vramFree(arena); memset(&manual,0,sizeof(manual));
+
     C3D_Tex renderTexture={0}; assert(C3D_TexInitVRAM(&renderTexture,16,16,GPU_RGBA8));
     C3D_RenderTarget *renderTarget=C3D_RenderTargetCreateFromTex(&renderTexture,GPU_TEXFACE_2D,0,-1); assert(renderTarget);
     C2D_SceneBegin(renderTarget); C2D_DrawRectSolid(0,0,0,16,8,C2D_Color32(255,0,255,255));
@@ -166,7 +196,7 @@ int main(int argc,char **argv)
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_BOTTOM));
     pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255); pixel(100,300,0,255,0,255);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
-    printf("PASS %d GLES pixel assertions: 2D, tiling, flips, tint, CPU edits, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display\n",checks);
+    printf("PASS %d GLES pixel assertions: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display\n",checks);
     if(argc==3) {
         /* Upstream's atlas is 1024x1024, but a typed glyph can change one
          * 8x8 tile. Measure that real update pattern separately from VBlank. */

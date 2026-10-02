@@ -60,9 +60,9 @@
     <string name="pref_version">Version %1$s</string>
 
     <string name="import_restart_title">Restart needed</string>
-    <string name="import_restart_body">The game is running. It will close now (unsaved progress is lost) and start again with the imported file.</string>
+    <string name="import_restart_body">Your import is ready and will be used the next time the game starts. Restart now to use it immediately. Restarting discards unsaved progress.</string>
     <string name="restart_now">Restart now</string>
-    <string name="cancel">Cancel</string>
+    <string name="import_later">Later</string>
     <string name="ok">OK</string>
     <string name="import_done">Imported.</string>
     <string name="import_bad_pak">That file is not an emerald3ds.pak data pack.</string>

@@ -82,12 +82,13 @@ class ControlsInputTest {
         while (SystemClock.uptimeMillis() < deadline) {
             var ready = false
             instrumentation.runOnMainSync {
-                ready = view.controlsVisible && view.bottomScreenBounds() != null && !view.controlBounds(0).isEmpty
+                ready = view.inputEnabled && view.controlsVisible &&
+                    view.bottomScreenBounds() != null && !view.controlBounds(0).isEmpty
             }
             if (ready) return
             SystemClock.sleep(100)
         }
-        throw AssertionError("overlay not laid out")
+        throw AssertionError("game input overlay was not ready")
     }
 
     @Test

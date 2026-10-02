@@ -90,7 +90,7 @@ class SettingsActivity : AppCompatActivity() {
                         .setTitle(R.string.import_restart_title)
                         .setMessage(R.string.import_restart_body)
                         .setPositiveButton(R.string.restart_now) { _, _ -> RestartActivity.restart(requireActivity()) }
-                        .setNegativeButton(R.string.cancel, null)
+                        .setNegativeButton(R.string.import_later, null)
                         .show()
                 }
             }

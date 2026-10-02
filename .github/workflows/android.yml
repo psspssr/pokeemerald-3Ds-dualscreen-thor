@@ -102,6 +102,14 @@ jobs:
         # Match the locally verified dual-display/GLES harness while compiling
         # and targeting API 35. Current emulators enforce a 6 GB userdata floor.
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'emulator' 'system-images;android-34;google_apis;x86_64'
+      - name: Build harness APKs and lint before starting the emulator
+        working-directory: android/app
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          ./gradlew --no-daemon --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx1024m -Dfile.encoding=UTF-8' \
+            -Pkotlin.compiler.execution.strategy=in-process \
+            assembleHarness assembleHarnessAndroidTest lintHarness
       - name: Start emulator
         timeout-minutes: 7
         run: |
@@ -123,6 +131,10 @@ jobs:
             fi
             booted="$(timeout 5 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$booted" = 1 ]; then
+              # AOSP CTS also preconfirms this tutorial: its SystemUI window
+              # otherwise intercepts the test's injected control touches.
+              timeout 10 adb shell settings put secure immersive_mode_confirmations confirmed
+              timeout 10 adb shell wm dismiss-keyguard
               timeout 10 adb shell input keyevent 82
               timeout 10 adb shell settings put global window_animation_scale 0
               timeout 10 adb shell settings put global transition_animation_scale 0
@@ -135,7 +147,11 @@ jobs:
           exit 1
       - name: App input, storage and secondary-display instrumentation
         working-directory: android/app
-        run: ./gradlew --no-daemon connectedHarnessAndroidTest lintHarness
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          ./gradlew --no-daemon --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx1024m -Dfile.encoding=UTF-8' \
+            -Pkotlin.compiler.execution.strategy=in-process connectedHarnessAndroidTest
       - name: GLES pixel conformance
         run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018" bash android/gpu/test/run-emulator.sh
       - name: Capture emulator log

@@ -17,6 +17,53 @@ void gpuSetTextureParams(C3D_Tex *texture)
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,wraps[(texture->param>>8)&3]);
 }
 
+static bool validTextureView(const C3D_Tex *texture)
+{
+    return texture && texture->data && texture->width>=8 && texture->height>=8 &&
+        texture->width<=2048 && texture->height<=2048 &&
+        !(texture->width&(texture->width-1)) && !(texture->height&(texture->height-1)) &&
+        texture->fmt<GPU_ETC1 && ((texture->param>>28)&7)==GPU_TEX_2D &&
+        texture->size==gpuTextureSize(texture->width,texture->height,texture->fmt);
+}
+
+static bool configureRecord(GpuTexture *record,C3D_Tex *texture)
+{
+    unsigned char *shadow=calloc(1,texture->size);
+    unsigned char *rgba=calloc((size_t)texture->width*texture->height,4);
+    if(!shadow || !rgba) { free(shadow); free(rgba); return false; }
+    free(record->shadow); free(record->rgba);
+    record->shadow=shadow; record->rgba=rgba; record->tex=texture;
+    record->data=texture->data; record->width=texture->width; record->height=texture->height;
+    record->size=texture->size; record->format=texture->fmt;
+    record->authoritative=false; record->uploaded=false;
+    if(!record->id) glGenTextures(1,&record->id);
+    glBindTexture(GL_TEXTURE_2D,record->id);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,texture->width,texture->height,0,GL_RGBA,GL_UNSIGNED_BYTE,rgba);
+    gpuSetTextureParams(texture);
+    return true;
+}
+
+static GpuTexture *ensureTextureRecord(C3D_Tex *texture)
+{
+    if(!validTextureView(texture)) { GPU_LOG("invalid or unsupported texture view"); return NULL; }
+    GpuTexture *record=gpuFindTexture(texture);
+    if(!record) {
+        /* Origin's building pages construct C3D_Tex directly over arena slices.
+         * This record owns GPU resources and shadows, never the caller's data. */
+        record=calloc(1,sizeof(*record));
+        if(!record) return NULL;
+        if(!configureRecord(record,texture)) { free(record); return NULL; }
+        record->next=gpuTextures; gpuTextures=record;
+    } else if(record->data!=texture->data || record->width!=texture->width ||
+              record->height!=texture->height || record->size!=texture->size || record->format!=texture->fmt) {
+        /* PageFree clears the descriptor; PageTexInit can reuse that same slot
+         * with a different arena slice or size without calling TexDelete. */
+        if(record->ownsData) { GPU_LOG("owned texture allocation changed without deletion"); return NULL; }
+        if(!configureRecord(record,texture)) return NULL;
+    }
+    return record;
+}
+
 bool C3D_TexInitWithParams(C3D_Tex *texture,C3D_TexCube *cube,C3D_TexInitParams p)
 {
     if(!texture || cube || p.type!=GPU_TEX_2D || p.width<8 || p.height<8 ||
@@ -26,17 +73,13 @@ bool C3D_TexInitWithParams(C3D_Tex *texture,C3D_TexCube *cube,C3D_TexInitParams 
     if(!record) return false;
     memset(texture,0,sizeof(*texture));
     texture->data=p.onVram?vramAlloc(total):linearAlloc(total);
-    record->shadow=malloc(total); record->rgba=calloc((size_t)p.width*p.height,4);
-    if(!texture->data || !record->shadow || !record->rgba) {
+    texture->width=p.width; texture->height=p.height; texture->fmt=p.format;
+    texture->size=size; texture->maxLevel=p.maxLevel;
+    if(!texture->data || !configureRecord(record,texture)) {
         if(p.onVram) vramFree(texture->data); else linearFree(texture->data);
         free(record->shadow); free(record->rgba); free(record); memset(texture,0,sizeof(*texture)); return false;
     }
-    memset(texture->data,0,total); memset(record->shadow,0,total);
-    texture->width=p.width; texture->height=p.height; texture->fmt=p.format;
-    texture->size=size; texture->maxLevel=p.maxLevel; record->tex=texture;
-    glGenTextures(1,&record->id); glBindTexture(GL_TEXTURE_2D,record->id);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,p.width,p.height,0,GL_RGBA,GL_UNSIGNED_BYTE,record->rgba);
-    gpuSetTextureParams(texture);
+    memset(texture->data,0,total); record->ownsData=true;
     CtrMem_SetOwner(texture->data,record);
     record->next=gpuTextures; gpuTextures=record;
     return true;
@@ -44,7 +87,7 @@ bool C3D_TexInitWithParams(C3D_Tex *texture,C3D_TexCube *cube,C3D_TexInitParams 
 
 GLuint gpuTextureId(C3D_Tex *texture)
 {
-    GpuTexture *record=gpuFindTexture(texture);
+    GpuTexture *record=ensureTextureRecord(texture);
     if(!record) return 0;
     glBindTexture(GL_TEXTURE_2D,record->id); gpuSetTextureParams(texture);
     if(!record->authoritative && (!record->uploaded || memcmp(record->shadow,texture->data,texture->size))) {
@@ -96,8 +139,10 @@ void C3D_TexDelete(C3D_Tex *texture)
     GpuTexture *t=*item; *item=t->next;
     for(int i=0;i<3;i++) if(GPU_BOUND_TEXTURES[i]==texture) GPU_BOUND_TEXTURES[i]=NULL;
     glDeleteTextures(1,&t->id); free(t->shadow); free(t->rgba);
-    CtrMemBlock block;
-    if(CtrMem_Find(texture->data,&block) && block.kind==CTR_MEM_VRAM) vramFree(texture->data); else linearFree(texture->data);
+    if(t->ownsData) {
+        CtrMemBlock block;
+        if(CtrMem_Find(t->data,&block) && block.kind==CTR_MEM_VRAM) vramFree(t->data); else linearFree(t->data);
+    }
     free(t); memset(texture,0,sizeof(*texture));
 }
 
@@ -169,7 +214,7 @@ C3D_RenderTarget *C3D_RenderTargetCreate(int width,int height,GPU_COLORBUF color
 C3D_RenderTarget *C3D_RenderTargetCreateFromTex(C3D_Tex *texture,GPU_TEXFACE face,int level,C3D_DEPTHTYPE depth)
 {
     (void)face;
-    gpuC2DFlush(); GpuTexture *t=gpuFindTexture(texture); if(!t || level) return NULL;
+    gpuC2DFlush(); GpuTexture *t=ensureTextureRecord(texture); if(!t || level) return NULL;
     return createTarget(texture->width,texture->height,(GPU_COLORBUF)texture->fmt,depth,t);
 }
 void C3D_RenderTargetDelete(C3D_RenderTarget *target)

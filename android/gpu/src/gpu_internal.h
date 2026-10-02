@@ -14,7 +14,11 @@ typedef struct GpuTexture {
     C3D_Tex *tex;
     GLuint id;
     unsigned char *shadow, *rgba;
-    bool authoritative, uploaded;
+    void *data;
+    unsigned width, height;
+    size_t size;
+    GPU_TEXCOLOR format;
+    bool authoritative, uploaded, ownsData;
 } GpuTexture;
 typedef struct GpuTarget {
     struct GpuTarget *next;

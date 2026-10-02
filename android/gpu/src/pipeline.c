@@ -138,7 +138,9 @@ GLuint gpuUseProgram(bool citro2d)
     }
     for(int unit=0;unit<3;unit++) {
         glActiveTexture(GL_TEXTURE0+unit);
-        if(!GPU_BOUND_TEXTURES[unit] || !gpuTextureId(GPU_BOUND_TEXTURES[unit])) {
+        if(GPU_BOUND_TEXTURES[unit]) {
+            if(!gpuTextureId(GPU_BOUND_TEXTURES[unit])) return 0;
+        } else {
             if(!whiteTexture) {
                 const unsigned char white[4]={255,255,255,255}; glGenTextures(1,&whiteTexture); glBindTexture(GL_TEXTURE_2D,whiteTexture);
                 glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,1,1,0,GL_RGBA,GL_UNSIGNED_BYTE,white);
