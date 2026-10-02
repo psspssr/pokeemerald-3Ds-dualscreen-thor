@@ -149,6 +149,17 @@ Java_com_emerald3ds_android_NativeBridge_nativeIsShinyFleePending(JNIEnv *env, j
     return CtrHost_IsShinyFleePending((uint32_t)request) ? JNI_TRUE : JNI_FALSE;
 }
 
+#ifdef CTR_HOST_HARNESS
+/* Exercise the actual blocking JNI/UI round trip without modifying a game
+ * encounter. This entry point does not exist in the production library. */
+JNIEXPORT jboolean JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeTestShinyFlee(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    return CtrHost_ConfirmShinyFlee() ? JNI_TRUE : JNI_FALSE;
+}
+#endif
+
 static void ReadRect(JNIEnv *env, jintArray array, CtrHostRect *out)
 {
     jint v[4] = { 0, 0, 0, 0 };

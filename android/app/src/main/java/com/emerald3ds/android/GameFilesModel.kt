@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import java.io.IOException
+import java.io.File
 import java.util.concurrent.Executors
 
 /**
@@ -16,7 +17,7 @@ import java.util.concurrent.Executors
  * racing between the game and Settings, including a destroyed/reopened UI.
  */
 class GameFilesModel(application: Application) : AndroidViewModel(application) {
-    enum class Action { PREPARE, IMPORT_PAK, IMPORT_SAVE, EXPORT_SAVE }
+    enum class Action { PREPARE, IMPORT_PAK, IMPORT_SAVE, EXPORT_SAVE, RESTORE_BACKUP }
     data class State(val action: Action, val busy: Boolean, val ready: Boolean = false,
                      val error: String? = null, val done: Int = 0, val total: Int = 0)
 
@@ -50,10 +51,17 @@ class GameFilesModel(application: Application) : AndroidViewModel(application) {
         false
     }
 
+    fun restoreBackup(file: File) = submit(Action.RESTORE_BACKUP) {
+        if (!NativeBridge.awaitPaused()) throw IOException("The game is still saving. Return to Settings and retry.")
+        files.stageBackup(file)
+        false
+    }
+
     /** UI thread only. An unconsumed result also blocks overlapping requests. */
     internal fun submit(action: Action, work: () -> Boolean) {
         if (mutableState.value != null) return
-        if (action == Action.EXPORT_SAVE) {
+        val holdsPause = action == Action.EXPORT_SAVE || action == Action.RESTORE_BACKUP
+        if (holdsPause) {
             mutablePauseHolds.value = (mutablePauseHolds.value ?: 0) + 1
             NativeBridge.setState(NativeBridge.STATE_PAUSED)
         }
@@ -64,7 +72,7 @@ class GameFilesModel(application: Application) : AndroidViewModel(application) {
             main.post {
                 // A slow document provider may outlive Settings. Keep the
                 // game paused until its save has been copied completely.
-                if (action == Action.EXPORT_SAVE)
+                if (holdsPause)
                     mutablePauseHolds.value = (mutablePauseHolds.value ?: 1) - 1
                 if (!cleared) mutableState.value = result
             }

@@ -6,6 +6,15 @@ The remote named `origin` belongs to **this Android repository**; the imported
 project's URL, default branch, exact commit and tree hash live in `origin.lock`.
 Android fixes belong outside `origin/`.
 
+Tracked Android overlays in `patches/android/` are applied in filename order
+to the generated tree by `tools/bootstrap.py`. They add the optional gameplay
+hooks and a scoped field-window clipping repair. Their exact context is
+checked before installation; a new upstream revision that changes those
+sections stops with a patch error instead of silently applying shifted code.
+Rebase or remove the affected overlay, then repeat the checks below. Repeated
+builds at the same patch series preserve source timestamps and cached objects;
+changing the series refreshes affected sources and invalidates configuration.
+
 ## Preview and import
 
 From the repository root:

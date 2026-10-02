@@ -79,4 +79,37 @@ Built on the <b>pret/pokeemerald</b> decompilation (github.com/pret/pokeemerald)
 Contains code from devkitPro <b>libctru</b>, <b>citro3d</b> and <b>citro2d</b> (zlib licence).<br><br>
 Engine-only builds require a data pack generated for the same Android build using your own cartridge dump. Development builds may embed game data.<br><br>
 This is an unofficial fan project, not affiliated with or endorsed by Nintendo, Game Freak, Creatures or The Pokémon Company. Pokémon and Pokémon Emerald are trademarks of their respective owners.]]></string>
+    <string name="cat_gameplay">Gameplay</string>
+    <string name="qol_title">Quality of life</string>
+    <string name="qol_summary">Optional speed, shiny odds, experience and save helpers</string>
+    <string name="qol_intro">Your rules, your choice</string>
+    <string name="qol_intro_summary">Every option starts off. Preferences stay separate from your Emerald save; Pokémon and progress still use the original save format.</string>
+    <string name="qol_fast_forward">Enable fast-forward controls</string>
+    <string name="qol_fast_forward_summary">R2 toggles; hold L2 or keyboard Tab. A toggle also appears in the pause menu. Audio is muted while fast-forwarding.</string>
+    <string name="qol_speed">Fast-forward speed</string>
+    <string name="qol_shiny">Shiny odds for new wild encounters</string>
+    <string name="qol_shared_exp">Share party experience</string>
+    <string name="qol_shared_exp_summary">Healthy benched Pokémon below level 100 receive half base EXP. Existing participant and held Exp. Share rewards stay unchanged. Eggs are excluded.</string>
+    <string name="qol_backups">Keep save backups</string>
+    <string name="qol_backups_summary">Keep the last five completed in-game saves. This does not save automatically while you play.</string>
+    <string name="qol_protect_shinies">Confirm before fleeing a shiny</string>
+    <string name="qol_protect_shinies_summary">Ask before escaping from a living wild shiny Pokémon.</string>
+    <string name="fast_forward_active">Fast-forward: %1$d×</string>
+    <string name="fast_forward_normal">Normal speed</string>
+    <string name="fast_forward_start">Start fast-forward (%1$d×)</string>
+    <string name="fast_forward_stop">Stop fast-forward</string>
+    <string name="shiny_flee_title">Run from a shiny Pokémon?</string>
+    <string name="shiny_flee_body">A wild shiny Pokémon is still present. Run away anyway?</string>
+    <string name="shiny_flee_stay">Stay</string>
+    <string name="shiny_flee_run">Run away</string>
+    <string name="backup_failed">Game saved, but a backup could not be created.</string>
+    <string name="restore_backup">Restore a save backup</string>
+    <string name="restore_backup_summary">Choose an earlier completed save; applies after restart</string>
+    <string name="restore_backup_none">No save backups yet. Enable backups, then save normally in-game.</string>
+    <string name="restore_backup_confirm">Restore the save from %1$s? Your current save will be kept as a .bak file. Restart to load the restored progress.</string>
+    <string name="restore_backup_action">Restore</string>
+    <string-array name="qol_speed_entries"><item>2×</item><item>4×</item></string-array>
+    <string-array name="qol_speed_values"><item>2</item><item>4</item></string-array>
+    <string-array name="qol_shiny_entries"><item>Off — normal odds (1 in 8,192)</item><item>Up to 4× (about 1 in 2,048)</item><item>Up to 16× (about 1 in 512)</item><item>Up to 64× (about 1 in 128)</item></string-array>
+    <string-array name="qol_shiny_values"><item>1</item><item>4</item><item>16</item><item>64</item></string-array>
 </resources>

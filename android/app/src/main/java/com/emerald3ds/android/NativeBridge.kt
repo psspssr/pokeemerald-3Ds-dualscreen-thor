@@ -7,6 +7,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
 import android.view.Surface
+import android.widget.Toast
 
 /**
  * JNI surface of libemerald.so (android/host/src/jni_bridge.c). Every native
@@ -51,6 +52,10 @@ object NativeBridge {
     @JvmStatic private external fun nativeSetInput(keys: Int, circleX: Int, circleY: Int, touchX: Int, touchY: Int)
     @JvmStatic private external fun nativeSetState(state: Int)
     @JvmStatic private external fun nativeAwaitPaused(timeoutMs: Int): Boolean
+    @JvmStatic private external fun nativeSetGameplayOptions(speed: Int, shiny: Int, shared: Boolean, backups: Boolean, protect: Boolean)
+    @JvmStatic private external fun nativeAnswerShinyFlee(request: Int, allow: Boolean)
+    @JvmStatic private external fun nativeIsShinyFleePending(request: Int): Boolean
+    @JvmStatic private external fun nativeTestShinyFlee(): Boolean
 
     fun init(romfsDir: String, sdmcDir: String) {
         if (loaded) nativeInit(romfsDir, sdmcDir)
@@ -80,6 +85,35 @@ object NativeBridge {
 
     fun setState(state: Int) {
         if (loaded) nativeSetState(state)
+    }
+
+    fun setGameplayOptions(speed: Int, options: GameplayOptions) {
+        if (loaded) nativeSetGameplayOptions(speed, options.shinyMultiplier,
+            options.sharedExperience, options.saveBackups, options.protectShinies)
+    }
+
+    fun answerShinyFlee(request: Int, allow: Boolean) {
+        if (loaded) nativeAnswerShinyFlee(request, allow)
+    }
+
+    fun isShinyFleePending(request: Int): Boolean = loaded && nativeIsShinyFleePending(request)
+
+    internal fun testShinyFleeRoundTrip(): Boolean {
+        check(BuildConfig.HOST_HARNESS) { "Only available in the isolated display test app" }
+        return nativeTestShinyFlee()
+    }
+
+    @JvmStatic
+    fun onShinyFleePrompt(request: Int) {
+        Handler(Looper.getMainLooper()).post { GameActivity.onShinyFleePrompt(request) }
+    }
+
+    @JvmStatic
+    @Suppress("UNUSED_PARAMETER")
+    fun onBackupFailure(status: Int) {
+        Handler(Looper.getMainLooper()).post {
+            appContext?.let { Toast.makeText(it, R.string.backup_failed, Toast.LENGTH_LONG).show() }
+        }
     }
 
     /** File worker only: wait for the game to finish its current frame/save. */

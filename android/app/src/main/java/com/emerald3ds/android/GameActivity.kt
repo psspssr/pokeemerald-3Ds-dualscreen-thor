@@ -78,6 +78,9 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     private var resumed = false
     private var menuShown = false
     private var menuDialog: AlertDialog? = null
+    private var shinyDialog: AlertDialog? = null
+    private var shinyRequest = 0
+    private val fastForward = FastForwardState { applyGameplayOptions() }
     private var exiting = false
 
     private val importPak = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -145,6 +148,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         displayManager.unregisterDisplayListener(this)
         inputManager.unregisterInputDeviceListener(this)
         menuDialog?.dismiss()
+        dismissShinyPrompt()
         dismissPresentation()
         if (!exiting) handler.removeCallbacksAndMessages(null)
         if (current?.get() === this) current = null
@@ -166,6 +170,8 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         resumed = true
         settings = AppSettings.load(this)
         physical.labelMapping = settings.labelMapping
+        fastForward.configure(GameplayOptions.load(this))
+        physical.fastForwardEnabled = fastForward.options.fastForwardEnabled
         if (settings.keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enterImmersive()
@@ -180,6 +186,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         resumed = false
         updateInputEnabled()
         NativeBridge.setState(NativeBridge.STATE_PAUSED)
+        dismissShinyPrompt()
         overlay.releaseAll()
         presentation?.touchView?.releaseAll()
         physical.clear()
@@ -301,7 +308,64 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         presentation?.touchView?.inputEnabled = enabled
     }
 
-    private fun acceptsGameInput() = resumed && phase == Phase.RUNNING && !menuShown && !exiting && !GameFilesModel.exportPending
+    private fun acceptsGameInput() = resumed && phase == Phase.RUNNING && !menuShown && shinyRequest == 0 && !exiting && !GameFilesModel.exportPending
+
+    private fun applyGameplayOptions() {
+        NativeBridge.setGameplayOptions(fastForward.speed, fastForward.options)
+    }
+
+    override fun onFastForwardToggle() {
+        fastForward.toggle()
+        Toast.makeText(this, if (fastForward.speed > 1)
+            getString(R.string.fast_forward_active, fastForward.speed)
+            else getString(R.string.fast_forward_normal), Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onFastForwardHold(held: Boolean) = fastForward.hold(held)
+
+    private fun dismissShinyPrompt() {
+        val request = shinyRequest
+        shinyRequest = 0
+        shinyDialog?.setOnDismissListener(null)
+        shinyDialog?.dismiss()
+        shinyDialog = null
+        if (request != 0) NativeBridge.answerShinyFlee(request, false)
+    }
+
+    private fun showShinyPrompt(request: Int) {
+        if (!resumed || phase != Phase.RUNNING || exiting || menuShown ||
+            !NativeBridge.isShinyFleePending(request)) {
+            NativeBridge.answerShinyFlee(request, false)
+            return
+        }
+        dismissShinyPrompt()
+        shinyRequest = request
+        updateInputEnabled()
+        physical.clear()
+        InputHub.clear()
+        // The native thread is waiting for this answer, so do not pause it
+        // through aptMainLoop here. A real Activity pause cancels the request.
+        fun answer(allow: Boolean) {
+            if (shinyRequest != request) return
+            shinyRequest = 0
+            NativeBridge.answerShinyFlee(request, allow)
+        }
+        shinyDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.shiny_flee_title)
+            .setMessage(R.string.shiny_flee_body)
+            .setNegativeButton(R.string.shiny_flee_stay) { _, _ -> answer(false) }
+            .setPositiveButton(R.string.shiny_flee_run) { _, _ -> answer(true) }
+            .setOnCancelListener { answer(false) }
+            .setOnDismissListener {
+                answer(false)
+                shinyDialog = null
+                updateInputEnabled()
+                enterImmersive()
+            }
+            .create()
+        shinyDialog?.show()
+        shinyDialog?.getButton(AlertDialog.BUTTON_NEGATIVE)?.requestFocus()
+    }
 
     // ── Surfaces and layout ──────────────────────────────────────────────
 
@@ -431,6 +495,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     // ── Input ────────────────────────────────────────────────────────────
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (shinyDialog?.dispatchKeyEvent(event) == true) return true
         if (menuShown && menuDialog?.dispatchKeyEvent(event) == true) return true
         if (acceptsGameInput() && physical.onKey(event)) return true
         return super.dispatchKeyEvent(event)
@@ -458,20 +523,24 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             if (phase != Phase.EXTRACTING) exitProcess()
             return
         }
-        if (menuShown || exiting) return
+        if (menuShown || shinyRequest != 0 || exiting) return
         menuShown = true
         updateInputEnabled()
         NativeBridge.setState(NativeBridge.STATE_PAUSED)
         overlay.releaseAll()
         physical.clear()
         InputHub.clear()
-        val items = arrayOf(getString(R.string.menu_resume), getString(R.string.menu_settings), getString(R.string.menu_quit))
+        val items = mutableListOf(getString(R.string.menu_resume), getString(R.string.menu_settings), getString(R.string.menu_quit))
+        if (fastForward.options.fastForwardEnabled)
+            items.add(getString(if (fastForward.toggled) R.string.fast_forward_stop else R.string.fast_forward_start,
+                fastForward.options.fastForwardSpeed))
         menuDialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.menu_title)
-            .setItems(items) { _, which ->
+            .setItems(items.toTypedArray()) { _, which ->
                 when (which) {
                     1 -> openSettings()
                     2 -> quitGame()
+                    3 -> onFastForwardToggle()
                 }
             }
             .setOnDismissListener {
@@ -524,6 +593,12 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         private const val KILL_DELAY_MS = 300L
 
         private var current: WeakReference<GameActivity>? = null
+
+        fun onShinyFleePrompt(request: Int) {
+            val activity = current?.get()
+            if (activity == null || activity.isDestroyed) NativeBridge.answerShinyFlee(request, false)
+            else activity.showShinyPrompt(request)
+        }
 
         fun onNativeGameExit(status: Int) {
             val activity = current?.get()

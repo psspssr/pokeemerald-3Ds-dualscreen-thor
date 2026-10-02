@@ -64,6 +64,7 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 | **Touch menus** | Use the bottom screen for the map, party, bag, battle commands, save and options. |
 | **Physical controls** | Gamepad and keyboard support, with a Nintendo-style positional layout by default and an alternative Xbox-style mapping. |
 | **Portable saves** | Import and export standard Emerald `.sav` files. Keep Android and voxel preferences separately from your game progress. |
+| **Optional quality of life** | 2×/4× fast-forward, boosted wild shiny odds, shared party EXP, rotating save backups and shiny-escape confirmation. Every option starts off. |
 
 ## Compatibility
 
@@ -103,9 +104,15 @@ Use **Settings → Import save** to bring in an Emerald battery/flash save, then
 
 Game-created saves use the standard **128 KiB raw `.sav` format**, with no Android header. Real saves have been transferred between this port and the original GBA game running in mGBA. The importer also handles mGBA's optional RTC trailer; emulator save states are a different format and are not supported. [Save formats and transfer details →](docs/BUILDING.md#engine-only-build-and-data-packs)
 
+## Choose your quality-of-life options
+
+Open **Settings → Gameplay → Quality of life**. Fast-forward has a **2× / 4×** selector; once enabled, **R2 toggles** it and **L2 holds** it. Keyboard Tab and the pause menu are available too. Audio is muted while accelerating.
+
+Shiny-odds boosts affect new ordinary wild encounters, shared EXP rewards eligible benched Pokémon, and optional backups retain five completed in-game saves. A separate switch asks for confirmation before fleeing a shiny. All features are disabled by default and keep the GBA save format intact. [Behavior and safeguards →](docs/QUALITY_OF_LIFE.md)
+
 ## Follow upstream
 
-The original 3DS project is kept unchanged in [`origin/`](origin/), with its exact revision recorded in [`origin.lock`](origin.lock). Android changes live outside that tree.
+The original 3DS project is kept unchanged in [`origin/`](origin/), with its exact revision recorded in [`origin.lock`](origin.lock). Android changes live outside that tree; small tracked overlays are applied only to the generated build for optional gameplay hooks and visual fixes.
 
 Preview an update:
 
@@ -127,6 +134,7 @@ The updater checks source integrity and reports newly required 3DS APIs. New ups
 |---|---|
 | [Build and test](docs/BUILDING.md) | Toolchain setup, APKs, data packs, saves and emulator tests. |
 | [AYN Thor](docs/AYN_THOR.md) | Display routing, scaling, controls and hardware checks. |
+| [Quality of life](docs/QUALITY_OF_LIFE.md) | Opt-in speed, shiny odds, party EXP, backup and encounter settings. |
 | [Validation](docs/VALIDATION.md) | Real-game results, save interchange and performance measurements. |
 | [Architecture](docs/ANDROID_ARCHITECTURE.md) | How the unchanged 3DS project runs on Android. |
 | [Update upstream](docs/UPDATING_FROM_ORIGIN.md) | Preview, import and validate new versions. |

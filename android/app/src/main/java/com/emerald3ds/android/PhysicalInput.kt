@@ -3,6 +3,7 @@ package com.emerald3ds.android
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.os.SystemClock
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -16,9 +17,22 @@ class PhysicalInput(private val callbacks: Callbacks) {
         fun onPhysicalInput()
         fun onMenuKey()
         fun onToggleBottomScreen()
+        fun onFastForwardToggle() {}
+        fun onFastForwardHold(held: Boolean) {}
     }
 
     var labelMapping = false
+    var fastForwardEnabled = false
+        set(value) {
+            if (field != value) clearFastTriggers()
+            field = value
+        }
+    private val fastKeys = mutableSetOf<Pair<Int, Int>>()
+    private val fastAxes = mutableMapOf<Int, Pair<Boolean, Boolean>>()
+    private var fastToggleDown = false
+    private var fastHoldDown = false
+    private var fastToggleNeedsRelease = false
+    private var fastSuspendedAt = Long.MIN_VALUE
 
     // Track physical keys individually: left/right Shift and multiple
     // controllers may hold the same logical 3DS button at the same time.
@@ -66,6 +80,21 @@ class PhysicalInput(private val callbacks: Callbacks) {
         if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
         val code = event.keyCode
         val down = event.action == KeyEvent.ACTION_DOWN
+        if (fastForwardEnabled && code in setOf(KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_BUTTON_R2, KeyEvent.KEYCODE_TAB)) {
+            if (down && event.repeatCount > 0) return true
+            // A fresh digital press is an explicit edge, unlike replayed
+            // joystick state after a pause/dialog. A release may have reached
+            // the dialog while game input was suspended.
+            if (down && code == KeyEvent.KEYCODE_BUTTON_R2 && fastToggleNeedsRelease && event.downTime > fastSuspendedAt) {
+                fastToggleNeedsRelease = false
+                fastToggleDown = false
+            }
+            val identity = event.deviceId to code
+            if (down) fastKeys.add(identity) else fastKeys.remove(identity)
+            updateFastTriggers()
+            if (down) callbacks.onPhysicalInput()
+            return true
+        }
         when (code) {
             KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_MENU -> {
                 if (down && event.repeatCount == 0) callbacks.onMenuKey()
@@ -119,15 +148,25 @@ class PhysicalInput(private val callbacks: Callbacks) {
         if (rx > 0.5f) axes = axes or CtrKeys.CSTICK_RIGHT
         if (ry < -0.5f) axes = axes or CtrKeys.CSTICK_UP
         if (ry > 0.5f) axes = axes or CtrKeys.CSTICK_DOWN
-        if (max(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE)) > 0.5f)
-            axes = axes or CtrKeys.ZL
-        if (max(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS)) > 0.5f)
-            axes = axes or CtrKeys.ZR
+        val leftTrigger = max(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE))
+        val rightTrigger = max(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS))
+        val previousTriggers = fastAxes[event.deviceId] ?: (false to false)
+        fun trigger(value: Float, wasDown: Boolean): Boolean =
+            if (fastForwardEnabled) value >= 0.55f || (wasDown && value > 0.4f) else value > 0.5f
+        val l2 = trigger(leftTrigger, previousTriggers.first)
+        val r2 = trigger(rightTrigger, previousTriggers.second)
+        if (fastForwardEnabled) {
+            fastAxes[event.deviceId] = l2 to r2
+            updateFastTriggers()
+        } else {
+            if (l2) axes = axes or CtrKeys.ZL
+            if (r2) axes = axes or CtrKeys.ZR
+        }
 
         InputHub.setKeys(InputHub.SRC_HAT, hat)
         InputHub.setKeys(InputHub.SRC_AXES, axes)
         InputHub.setCircle(InputHub.SRC_AXES, lx, ly)
-        if (hat != 0 || axes != 0 || abs(lx) > 0 || abs(ly) > 0) callbacks.onPhysicalInput()
+        if (hat != 0 || axes != 0 || l2 || r2 || abs(lx) > 0 || abs(ly) > 0) callbacks.onPhysicalInput()
         return true
     }
 
@@ -137,6 +176,7 @@ class PhysicalInput(private val callbacks: Callbacks) {
     }
 
     fun clear() {
+        clearFastTriggers()
         gamepadKeys.clear()
         keyboardKeys.clear()
         motionDevice = null
@@ -146,6 +186,9 @@ class PhysicalInput(private val callbacks: Callbacks) {
     }
 
     fun removeDevice(deviceId: Int) {
+        fastKeys.removeAll { it.first == deviceId }
+        fastAxes.remove(deviceId)
+        updateFastTriggers()
         gamepadKeys.keys.removeAll { it.first == deviceId }
         keyboardKeys.keys.removeAll { it.first == deviceId }
         InputHub.setKeys(InputHub.SRC_GAMEPAD, gamepadKeys.values.fold(0) { a, b -> a or b })
@@ -160,5 +203,29 @@ class PhysicalInput(private val callbacks: Callbacks) {
         InputHub.setKeys(InputHub.SRC_HAT, 0)
         InputHub.setKeys(InputHub.SRC_AXES, 0)
         InputHub.setCircle(InputHub.SRC_AXES, 0, 0)
+    }
+
+    private fun updateFastTriggers() {
+        // Some controllers send both key and axis events for one trigger.
+        // Merge them before detecting an edge, so R2 toggles exactly once.
+        val toggle = fastKeys.any { it.second == KeyEvent.KEYCODE_BUTTON_R2 } || fastAxes.values.any { it.second }
+        val hold = fastKeys.any { it.second != KeyEvent.KEYCODE_BUTTON_R2 } || fastAxes.values.any { it.first }
+        if (!toggle) fastToggleNeedsRelease = false
+        if (toggle && !fastToggleDown && !fastToggleNeedsRelease) callbacks.onFastForwardToggle()
+        fastToggleDown = toggle
+        if (hold != fastHoldDown) {
+            fastHoldDown = hold
+            callbacks.onFastForwardHold(hold)
+        }
+    }
+
+    private fun clearFastTriggers() {
+        fastToggleNeedsRelease = fastToggleNeedsRelease || fastToggleDown
+        fastSuspendedAt = SystemClock.uptimeMillis()
+        fastKeys.clear()
+        fastAxes.clear()
+        fastToggleDown = false
+        fastHoldDown = false
+        callbacks.onFastForwardHold(false)
     }
 }

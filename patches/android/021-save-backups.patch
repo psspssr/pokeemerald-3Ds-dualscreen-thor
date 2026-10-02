@@ -1,0 +1,20 @@
+diff --git a/src/save.c b/src/save.c
+--- a/src/save.c
++++ b/src/save.c
+@@ -4,6 +4,7 @@
+ #include "gba/flash_internal.h"
+ #include "fieldmap.h"
+ #include "save.h"
++#include "android_qol_backups.h"
+ #include "task.h"
+ #include "decompress.h"
+ #include "load_save.h"
+@@ -793,6 +794,8 @@
+     if (!gDamagedSaveSectors)
+     {
+         gSaveAttemptStatus = SAVE_STATUS_OK;
++        if (saveType == SAVE_NORMAL || saveType == SAVE_OVERWRITE_DIFFERENT_FILE)
++            CtrQol_BackupCompletedSave(gSaveCounter);
+         return SAVE_STATUS_OK;
+     }
+     else

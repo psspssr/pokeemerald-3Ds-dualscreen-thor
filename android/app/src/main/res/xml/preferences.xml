@@ -114,6 +114,36 @@
             app:title="@string/pref_dual_controls" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/cat_gameplay" app:iconSpaceReserved="false">
+        <PreferenceScreen app:key="qol" app:title="@string/qol_title"
+            app:summary="@string/qol_summary" app:iconSpaceReserved="false">
+            <Preference app:title="@string/qol_intro" app:summary="@string/qol_intro_summary"
+                app:selectable="false" app:iconSpaceReserved="false" />
+            <SwitchPreferenceCompat app:key="qol_fast_forward" app:defaultValue="false"
+                app:title="@string/qol_fast_forward" app:summary="@string/qol_fast_forward_summary"
+                app:iconSpaceReserved="false" />
+            <ListPreference app:key="qol_speed" app:defaultValue="4" app:dependency="qol_fast_forward"
+                app:title="@string/qol_speed" app:entries="@array/qol_speed_entries"
+                app:entryValues="@array/qol_speed_values" app:useSimpleSummaryProvider="true"
+                app:iconSpaceReserved="false" />
+            <ListPreference app:key="qol_shiny" app:defaultValue="1"
+                app:title="@string/qol_shiny" app:entries="@array/qol_shiny_entries"
+                app:entryValues="@array/qol_shiny_values" app:useSimpleSummaryProvider="true"
+                app:iconSpaceReserved="false" />
+            <SwitchPreferenceCompat app:key="qol_shared_exp" app:defaultValue="false"
+                app:title="@string/qol_shared_exp" app:summary="@string/qol_shared_exp_summary"
+                app:iconSpaceReserved="false" />
+            <SwitchPreferenceCompat app:key="qol_backups" app:defaultValue="false"
+                app:title="@string/qol_backups" app:summary="@string/qol_backups_summary"
+                app:iconSpaceReserved="false" />
+            <Preference app:key="restore_backup" app:title="@string/restore_backup"
+                app:summary="@string/restore_backup_summary" app:iconSpaceReserved="false" />
+            <SwitchPreferenceCompat app:key="qol_protect_shinies" app:defaultValue="false"
+                app:title="@string/qol_protect_shinies" app:summary="@string/qol_protect_shinies_summary"
+                app:iconSpaceReserved="false" />
+        </PreferenceScreen>
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/cat_data" app:iconSpaceReserved="false">
         <Preference
             app:iconSpaceReserved="false"

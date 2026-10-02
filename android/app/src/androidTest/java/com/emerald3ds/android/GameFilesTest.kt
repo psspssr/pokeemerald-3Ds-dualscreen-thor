@@ -69,6 +69,37 @@ class GameFilesTest {
         assertArrayEquals(recovery, files.saveFile.readBytes())
     }
 
+    @Test fun restoringBackupStagesItAndRejectsOutsideOrTruncatedFiles() {
+        val current = ByteArray(128 * 1024) { 7 }
+        val previous = ByteArray(128 * 1024) { 3 }
+        files.saveFile.writeBytes(current)
+        files.backupsDir.mkdirs()
+        val backup = File(files.backupsDir, "save-1700000000000-3.sav").apply { writeBytes(previous) }
+        File(files.backupsDir, "save-incomplete.tmp").writeBytes(previous)
+        assertEquals(listOf(backup), files.saveBackups())
+        files.stageBackup(backup)
+        assertArrayEquals(current, files.saveFile.readBytes())
+        val outside = File(dir, "save-1700000000000-4.sav").apply { writeBytes(previous) }
+        val short = File(files.backupsDir, "save-1700000000000-5.sav").apply { writeBytes(ByteArray(30)) }
+        for (bad in listOf(outside, short)) {
+            try { files.stageBackup(bad); fail("invalid backup accepted") } catch (_: IOException) { }
+        }
+        files.applyPendingImports()
+        assertArrayEquals(previous, files.saveFile.readBytes())
+        assertArrayEquals(current, File(files.dataDir, "emerald3ds.sav.bak").readBytes())
+    }
+
+    @Test fun backupOrderUsesSnapshotSequenceAcrossClockAndCounterRollback() {
+        files.backupsDir.mkdirs()
+        val older = File(files.backupsDir, "save-1700000000000-999.sav").apply {
+            writeBytes(ByteArray(128 * 1024)); setLastModified(1700000000000)
+        }
+        val newer = File(files.backupsDir, "save-1700000000001-0.sav").apply {
+            writeBytes(ByteArray(128 * 1024)); setLastModified(1600000000000)
+        }
+        assertEquals(listOf(newer, older), files.saveBackups())
+    }
+
     @Test fun dataPackValidationAndFailedApplyDoNotReportSuccess() {
         try {
             files.stageImport(input("wrong.pak", ByteArray(64)), GameFiles.Kind.PAK)

@@ -11,11 +11,14 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.PreferenceScreen
 import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import java.text.DateFormat
+import java.util.Date
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPreferenceStartScreenCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
@@ -27,11 +30,20 @@ class SettingsActivity : AppCompatActivity() {
         }
         findViewById<MaterialToolbar>(R.id.toolbar).apply {
             setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
-            setNavigationOnClickListener { finish() }
+            setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
         }
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction().replace(R.id.settings_container, SettingsFragment()).commit()
         }
+    }
+
+    override fun onPreferenceStartScreen(caller: PreferenceFragmentCompat, pref: PreferenceScreen): Boolean {
+        val fragment = SettingsFragment().apply {
+            arguments = Bundle().apply { putString(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT, pref.key) }
+        }
+        supportFragmentManager.beginTransaction().replace(R.id.settings_container, fragment)
+            .addToBackStack(pref.key).commit()
+        return true
     }
 
     class SettingsFragment : PreferenceFragmentCompat() {
@@ -64,15 +76,22 @@ class SettingsActivity : AppCompatActivity() {
                 else toast(getString(R.string.export_none))
             }
             click("about") { showAbout() }
+            click("restore_backup") { showBackups() }
             findPreference<Preference>("data_location")?.summary = files.dataDir.absolutePath
             findPreference<Preference>("about")?.summary = getString(R.string.pref_version, BuildConfig.VERSION_NAME)
+        }
+
+        override fun onResume() {
+            super.onResume()
+            requireActivity().findViewById<MaterialToolbar>(R.id.toolbar).title =
+                preferenceScreen.title ?: getString(R.string.settings_title)
         }
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
             super.onViewCreated(view, savedInstanceState)
             fileModel.state.observe(viewLifecycleOwner) { state ->
                 val busy = state?.busy == true
-                for (key in listOf("import_pak", "import_save", "export_save"))
+                for (key in listOf("import_pak", "import_save", "export_save", "restore_backup"))
                     findPreference<Preference>(key)?.isEnabled = !busy
                 findPreference<Preference>("data_location")?.summary =
                     if (busy) getString(R.string.file_working) else files.dataDir.absolutePath
@@ -110,6 +129,23 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         private fun toast(message: String) = Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+
+        private fun showBackups() {
+            val backups = files.saveBackups()
+            if (backups.isEmpty()) { toast(getString(R.string.restore_backup_none)); return }
+            val format = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM)
+            val labels = backups.map { format.format(Date(files.backupTime(it) ?: it.lastModified())) }.toTypedArray()
+            dialog = MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.restore_backup)
+                .setItems(labels) { _, which ->
+                    dialog = MaterialAlertDialogBuilder(requireContext())
+                        .setTitle(R.string.restore_backup)
+                        .setMessage(getString(R.string.restore_backup_confirm, labels[which]))
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .setPositiveButton(R.string.restore_backup_action) { _, _ -> fileModel.restoreBackup(backups[which]) }
+                        .show()
+                }.setNegativeButton(android.R.string.cancel, null).show()
+        }
 
         /*
          * The running game holds the pack open and the save in memory, so an

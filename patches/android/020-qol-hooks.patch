@@ -1,0 +1,202 @@
+diff --git a/src/battle_main.c b/src/battle_main.c
+--- a/src/battle_main.c
++++ b/src/battle_main.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_qol.h"
+ #include "battle.h"
+ #include "battle_anim.h"
+ #include "battle_ai_script_commands.h"
+@@ -4144,6 +4145,7 @@
+             gBattleCommunication[gActiveBattler] = STATE_BEFORE_ACTION_CHOSEN;
+             break;
+         case STATE_BEFORE_ACTION_CHOSEN: // Choose an action.
++            CtrQol_ResetMoveEscape(gActiveBattler);
+             *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = PARTY_SIZE;
+             if (gBattleTypeFlags & BATTLE_TYPE_MULTI
+                 || (position & BIT_FLANK) == B_FLANK_LEFT
+@@ -4178,6 +4180,14 @@
+         case STATE_WAIT_ACTION_CHOSEN: // Try to perform an action.
+             if (!IS_BATTLE_CONTROLLER_ACTIVE_OR_PENDING_SYNC_ANYWHERE(gActiveBattler))
+             {
++                if (GetBattlerSide(gActiveBattler) == B_SIDE_PLAYER
++                    && (gBattleBufferB[gActiveBattler][1] == B_ACTION_RUN
++                        || gBattleBufferB[gActiveBattler][1] == B_ACTION_SAFARI_RUN)
++                    && !CtrQol_ConfirmFlee())
++                {
++                    gBattleCommunication[gActiveBattler] = STATE_BEFORE_ACTION_CHOSEN;
++                    return;
++                }
+                 RecordedBattle_SetBattlerAction(gActiveBattler, gBattleBufferB[gActiveBattler][1]);
+                 gChosenActionByBattler[gActiveBattler] = gBattleBufferB[gActiveBattler][1];
+ 
+@@ -4402,6 +4412,14 @@
+                         }
+                         else
+                         {
++                            if (gBattleBufferB[gActiveBattler][2] < MAX_MON_MOVES
++                                && !CtrQol_SelectMoveEscape(gActiveBattler,
++                                    gBattleMons[gActiveBattler].moves[gBattleBufferB[gActiveBattler][2]]))
++                            {
++                                gBattleCommunication[gActiveBattler] = STATE_BEFORE_ACTION_CHOSEN;
++                                RecordedBattle_ClearBattlerAction(gActiveBattler, 1);
++                                return;
++                            }
+                             if (!(gBattleTypeFlags & BATTLE_TYPE_PALACE))
+                             {
+                                 RecordedBattle_SetBattlerAction(gActiveBattler, gBattleBufferB[gActiveBattler][2]);
+diff --git a/src/battle_pyramid_bag.c b/src/battle_pyramid_bag.c
+--- a/src/battle_pyramid_bag.c
++++ b/src/battle_pyramid_bag.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_qol.h"
+ #include "battle.h"
+ #include "battle_controllers.h"
+ #include "battle_pyramid_bag.h"
+@@ -1299,6 +1300,11 @@
+ 
+ static void BagAction_UseInBattle(u8 taskId)
+ {
++    if (GetItemBattleFunc(gSpecialVar_ItemId) == ItemUseInBattle_Escape && !CtrQol_ConfirmFlee())
++    {
++        BagAction_Cancel(taskId);
++        return;
++    }
+     if (GetItemBattleFunc(gSpecialVar_ItemId) != NULL)
+     {
+         CloseMenuActionWindow();
+diff --git a/src/battle_script_commands.c b/src/battle_script_commands.c
+--- a/src/battle_script_commands.c
++++ b/src/battle_script_commands.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_qol.h"
+ #include "battle.h"
+ #include "battle_message.h"
+ #include "battle_anim.h"
+@@ -3255,6 +3256,7 @@
+ static void Cmd_getexp(void)
+ {
+     u16 item;
++    unsigned extraExp;
+     s32 i; // also used as stringId
+     u8 holdEffect;
+     s32 sentIn;
+@@ -3308,6 +3310,7 @@
+             }
+ 
+             calculatedExp = gSpeciesInfo[gBattleMons[gBattlerFainted].species].expYield * gBattleMons[gBattlerFainted].level / 7;
++            CtrQol_BeginExperience(calculatedExp);
+ 
+             if (viaExpShare) // at least one mon is getting exp via exp share
+             {
+@@ -3342,7 +3345,9 @@
+             else
+                 holdEffect = GetItemHoldEffect(item);
+ 
+-            if (holdEffect != HOLD_EFFECT_EXP_SHARE && !(gBattleStruct->sentInPokes & 1))
++            extraExp = CtrQol_ExtraExperience(gBattleStruct->expGetterMonId,
++                (gBattleStruct->sentInPokes & 1) != 0, holdEffect == HOLD_EFFECT_EXP_SHARE);
++            if (holdEffect != HOLD_EFFECT_EXP_SHARE && !(gBattleStruct->sentInPokes & 1) && !extraExp)
+             {
+                 *(&gBattleStruct->sentInPokes) >>= 1;
+                 gBattleScripting.getexpState = 5;
+@@ -3369,7 +3374,7 @@
+                     if (gBattleStruct->sentInPokes & 1)
+                         gBattleMoveDamage = *exp;
+                     else
+-                        gBattleMoveDamage = 0;
++                        gBattleMoveDamage = extraExp;
+ 
+                     if (holdEffect == HOLD_EFFECT_EXP_SHARE)
+                         gBattleMoveDamage += gExpShareExp;
+@@ -6357,6 +6362,8 @@
+         break;
+     case VARIOUS_IS_RUNNING_IMPOSSIBLE:
+         gBattleCommunication[0] = IsRunningFromBattleImpossible();
++        if (gBattleCommunication[0] == BATTLE_RUN_SUCCESS && !CtrQol_ResolveMoveEscape(gActiveBattler))
++            gBattleCommunication[0] = BATTLE_RUN_FORBIDDEN;
+         break;
+     case VARIOUS_GET_MOVE_TARGET:
+         gBattlerTarget = GetMoveTarget(gCurrentMove, NO_TARGET_OVERRIDE);
+@@ -7401,7 +7408,10 @@
+     }
+     else
+     {
+-        TryDoForceSwitchOut();
++        if (!CtrQol_ResolveMoveEscape(gBattlerAttacker))
++            gBattlescriptCurrInstr = T1_READ_PTR(gBattlescriptCurrInstr + 1);
++        else
++            TryDoForceSwitchOut();
+     }
+ }
+ 
+diff --git a/src/item_menu.c b/src/item_menu.c
+--- a/src/item_menu.c
++++ b/src/item_menu.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_qol.h"
+ #include "item_menu.h"
+ #include "battle.h"
+ #include "battle_controllers.h"
+@@ -2047,6 +2048,11 @@
+ 
+ static void ItemMenu_UseInBattle(u8 taskId)
+ {
++    if (GetItemBattleFunc(gSpecialVar_ItemId) == ItemUseInBattle_Escape && !CtrQol_ConfirmFlee())
++    {
++        ItemMenu_Cancel(taskId);
++        return;
++    }
+     if (GetItemBattleFunc(gSpecialVar_ItemId))
+     {
+         RemoveContextWindow();
+diff --git a/src/pokemon.c b/src/pokemon.c
+--- a/src/pokemon.c
++++ b/src/pokemon.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_qol.h"
+ #include "malloc.h"
+ #include "apprentice.h"
+ #include "battle.h"
+@@ -2220,6 +2221,7 @@
+     else
+         personality = Random32();
+ 
++    personality = CtrQol_WildPersonality(boxMon, species, personality, otIdType);
+     SetBoxMonData(boxMon, MON_DATA_PERSONALITY, &personality);
+ 
+     // Determine original trainer ID
+diff --git a/src/wild_encounter.c b/src/wild_encounter.c
+--- a/src/wild_encounter.c
++++ b/src/wild_encounter.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "android_qol.h"
+ #include "wild_encounter.h"
+ #include "pokemon.h"
+ #include "metatile_behavior.h"
+@@ -381,6 +382,7 @@
+     bool32 checkCuteCharm;
+ 
+     ZeroEnemyPartyMons();
++    CtrQol_BeginWildMon(&gEnemyParty[0]);
+     checkCuteCharm = TRUE;
+ 
+     switch (gSpeciesInfo[species].genderRatio)
+@@ -408,10 +410,12 @@
+             gender = MON_FEMALE;
+ 
+         CreateMonWithGenderNatureLetter(&gEnemyParty[0], species, level, USE_RANDOM_IVS, gender, PickWildMonNature(), 0);
++        CtrQol_EndWildMon();
+         return;
+     }
+ 
+     CreateMonWithNature(&gEnemyParty[0], species, level, USE_RANDOM_IVS, PickWildMonNature());
++    CtrQol_EndWildMon();
+ }
+ #ifdef BUGFIX
+ #define TRY_GET_ABILITY_INFLUENCED_WILD_MON_INDEX(wildPokemon, type, ability, ptr, count) TryGetAbilityInfluencedWildMonIndex(wildPokemon, type, ability, ptr, count)

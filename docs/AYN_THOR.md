@@ -38,7 +38,8 @@ Dual-display mode is the default when a second built-in display is present:
   outside the game picture, if enabled in Settings.
 - **Mapping**: by position like a Nintendo console (Thor's bottom face button
   is 3DS B, right is A, left is Y, top is X); left stick is the circle pad;
-  L1/R1 are L/R; L2/R2 unused. A label-based mapping is in Settings for
+  L1/R1 are L/R. With optional fast-forward controls enabled, R2 toggles the
+  selected 2×/4× rate and L2 holds it. A label-based mapping is in Settings for
   controllers set to the Xbox layout.
 - **Refresh target**: both screens use one 59.83 Hz game clock and separate
   EGL surfaces. The renderer requests no per-window vsync wait, though the

@@ -25,6 +25,22 @@ class GameFiles(private val context: Context) {
     val dataDir = File(sdmcDir, "3ds/emerald3ds")
     val pakFile = File(dataDir, PAK_NAME)
     val saveFile = File(dataDir, SAVE_NAME)
+    val backupsDir = File(dataDir, "backups")
+
+    fun saveBackups(): List<File> = backupsDir.listFiles().orEmpty()
+        .filter { it.isFile && it.length() == SAVE_MAX_BYTES &&
+            it.name.matches(Regex("save-[0-9]+-[0-9]+\\.sav")) && backupTime(it) != null }
+        .sortedWith(compareByDescending<File> { backupTime(it) }.thenByDescending { it.name })
+
+    fun backupTime(file: File): Long? = file.name.removePrefix("save-").substringBefore('-').toLongOrNull()
+
+    fun stageBackup(file: File) {
+        val candidate = file.canonicalFile
+        if (candidate.parentFile != backupsDir.canonicalFile || !candidate.isFile ||
+            !candidate.name.matches(Regex("save-[0-9]+-[0-9]+\\.sav")) || candidate.length() != SAVE_MAX_BYTES)
+            throw IOException("This backup is no longer available or is incomplete.")
+        stageImport(Uri.fromFile(candidate), Kind.SAVE)
+    }
 
     enum class Kind(val fileName: String) { PAK(PAK_NAME), SAVE(SAVE_NAME) }
 

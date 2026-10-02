@@ -56,6 +56,10 @@ export DEVKITPRO DEVKITARM
 
 include Makefile
 
+# Android-only engine hooks are kept outside the immutable origin subtree.
+CPPFLAGS += -I$(ANDROID_NATIVE)/include
+FULLFLAGS += -I$(ANDROID_NATIVE)/include
+
 .DEFAULT_GOAL := android
 
 # Compiler differences (GCC on the console, clang here) that are handled by
@@ -97,6 +101,7 @@ ANDROID_SRCS := $(wildcard $(ANDROID_DIR)/shim/src/*.c $(ANDROID_DIR)/shim/src/*
 ANDROID_SRCS += $(wildcard $(ANDROID_DIR)/gpu/src/*.c $(ANDROID_DIR)/gpu/src/*/*.c $(ANDROID_DIR)/gpu/src/*/*/*.c)
 ANDROID_SRCS += $(wildcard $(ANDROID_DIR)/host/src/*.c $(ANDROID_DIR)/host/src/*/*.c $(ANDROID_DIR)/host/src/*/*/*.c)
 ANDROID_SRCS += $(ANDROID_NATIVE)/src/load_address.c $(ANDROID_NATIVE)/src/save_abi.c
+ANDROID_SRCS += $(ANDROID_NATIVE)/src/qol_rules.c $(ANDROID_NATIVE)/src/qol_game.c $(ANDROID_NATIVE)/src/qol_backups.c
 ANDROID_OBJS := $(patsubst $(ANDROID_DIR)/%.c,build/android/%.o,$(ANDROID_SRCS))
 ANDROID_CFLAGS := -O2 -g -std=gnu11 -Wall -Wextra -ffunction-sections -fdata-sections \
 	-DCTR_LOAD_ADDRESS=$(LOAD_ADDRESS)
@@ -106,8 +111,9 @@ build/android/%.o: $(ANDROID_DIR)/%.c
 	@mkdir -p $(dir $@)
 	"$(CC)" $(CPPFLAGS) $(ANDROID_CFLAGS) -MMD -MP -c $< -o $@
 
-# Compile-time save compatibility assertions use origin's game types/flags.
-build/android/native/src/save_abi.o: $(ANDROID_NATIVE)/src/save_abi.c
+# Game hooks and save compatibility assertions use the actual game ABI.
+ANDROID_GAME_OBJS := build/android/native/src/save_abi.o build/android/native/src/qol_game.o
+$(ANDROID_GAME_OBJS): build/android/native/%.o: $(ANDROID_NATIVE)/%.c
 	@mkdir -p $(dir $@)
 	"$(CC)" $(FULLFLAGS) $(FULLCFLAGS) -std=gnu11 -MMD -MP -c $< -o $@
 
@@ -116,6 +122,7 @@ build/android/native/src/save_abi.o: $(ANDROID_NATIVE)/src/save_abi.c
 # Origin's game preprocessor pipeline does not emit C dependency files.
 # Header changes in a new upstream revision must invalidate its C objects.
 GAME_HEADERS := $(shell find $(ROOT)/include include compat -type f -name '*.h')
+GAME_HEADERS += $(wildcard $(ANDROID_NATIVE)/include/*.h)
 $(FULL_C_OBJS): $(GAME_HEADERS)
 $(OBJECTS) $(ANDROID_OBJS): $(ANDROID_NATIVE)/Makefile $(CC)
 
