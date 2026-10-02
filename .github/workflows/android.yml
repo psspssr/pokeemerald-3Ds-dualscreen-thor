@@ -10,13 +10,21 @@ on:
       - 'LICENSE'
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact reviewed commit for release validation
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Reusable validation has a run-specific namespace. It cannot cancel its
+  # release caller, another release, or normal push/PR validation.
+  group: android-validation-${{ inputs.source_ref || github.ref }}-${{ inputs.source_ref && github.run_id || github.workflow }}
+  cancel-in-progress: ${{ !inputs.source_ref }}
 
 jobs:
   source-and-host:
@@ -25,6 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
       - name: Verify the imported upstream pin
         run: python3 tools/check_origin.py --fetch
@@ -45,6 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
@@ -64,6 +74,8 @@ jobs:
         run: python3 tools/check_shim_coverage.py --ndk "$ANDROID_HOME/ndk/27.2.12479018"
       - name: Original Pokemon encryption, RNG and optional gameplay rules
         run: python3 android/native/test/run_qol_tests.py
+      - name: Mystery event eligibility, gifts and repeat protection
+        run: python3 android/native/test/run_mystery_tests.py
       - name: Build engine-only release APK
         run: python3 tools/bootstrap.py --ndk "$ANDROID_HOME/ndk/27.2.12479018" --make --apk --release --out build/android-release-out -j2
       - name: Keep build diagnostics
@@ -86,6 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:

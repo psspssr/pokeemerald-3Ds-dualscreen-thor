@@ -1,0 +1,274 @@
+name: Android release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+# Serialize attempts for this release only; distinct published releases are
+# independent. This group never matches the reusable validation workflow.
+concurrency:
+  group: android-release-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      release_id: ${{ steps.plan.outputs.release_id }}
+      release_tag: ${{ steps.plan.outputs.release_tag }}
+      code_commit: ${{ steps.plan.outputs.code_commit }}
+      version: ${{ steps.plan.outputs.version }}
+      version_code: ${{ steps.plan.outputs.version_code }}
+      apk: ${{ steps.plan.outputs.apk }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate published release and assign Android version
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release.py plan --output release-plan.json --github-output "$GITHUB_OUTPUT"
+
+  checks:
+    needs: plan
+    if: needs.plan.outputs.mode == 'build'
+    uses: ./.github/workflows/android.yml
+    with:
+      source_ref: ${{ needs.plan.outputs.code_commit }}
+    # Signing secrets are deliberately not passed to the reusable workflow.
+
+  build:
+    needs: [plan, checks]
+    if: needs.plan.outputs.mode == 'build'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      artifact_id: ${{ steps.bundle.outputs.artifact-id }}
+      artifact_digest: ${{ steps.bundle.outputs.artifact-digest }}
+      unsigned_sha256: ${{ steps.prepare.outputs.unsigned_sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.plan.outputs.code_commit }}
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils-arm-linux-gnueabi gcc-arm-linux-gnueabi libpng-dev python3-pil
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+      - name: Build the playable ARM release candidate
+        env:
+          RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+          RELEASE_CODE: ${{ needs.plan.outputs.version_code }}
+        run: |
+          python3 tools/bootstrap.py --ndk "$ANDROID_HOME/ndk/27.2.12479018" --make --out build/android-publish-out -j2
+          android/app/gradlew -p android/app assembleRelease lintRelease \
+            "-Pemerald.nativeOut=$GITHUB_WORKSPACE/build/android-publish-out" \
+            "-Pemerald.versionName=$RELEASE_VERSION" "-Pemerald.versionCode=$RELEASE_CODE" \
+            --no-daemon --max-workers=2
+      - name: Verify production package and record build inputs
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/release.py prepare \
+            --native-out build/android-publish-out \
+            --apk android/app/build/outputs/apk/release/emerald3ds-android-release-unsigned.apk \
+            --build-tools "$ANDROID_HOME/build-tools/35.0.0" \
+            --output build/release-input --github-output "$GITHUB_OUTPUT"
+      - name: Keep immutable unsigned input for the signing job
+        id: bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unsigned-release-${{ github.event.release.id }}-${{ github.run_attempt }}
+          path: build/release-input/
+          if-no-files-found: error
+          retention-days: 14
+
+  sign:
+    needs: [plan, build]
+    if: needs.plan.outputs.mode == 'build'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      artifact_id: ${{ steps.bundle.outputs.artifact-id }}
+      artifact_digest: ${{ steps.bundle.outputs.artifact-digest }}
+    env:
+      APK_NAME: ${{ needs.plan.outputs.apk }}
+      RELEASE_ID: ${{ needs.plan.outputs.release_id }}
+      RELEASE_TAG: ${{ needs.plan.outputs.release_tag }}
+      SOURCE_SHA: ${{ needs.plan.outputs.code_commit }}
+      VERSION_NAME: ${{ needs.plan.outputs.version }}
+      VERSION_CODE: ${{ needs.plan.outputs.version_code }}
+      EXPECTED_SIGNER: eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389
+    steps:
+      # No checkout, build scripts, or executable content from the input
+      # artifact runs on this machine. It only runs pinned SDK/signing tools.
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: build-tools;35.0.0
+      - name: Download the exact unsigned artifact and verify its archive digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          ARTIFACT_SHA: ${{ needs.build.outputs.artifact_digest }}
+          UNSIGNED_SHA: ${{ needs.build.outputs.unsigned_sha256 }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/release-input.zip"
+          python3 - <<'PY'
+          import hashlib, json, os, stat, zipfile
+          from pathlib import Path
+          archive = Path(os.environ['RUNNER_TEMP']) / 'release-input.zip'
+          assert hashlib.file_digest(archive.open('rb'), 'sha256').hexdigest() == os.environ['ARTIFACT_SHA'], 'artifact digest differs'
+          dest = Path(os.environ['RUNNER_TEMP']) / 'release-input'
+          dest.mkdir()
+          with zipfile.ZipFile(archive) as bundle:
+              assert sorted(bundle.namelist()) == ['build-input.json', 'unsigned.apk'], 'unexpected artifact members'
+              for entry in bundle.infolist():
+                  assert not stat.S_ISLNK(entry.external_attr >> 16) and entry.file_size < 512 * 1024 * 1024
+                  (dest / entry.filename).write_bytes(bundle.read(entry))
+          info = json.loads((dest / 'build-input.json').read_text())
+          expected = {'release_id': int(os.environ['RELEASE_ID']), 'release_tag': os.environ['RELEASE_TAG'],
+                      'code_commit': os.environ['SOURCE_SHA'], 'version': os.environ['VERSION_NAME'],
+                      'version_code': int(os.environ['VERSION_CODE']), 'apk': os.environ['APK_NAME']}
+          assert all(info.get(key) == value for key, value in expected.items()), 'artifact identity differs'
+          digest = hashlib.file_digest((dest / 'unsigned.apk').open('rb'), 'sha256').hexdigest()
+          assert digest == info['unsigned_sha256'] == os.environ['UNSIGNED_SHA'], 'unsigned APK differs'
+          PY
+      - name: Inspect the unsigned application before using the key
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/release-input/unsigned.apk" > "$RUNNER_TEMP/package.txt"
+          python3 - <<'PY'
+          import os, shlex
+          from pathlib import Path
+          lines = (Path(os.environ['RUNNER_TEMP']) / 'package.txt').read_text().splitlines()
+          fields = dict(item.split('=', 1) for item in shlex.split(next(line for line in lines if line.startswith('package: '))[9:]))
+          assert fields['name'] == 'com.emerald3ds.android'
+          assert fields['versionName'] == os.environ['VERSION_NAME'] and fields['versionCode'] == os.environ['VERSION_CODE']
+          assert 'application-debuggable' not in lines and "native-code: 'armeabi-v7a'" in lines
+          assert any(line in ("sdkVersion:'28'", "minSdkVersion:'28'") for line in lines)
+          assert "targetSdkVersion:'35'" in lines
+          PY
+      - name: Align and sign with the persistent release identity
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" && test -n "$KEYSTORE_PASSWORD"
+          umask 077
+          signing_dir=$(mktemp -d "$RUNNER_TEMP/emerald-signing.XXXXXX")
+          trap 'rm -rf "$signing_dir"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$signing_dir/release.keystore"
+          printf '%s' "$KEYSTORE_PASSWORD" > "$signing_dir/release.pass"
+          mkdir -p "$RUNNER_TEMP/release-bundle"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -P 16 -f 4 \
+            "$RUNNER_TEMP/release-input/unsigned.apk" "$RUNNER_TEMP/aligned-unsigned.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks "$signing_dir/release.keystore" --ks-key-alias emerald-thor \
+            --ks-pass "file:$signing_dir/release.pass" \
+            --debuggable-apk-permitted false --v4-signing-enabled false \
+            --out "$RUNNER_TEMP/release-bundle/$APK_NAME" "$RUNNER_TEMP/aligned-unsigned.apk"
+      - name: Verify signed bytes and create public manifest/checksums
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            "$RUNNER_TEMP/release-bundle/$APK_NAME" > "$RUNNER_TEMP/signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$RUNNER_TEMP/release-bundle/$APK_NAME"
+          python3 - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          signer = re.findall(r'Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-f]+)', (temp / 'signature.txt').read_text())
+          assert signer == [os.environ['EXPECTED_SIGNER']], 'wrong signing certificate'
+          dest = temp / 'release-bundle'
+          apk = dest / os.environ['APK_NAME']
+          info = json.loads((temp / 'release-input/build-input.json').read_text())
+          info.pop('unsigned_sha256')
+          info.update({'sha256': hashlib.file_digest(apk.open('rb'), 'sha256').hexdigest(),
+                       'size': apk.stat().st_size, 'signer_sha256': signer[0]})
+          (dest / 'build-info.json').write_text(json.dumps(info, indent=2, sort_keys=True) + '\n')
+          names = (apk.name, 'build-info.json')
+          (dest / 'SHA256SUMS').write_text(''.join(hashlib.file_digest((dest / name).open('rb'), 'sha256').hexdigest() + '  ' + name + '\n' for name in names))
+          PY
+      - name: Retain the exact signed bundle for failed-publisher retries
+        id: bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: signed-release-${{ github.event.release.id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-bundle/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: [plan, sign]
+    if: always() && needs.plan.result == 'success' && (needs.plan.outputs.mode == 'existing' || needs.sign.result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.plan.outputs.code_commit }}
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: build-tools;35.0.0
+      - name: Verify a complete previous attempt without rebuilding
+        if: needs.plan.outputs.mode == 'existing'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release.py verify-existing --build-tools "$ANDROID_HOME/build-tools/35.0.0"
+      - name: Download the exact signed artifact and verify its archive digest
+        if: needs.plan.outputs.mode == 'build'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.sign.outputs.artifact_id }}
+          ARTIFACT_SHA: ${{ needs.sign.outputs.artifact_digest }}
+          APK_NAME: ${{ needs.plan.outputs.apk }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/signed-release.zip"
+          python3 - <<'PY'
+          import hashlib, os, stat, zipfile
+          from pathlib import Path
+          archive = Path(os.environ['RUNNER_TEMP']) / 'signed-release.zip'
+          assert hashlib.file_digest(archive.open('rb'), 'sha256').hexdigest() == os.environ['ARTIFACT_SHA'], 'signed artifact digest differs'
+          dest = Path('build/release-bundle')
+          dest.mkdir(parents=True)
+          with zipfile.ZipFile(archive) as bundle:
+              assert sorted(bundle.namelist()) == sorted([os.environ['APK_NAME'], 'build-info.json', 'SHA256SUMS'])
+              for entry in bundle.infolist():
+                  assert not stat.S_ISLNK(entry.external_attr >> 16) and entry.file_size < 512 * 1024 * 1024
+                  (dest / entry.filename).write_bytes(bundle.read(entry))
+          PY
+      - name: Attach only to the triggering release ID and verify downloaded bytes
+        if: needs.plan.outputs.mode == 'build'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release.py publish --bundle build/release-bundle --build-tools "$ANDROID_HOME/build-tools/35.0.0"
