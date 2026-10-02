@@ -1,4 +1,91 @@
-# Validation — 2026-10-02
+# Validation — Android previews
+
+## 0.1.0-alpha.2 — Mystery Events and automatic releases
+
+Seven individual choices now live under **Settings → Gameplay → Mystery events**:
+Eon Ticket, Mystic Ticket, Aurora Ticket, Old Sea Map, offline Jirachi/Celebi
+gifts, and missing Regi dolls. [Behavior and prerequisites](MYSTERY_EVENTS.md)
+are documented alongside [actual app screenshots](images/mystery-events-captures.json).
+
+The complete local ARM build activated all seven through the real menu. Its
+normal save/restart retained the rewards and correctly changed their status
+without duplicate claims. The title screen reported no loaded game, a native
+Bag menu blocked changes, and a normal idle overworld allowed them. No new
+crash or EGL error appeared. This development APK was
+`76e864800ff2b4808e05a8f7e7e2e9b5915ac03531fe0c6e49cf502d59c80564`, engine ABI
+`e04e5ad0`, built from feature checkpoint `3f0a2ca`.
+
+The saved result was **128 KiB**, counter **13**, SHA-256:
+
+```text
+2a39cc8841256bb05c80c0edff4bb764d1d5881f4359c43c5e16385bf8de6269
+```
+
+It contained one of each ticket, the matching access/receipt flags, both
+level-5 gifts, and one of each Regi doll. The original two party records and
+Champion/encounter-completion flags stayed unchanged. The disk save did not
+change until an ordinary in-game Save. Original GBA Emerald in mGBA loaded the
+result with **all 400 party bytes identical**; Party and both gift Summary
+screens were inspected. No game-memory or save edits staged these rewards.
+Evidence: `build/evidence/mystery-events/{runtime-report,gba-compatibility}.json`
+and the screenshots/logs in that directory.
+
+Native ASan/UBSan tests execute the actual engine inventory, flags, Pokémon
+creation, ScriptGiveMon/Pokédex and decoration routines. They cover partial
+imported ticket state, PC ownership, completed encounters, full inventories,
+gift deduplication and failed decoration insertion rollback. Host tests cover
+paused-thread execution, no frame advancement, queued expiration/no late
+activation, concurrent calls and exact completion of an already-started action.
+App tests cover descriptions/statuses, blocked actions, repeated taps, rotation,
+queued departure and error handling.
+
+The normal CI checkpoint `e70e23c` passed [run 37049133779](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37049133779).
+Publishing [alpha.2](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.2)
+then triggered the new release workflow automatically against immutable tag
+commit `6dda8f71557b7e479c8ac1f0ad3c61ee314a7992`.
+
+**All seven release jobs passed on the first attempt** in [run 37050988950](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37050988950).
+The release event assigned version code **2**, reran the **31 app tests, 77
+tooling tests, 18 host-graphics checks and 57 GLES assertions**, and completed
+the native/engine sanitizer checks. Build, isolated signing and verified upload
+then succeeded. The published assets match the retained signed Actions artifact
+and independently downloaded checksums, package metadata and signer.
+
+| Published artifact | Verified value |
+|---|---|
+| Version | `0.1.0-alpha.2`, Android version code **2** |
+| APK | `emerald-thor-0.1.0-alpha.2-armeabi-v7a.apk` |
+| Bytes / SHA-256 | **27,534,476 bytes**; `44ecfaabe01780c0a228b8e867eab6cb862118798ced7bc74a23dcbe2a386a8b` |
+| Engine/data ABI | `e04e5ad0` |
+| Signing identity | Same certificate as alpha.1: `eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389` |
+
+The exact downloaded CI-published APK was installed on API30 with ARM
+translation. Its same-certificate update preserved the alpha.1 save and
+preferences byte-for-byte, and Continue loaded that old adventure. A separate
+copy of the pre-event fixture then activated Aurora Ticket, saved normally,
+restarted, and correctly refused a duplicate. The resulting counter-13 save
+remained a valid 128 KiB file with only the ticket/access/receipt changes and
+no Champion flag change.
+
+A 1240×1080 secondary display accepted full DOWN/MOVE/UP Party gestures and
+remained responsive after a **7.981-second** gap. Options, Home/resume, subsequent
+Map touch and removal back to combined layout/controls passed. No fatal or ANR
+entry appeared, and the on-device APK hash still matched after the checks.
+The screenshots were visually inspected. Evidence:
+`build/evidence/published-alpha2-qa/report.json` and its captures/logs.
+
+The release workflow itself checks only its build and automated test coverage;
+maintainer gameplay acceptance above is a separate check of the published APK.
+Its manifest does not claim an unperformed hardware or full-game test. Release
+notes/checksums and the public build manifest accompany the APK.
+
+These tests used an early-game save. Island voyages and legendary fights were
+not played through; normal Champion/story requirements were preserved. Full
+inventories, partial imported states and completion variants have engine-test
+coverage. Physical Thor behavior, sustained hardware performance and audible
+output remain untested.
+
+## Earlier preview — 0.1.0-alpha.1
 
 The ARM Android game runs through the opening, starter choice, wild battles,
 the first rival battle, level-ups and ordinary save/load. The bottom-screen
@@ -6,7 +93,7 @@ window has been exercised on a separate 1240×1080 emulator display. This report
 identifies the first signed preview and distinguishes automated checks,
 real-game checks and hardware work still outstanding.
 
-## Release identity
+### Release identity
 
 | Item | Verified value |
 |---|---|
@@ -38,7 +125,7 @@ marker, engine ABI, bottom-menu asset and voxel shader. The preview includes
 matching data. Release assets include its checksum and a machine-readable build
 record; signing secrets stay outside the repository.
 
-## Automated checks
+### Automated checks
 
 **All three jobs passed** in [CI run 37040555915](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37040555915)
 at the exact code checkpoint above. The workflow builds both native packaging
@@ -60,7 +147,7 @@ The upstream signed-byte-shift idiom has a narrow sanitizer exclusion; the new
 rule implementation remains instrumented. Save-backup tests cover incomplete
 writes, failed snapshots, retained unknown files and rotation.
 
-## Real-game checks
+### Real-game checks
 
 The exact signed APK above was installed and its on-device bytes verified on
 API 30. It passed Continue, an ordinary Route 101 battle, 1240×1080 secondary
@@ -95,7 +182,7 @@ the actual Android confirmation dialog, default Stay action and lifecycle
 cancellation have JNI/instrumentation coverage. Full-game encounter variants
 still need playtesting.
 
-## Graphics repairs and upstream boundary
+### Graphics repairs and upstream boundary
 
 The port now handles streamed texture views without losing building materials,
 retains CPU redraws after GPU menu output, requests unbuffered secondary-touch
@@ -114,7 +201,7 @@ textures. It does not implement every 3DS graphics feature. Upstream OBJ-window
 and BG-mosaic limitations remain; targeted pixel tests do not establish
 rendering correctness for every later-game scene.
 
-## Performance
+### Performance
 
 These are software-emulator measurements, not AYN Thor benchmarks. The host
 uses KVM, ARM translation and SwiftShader; no hardware graphics driver is bound.
@@ -139,7 +226,7 @@ full-speed dual rendering still requires a physical-device measurement.
 Evidence: `performance-followup.json`, `dual-2d-*-summary.json` and
 `graphics-polish/fast-forward-rates.json`.
 
-## GBA save compatibility
+### GBA save compatibility
 
 The original GBA Emerald was built from the pinned source (ROM SHA-1
 `f3ae088181bf583e55daf962a92bb46f4f1d07b7`) and run in **mGBA 0.10.2**.
@@ -181,7 +268,7 @@ Evidence: `android-gba-roundtrip.json`, `gba-reference-save.json`,
 `vanilla-resaved-by-android.json`, `roundtrip-app-export.sav`,
 `gameplay-torchic-android.{sav,json}` and `gameplay-torchic-gba-*.png`.
 
-## Coverage still open
+### Coverage still open
 
 - No physical Thor was available. Firmware ABI support, lid behavior, panel
   timing, sustained performance and thermals require hardware testing.
@@ -195,7 +282,7 @@ Local logs, save fixtures, ROMs and full test captures remain under ignored
 [game screenshots](images/README.md), source, test results and release identity.
 No ROM or save fixtures are attached to the release.
 
-## Repeat the checks
+### Repeat the checks
 
 After [installing the build tools](BUILDING.md#install-the-tools):
 
@@ -208,6 +295,7 @@ python3 android/gpu/test/test_gpu.py
 python3 tools/bootstrap.py --make --apk -j4
 python3 tools/check_shim_coverage.py
 python3 android/native/test/run_qol_tests.py
+python3 android/native/test/run_mystery_tests.py
 bash android/gpu/test/run-emulator.sh emulator-5584
 ANDROID_SERIAL=emulator-5584 android/app/gradlew -p android/app connectedHarnessAndroidTest lintHarness
 ```
