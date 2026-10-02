@@ -105,6 +105,9 @@ jobs:
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'system-images;android-34;default;x86_64'
       - name: Pin the locally validated Android emulator
         run: |
+          # Emulator 36 links the PulseAudio client even when -no-audio is used.
+          sudo apt-get update
+          sudo apt-get install -y libpulse0
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/emerald-emulator.zip" https://dl.google.com/android/repository/emulator-linux_x64-15507667.zip
           echo "1eade4cf2df6ea8eeead4902c635897ba12aaa32aac4389eaae0fdb498a5b830  $RUNNER_TEMP/emerald-emulator.zip" | sha256sum --check -
           unzip -q "$RUNNER_TEMP/emerald-emulator.zip" -d "$RUNNER_TEMP/emerald-emulator"
