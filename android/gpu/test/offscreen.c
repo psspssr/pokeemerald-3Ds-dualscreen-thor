@@ -43,6 +43,19 @@ int main(int argc,char **argv)
 {
     assert(argc==2 || (argc==3 && !strcmp(argv[2],"--benchmark")));
     assert(C3D_Init(0)); assert(C2D_Init(128)); C2D_Prepare();
+    /* A byte sentinel cannot represent "not uploaded": all-white CPU data
+     * must initialize the LCD even if it equals that sentinel byte-for-byte. */
+    u8 *topLcd=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,NULL,NULL);
+    memset(topLcd,0xff,400*240*3); gpuFlushScreens();
+    glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_TOP));
+    pixel(10,10,255,255,255,255);
+    glClearColor(0,0,0,1); glClear(GL_COLOR_BUFFER_BIT);
+    gfxSetScreenFormat(GFX_TOP,GSP_RGB565_OES);
+    memset(topLcd,0xff,400*240*2); gpuFlushScreens();
+    pixel(10,10,255,255,255,255);
+    glClearColor(0,0,0,1); glClear(GL_COLOR_BUFFER_BIT);
+    memset(topLcd,0xff,400*240*2); gfxFlushBuffers(); gpuFlushScreens();
+    pixel(10,10,255,255,255,255);
     C3D_RenderTarget *target=C3D_RenderTargetCreate(16,16,GPU_RB_RGBA8,GPU_RB_DEPTH16); assert(target);
     C2D_TargetClear(target,C2D_Color32(0,0,0,255)); C2D_SceneBegin(target);
     C2D_DrawRectSolid(0,0,0,8,8,C2D_Color32(255,0,0,255));
@@ -198,6 +211,19 @@ int main(int argc,char **argv)
     GSPGPU_FlushDataCache(lcd+300*240,480); gpuFlushScreens();
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_BOTTOM));
     pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255); pixel(100,300,0,255,0,255);
+    /* The CPU canvas can repaint identical bytes after the GPU has replaced
+     * that area. Its explicit flush, not just a byte difference, commits it. */
+    memset(lcd+100*240,0,480);
+    GSPGPU_FlushDataCache(lcd+100*240,480); gpuFlushScreens();
+    pixel(100,100,0,0,0,255); pixel(100,101,255,0,0,255);
+    C3D_SyncDisplayTransfer(bottom->frameBuf.colorBuf,GX_BUFFER_DIM(240,272),(u32 *)lcd,GX_BUFFER_DIM(240,272),GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGB565)|GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB565));
+    /* Two separate flushes must not re-upload the stale CPU shadow between
+     * them and erase the GPU compositor's intervening columns. */
+    GSPGPU_FlushDataCache(lcd+20*240,480);
+    GSPGPU_FlushDataCache(lcd+200*240,480); gpuFlushScreens();
+    glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_BOTTOM));
+    pixel(100,20,0,0,0,255); pixel(100,200,0,0,0,255);
+    pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
     printf("PASS %d GLES pixel assertions: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display\n",checks);
     if(argc==3) {

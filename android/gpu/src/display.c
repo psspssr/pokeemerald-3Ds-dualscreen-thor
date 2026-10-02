@@ -3,6 +3,7 @@
 #include <android/native_window.h>
 #include <time.h>
 #include <errno.h>
+#include <stdatomic.h>
 #include <ctrshim_apt.h>
 
 static EGLDisplay display=EGL_NO_DISPLAY;
@@ -16,6 +17,9 @@ static struct {
     GSPGPU_FramebufferFormat format;
     GLuint texture,fbo;
     unsigned columns;
+    /* Origin's framebuffer writers flush complete LCD columns. A flush is a
+     * CPU ownership claim even when its bytes equal the previous CPU shadow. */
+    _Atomic u32 dirty[13];
 } screens[2];
 static GLuint presentProgram,presentVbo,presentVao;
 static double nextVblank;
@@ -54,6 +58,12 @@ static GPU_TEXCOLOR screenFormat(GSPGPU_FramebufferFormat format)
     return (unsigned)format<5?formats[format]:GPU_RGB565;
 }
 
+static void dirtyScreen(unsigned screen)
+{
+    for(unsigned word=0;word<13;word++)
+        atomic_store_explicit(&screens[screen].dirty[word],UINT32_MAX,memory_order_release);
+}
+
 bool gpuInit(void)
 {
     if(initialized) return true;
@@ -79,7 +89,8 @@ bool gpuInit(void)
         size_t maxSize=(size_t)screens[i].columns*240*4;
         screens[i].data=calloc(1,maxSize); screens[i].shadow=malloc(maxSize); screens[i].rgba=calloc(1,maxSize);
         if(!screens[i].data || !screens[i].shadow || !screens[i].rgba) goto fail;
-        memset(screens[i].shadow,0xff,maxSize);
+        memset(screens[i].shadow,0,maxSize);
+        dirtyScreen(i);
         CtrMem_Register(CTR_MEM_FRAMEBUFFER,screens[i].data,maxSize,&screens[i]);
         glGenTextures(1,&screens[i].texture); glBindTexture(GL_TEXTURE_2D,screens[i].texture);
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,240,screens[i].columns,0,GL_RGBA,GL_UNSIGNED_BYTE,screens[i].rgba);
@@ -146,16 +157,26 @@ void gpuFlushScreens(void)
     if(!initialized) return;
     for(unsigned i=0;i<2;i++) {
         GPU_TEXCOLOR format=screenFormat(screens[i].format); unsigned bpp=gpuPixelBytes(format);
-        unsigned bytesPerColumn=240*bpp,first=screens[i].columns,last=0;
-        for(unsigned x=0;x<screens[i].columns;x++) {
-            if(!memcmp(screens[i].data+x*bytesPerColumn,screens[i].shadow+x*bytesPerColumn,bytesPerColumn)) continue;
-            if(x<first) first=x; last=x+1;
-            for(unsigned y=0;y<240;y++) gpuDecodePixel(screens[i].data+(x*240+y)*bpp,format,screens[i].rgba+(x*240+y)*4);
-            memcpy(screens[i].shadow+x*bytesPerColumn,screens[i].data+x*bytesPerColumn,bytesPerColumn);
-        }
-        if(first<last) {
-            glBindTexture(GL_TEXTURE_2D,screens[i].texture);
-            glTexSubImage2D(GL_TEXTURE_2D,0,0,first,240,last-first,GL_RGBA,GL_UNSIGNED_BYTE,screens[i].rgba+first*240*4);
+        unsigned bytesPerColumn=240*bpp;
+        u32 dirty[13];
+        for(unsigned word=0;word<13;word++)
+            dirty[word]=atomic_exchange_explicit(&screens[i].dirty[word],0,memory_order_acquire);
+        int first=-1;
+        for(unsigned x=0;x<=screens[i].columns;x++) {
+            bool changed=x<screens[i].columns &&
+                ((dirty[x/32]&(1u<<(x%32))) ||
+                 memcmp(screens[i].data+x*bytesPerColumn,screens[i].shadow+x*bytesPerColumn,bytesPerColumn));
+            if(changed) {
+                if(first<0) first=(int)x;
+                for(unsigned y=0;y<240;y++) gpuDecodePixel(screens[i].data+(x*240+y)*bpp,format,screens[i].rgba+(x*240+y)*4);
+                memcpy(screens[i].shadow+x*bytesPerColumn,screens[i].data+x*bytesPerColumn,bytesPerColumn);
+            } else if(first>=0) {
+                /* Never upload a clean gap: its pixels may belong to a GPU
+                 * blit and differ from the intentionally retained CPU canvas. */
+                glBindTexture(GL_TEXTURE_2D,screens[i].texture);
+                glTexSubImage2D(GL_TEXTURE_2D,0,0,first,240,x-(unsigned)first,GL_RGBA,GL_UNSIGNED_BYTE,screens[i].rgba+(unsigned)first*240*4);
+                first=-1;
+            }
         }
     }
 }
@@ -226,12 +247,12 @@ void gfxInit(GSPGPU_FramebufferFormat top,GSPGPU_FramebufferFormat bottom,bool v
 { (void)vram; if(gpuInit()) { gfxSetScreenFormat(GFX_TOP,top); gfxSetScreenFormat(GFX_BOTTOM,bottom); } }
 void gfxExit(void) { gpuShutdown(); }
 void gfxSetScreenFormat(gfxScreen_t screen,GSPGPU_FramebufferFormat format)
-{ if((unsigned)screen<2 && (unsigned)format<5 && gpuInit()) { screens[screen].format=format; memset(screens[screen].shadow,0xff,(size_t)screens[screen].columns*240*4); } }
+{ if((unsigned)screen<2 && (unsigned)format<5 && gpuInit()) { screens[screen].format=format; dirtyScreen(screen); } }
 GSPGPU_FramebufferFormat gfxGetScreenFormat(gfxScreen_t screen) { return (unsigned)screen<2?screens[screen].format:GSP_RGB565_OES; }
 void gfxSetDoubleBuffering(gfxScreen_t screen,bool enable) { (void)screen; (void)enable; }
 u8 *gfxGetFramebuffer(gfxScreen_t screen,gfx3dSide_t side,u16 *width,u16 *height)
 { (void)side; if((unsigned)screen>1 || !gpuInit()) return NULL; if(width) *width=240; if(height) *height=screens[screen].columns; return screens[screen].data; }
-void gfxFlushBuffers(void) { /* CPU writes are compared and uploaded at the next presentation. */ }
+void gfxFlushBuffers(void) { if(initialized) { dirtyScreen(GFX_TOP); dirtyScreen(GFX_BOTTOM); } }
 void gfxSwapBuffers(void) { gpuPresent(); }
 void gfxSwapBuffersGpu(void) { gpuPresent(); }
 void gfxSet3D(bool enable) { stereo=enable; }
@@ -239,7 +260,23 @@ bool gfxIs3D(void) { return stereo; }
 void gfxSetWide(bool enable) { (void)enable; }
 bool gfxIsWide(void) { return false; }
 void gspWaitForVBlank(void) { gpuPresent(); gpuPace(); }
-Result GSPGPU_FlushDataCache(const void *address,u32 size) { (void)address; (void)size; __sync_synchronize(); return 0; }
+Result GSPGPU_FlushDataCache(const void *address,u32 size)
+{
+    __sync_synchronize();
+    if(!initialized || !address || !size) return 0;
+    uintptr_t begin=(uintptr_t)address,end=begin+size;
+    if(end<begin) end=UINTPTR_MAX;
+    for(unsigned i=0;i<2;i++) {
+        unsigned stride=240*gpuPixelBytes(screenFormat(screens[i].format));
+        uintptr_t base=(uintptr_t)screens[i].data,limit=base+screens[i].columns*stride;
+        if(begin>=limit || end<=base) continue;
+        unsigned first=(begin>base?begin-base:0)/stride;
+        unsigned last=((end<limit?end:limit)-base-1)/stride;
+        for(unsigned column=first;column<=last;column++)
+            atomic_fetch_or_explicit(&screens[i].dirty[column/32],1u<<(column%32),memory_order_release);
+    }
+    return 0;
+}
 Result GSPGPU_InvalidateDataCache(const void *address,u32 size) { (void)address; (void)size; __sync_synchronize(); return 0; }
 
 #ifdef CTR_GPU_TEST
