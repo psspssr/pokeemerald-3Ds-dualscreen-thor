@@ -40,11 +40,14 @@ Dual-display mode is the default when a second built-in display is present:
   is 3DS B, right is A, left is Y, top is X); left stick is the circle pad;
   L1/R1 are L/R; L2/R2 unused. A label-based mapping is in Settings for
   controllers set to the Xbox layout.
-- **Refresh target**: both screens are drawn every emulated VBlank (59.83 Hz).
-  Each display has its own EGL surface; neither waits on the other's vsync,
-  so the 120 Hz top panel and the 60 Hz bottom panel stay in step with the game.
-- **Lifecycle**: closing the lid or switching apps pauses the game; the
-  Presentation is dismissed and recreated with the activity. If the second
+- **Refresh target**: both screens use one 59.83 Hz game clock and separate
+  EGL surfaces. The renderer requests no per-window vsync wait, though the
+  display driver can still block during presentation. The actual 120 Hz and
+  60 Hz panel timing needs verification on Thor hardware.
+- **Lifecycle**: Android's activity pause callback pauses the game when
+  switching apps. The same applies when lid closure triggers that callback;
+  the firmware's lid behavior needs a device check. The Presentation is
+  dismissed and recreated with the activity. If the second
   display disappears, both screens move to the top display (a single-display
   layout) until it returns.
 

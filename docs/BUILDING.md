@@ -212,6 +212,26 @@ needs an ARM-compatible emulator or physical device. Android documents
 headless operation and GPU options in its
 [emulator command-line guide](https://developer.android.com/studio/run/emulator-commandline).
 
+On an API 30 emulator, `adb shell input tap` may move around the system file
+picker but fail to activate a document: that command injects an unknown tool
+type, while the document selection handler expects a finger or mouse. The QA
+helper below injects an explicit finger event. It is never part of the APK.
+
+```sh
+mkdir -p build/android-input
+javac -source 8 -target 8 -classpath "$ANDROID_HOME/platforms/android-35/android.jar" \
+  -d build/android-input docs/testing/AndroidTouch.java
+"$ANDROID_HOME/build-tools/35.0.0/d8" --min-api 28 --output build/android-input \
+  build/android-input/AndroidTouch.class
+adb push build/android-input/classes.dex /data/local/tmp/emerald-touch.dex
+adb shell CLASSPATH=/data/local/tmp/emerald-touch.dex app_process / AndroidTouch 400 500
+```
+
+The optional third argument selects a display ID. Use coordinates from
+`adb shell uiautomator dump`, rather than a resized screenshot. This allows
+the production Settings import/export flow to be checked through the actual
+system picker and `content://` providers, in addition to file-copy tests.
+
 ## Runtime acceptance after an upstream update
 
 Record the Android commit, upstream pin, APK hash, device/emulator ABI list,

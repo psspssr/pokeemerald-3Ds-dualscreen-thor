@@ -4,7 +4,7 @@
   An Android port of
   <a href="https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen">Pokémon Emerald 3Ds Dual Screen</a>
   by ZallaxDev: the game on the top screen, the touch interface on the bottom
-  screen, and the optional voxel overworld — on your phone.
+  screen, and the optional voxel overworld — on Android phones and dual-display handhelds.
 </p>
 
 ---
@@ -20,6 +20,8 @@ Development and testing happen on `main` in
 [`psspssr/pokeemerald-3Ds-dualscreen-thor`](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor).
 The [build guide](docs/BUILDING.md) distinguishes the full ARM game from the
 separate emulator display/input harness and explains the runtime checks.
+The [validation report](docs/VALIDATION.md) records real-game emulator results,
+GBA save interchange, performance measurements and hardware coverage limits.
 
 Because origin is never edited, its new commits are taken with one command
 (see [Updating from origin](docs/UPDATING_FROM_ORIGIN.md)).
@@ -72,6 +74,7 @@ APK.
 | Guide | What's inside |
 |---|---|
 | [Building](docs/BUILDING.md) | Requirements, build, install, testing on the emulator. |
+| [Validation](docs/VALIDATION.md) | Tested builds, real-game results, save compatibility and remaining hardware checks. |
 | [Android architecture](docs/ANDROID_ARCHITECTURE.md) | How origin runs on Android unmodified. |
 | [Updating from origin](docs/UPDATING_FROM_ORIGIN.md) | Taking new commits of the 3DS port. |
 | [Origin's documentation](origin/docs/) | The game port itself: engine, assets, voxel overworld. |
