@@ -1,0 +1,46 @@
+--- a/3ds_port/src/3ds_game_full.c
++++ b/3ds_port/src/3ds_game_full.c
+@@ -202,6 +202,7 @@
+ /* The Pokédex's own callback. The page it shows for a mon just caught puts
+  * back the battle's, which stays the battle's. */
+ IntrCallback CtrPokedex_VBlankCallback(void);
++bool8 CtrPokedex_CaughtPageIsOpen(void);
+ 
+ void CtrCentredPokedex_SetVBlankCallback(IntrCallback callback)
+ {
+@@ -252,8 +253,15 @@
+         UpdateSet(&sBattle, callback);
+         UpdateSet(&sTransition, callback);
+     }
++    /* The caught-mon registration page keeps VBlankCB_Battle to service the
++     * battle engine while its task draws a full GBA screen. Unlike naming,
++     * summary and move-forget, it has no distinct centred VBlank callback.
++     * Override only the live page, including its fade-out. Never remember the
++     * shared battle callback as centred, which would affect later battles. */
++    unsigned centred = sCentred.on ? sCentred.screen : CTR_CENTRED_NONE;
++    if (CtrPokedex_CaughtPageIsOpen()) centred = CTR_CENTRED_PLAIN;
+     CtrVideo_SetStage(sStage.on);
+-    CtrVideo_SetCentred(sCentred.on ? sCentred.screen : CTR_CENTRED_NONE);
++    CtrVideo_SetCentred(centred);
+     CtrVideo_SetBattle(sBattle.on);
+     CtrVideo_SetTransition(sTransition.on);
+ }
+--- a/src/pokedex.c
++++ b/src/pokedex.c
+@@ -5780,6 +5780,16 @@
+     return VBlankCB_Pokedex;
+ }
+ 
++/* The registration page is driven by battle tasks, not CB2_Pokedex. Its
++ * full 160 rows must bypass the battle scene's 112-row crop until the exit
++ * task has finished fading the page and moving the caught sprite. */
++bool8 CtrPokedex_CaughtPageIsOpen(void)
++{
++    return FuncIsActiveTask(Task_DisplayCaughtMonDexPage)
++        || FuncIsActiveTask(Task_HandleCaughtMonPageInput)
++        || FuncIsActiveTask(Task_ExitCaughtMonPage);
++}
++
+ bool8 CtrPokedex_IsOpen(void)
+ {
+     return sPokedexView != NULL && (gMain.callback2 == CB2_Pokedex || gMain.callback2 == CB2_OpenPokedex);
