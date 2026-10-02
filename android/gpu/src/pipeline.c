@@ -12,6 +12,11 @@ typedef struct {
     ProgramKey key;
     GLuint program;
     GLint uniforms,colors,alphaRef;
+    C3D_FVec uniformValues[C3D_FVUNIF_COUNT];
+    u32 colorValues[6];
+    int alphaValue;
+    unsigned samplerMask;
+    bool uniformsUploaded,colorsUploaded,alphaUploaded;
     unsigned long used;
 } CachedProgram;
 static CachedProgram programs[96];
@@ -73,6 +78,30 @@ static void combineExpr(char out[1200],char args[3][160],unsigned func,bool alph
     default: snprintf(out,1200,alpha?"0.0":"vec3(0.0)"); break;
     }
 }
+static unsigned combineInputs(unsigned function)
+{
+    switch(function) {
+    case GPU_REPLACE: return 1;
+    case GPU_MODULATE: case GPU_ADD: case GPU_ADD_SIGNED: case GPU_SUBTRACT:
+    case GPU_DOT3_RGB: case GPU_DOT3_RGBA: return 2;
+    case GPU_INTERPOLATE: case GPU_MULTIPLY_ADD: case GPU_ADD_MULTIPLY: return 3;
+    default: return 0;
+    }
+}
+static unsigned programSamplers(const ProgramKey *key)
+{
+    unsigned mask=key->citro2d?1:0;
+    for(int i=key->citro2d?4:0;i<6;i++) {
+        const C3D_TexEnv *env=&key->stages[i];
+        unsigned sources[]={env->srcRgb,env->srcAlpha};
+        unsigned count[]={combineInputs(env->funcRgb),combineInputs(env->funcAlpha)};
+        for(int mode=0;mode<2;mode++) for(unsigned j=0;j<count[mode];j++) {
+            unsigned source=(sources[mode]>>(j*4))&15;
+            if(source>=GPU_TEXTURE0 && source<=GPU_TEXTURE2) mask|=1u<<(source-GPU_TEXTURE0);
+        }
+    }
+    return mask;
+}
 static GLuint makeProgram(ProgramKey *key)
 {
     char code[32768]; size_t used=0;
@@ -81,8 +110,12 @@ static GLuint makeProgram(ProgramKey *key)
         "uniform sampler2D tex0;uniform sampler2D tex1;uniform sampler2D tex2;"
         "uniform vec4 c[6];uniform float alphaRef;out vec4 outputColor;\n");
     if(key->citro2d) append(code,sizeof(code),&used,"in float v_blend;\n");
-    append(code,sizeof(code),&used,"void main(){vec4 t0=texture(tex0,v_tex0.xy);vec4 t1=texture(tex1,v_tex1.xy);"
-        "vec4 t2=texture(tex2,v_tex2.xy);vec4 p=v_color;\n");
+    append(code,sizeof(code),&used,"void main(){vec4 p=v_color;\n");
+    /* Do not rely on the driver to remove unused texture() expressions:
+     * some retain those fetches, samplers and texture bindings as active. */
+    unsigned samplers=programSamplers(key);
+    for(unsigned unit=0;unit<3;unit++) if(samplers&(1u<<unit))
+        append(code,sizeof(code),&used,"vec4 t%u=texture(tex%u,v_tex%u.xy);\n",unit,unit,unit);
     if(key->citro2d) append(code,sizeof(code),&used,"p=vec4(mix(t0.rgb,v_color.rgb,v_blend),t0.a*v_color.a);\n");
     for(int i=key->citro2d?4:0;i<6;i++) {
         C3D_TexEnv *env=&key->stages[i];
@@ -125,18 +158,50 @@ GLuint gpuUseProgram(bool citro2d)
         glUseProgram(cache->program);
         cache->uniforms=glGetUniformLocation(cache->program,"u"); cache->colors=glGetUniformLocation(cache->program,"c");
         cache->alphaRef=glGetUniformLocation(cache->program,"alphaRef");
-        glUniform1i(glGetUniformLocation(cache->program,"tex0"),0); glUniform1i(glGetUniformLocation(cache->program,"tex1"),1);
-        glUniform1i(glGetUniformLocation(cache->program,"tex2"),2);
+        const char *samplers[]={"tex0","tex1","tex2"};
+        for(int unit=0;unit<3;unit++) {
+            GLint location=glGetUniformLocation(cache->program,samplers[unit]);
+            if(location>=0) { glUniform1i(location,unit); cache->samplerMask|=1u<<unit; }
+        }
     }
     cache->used=++sequence; glUseProgram(cache->program);
-    float colors[24],uniforms[96*4];
-    for(int i=0;i<6;i++) for(int j=0;j<4;j++) colors[i*4+j]=((gpuEnvs[i].color>>(j*8))&255)/255.f;
-    glUniform4fv(cache->colors,6,colors); glUniform1f(cache->alphaRef,gpuAlphaRef/255.f);
+    if(cache->colors>=0) {
+        bool changed=!cache->colorsUploaded;
+        for(int i=0;i<6;i++) if(cache->colorValues[i]!=gpuEnvs[i].color) changed=true;
+        if(changed) {
+            float colors[24];
+            for(int i=0;i<6;i++) {
+                cache->colorValues[i]=gpuEnvs[i].color;
+                for(int j=0;j<4;j++) colors[i*4+j]=((gpuEnvs[i].color>>(j*8))&255)/255.f;
+            }
+            glUniform4fv(cache->colors,6,colors); cache->colorsUploaded=true;
+        }
+    }
+    if(cache->alphaRef>=0 && (!cache->alphaUploaded || cache->alphaValue!=gpuAlphaRef)) {
+        glUniform1f(cache->alphaRef,gpuAlphaRef/255.f);
+        cache->alphaValue=gpuAlphaRef; cache->alphaUploaded=true;
+    }
     if(!citro2d && cache->uniforms>=0) {
-        for(int i=0;i<96;i++) { C3D_FVec v=C3D_FVUnif[0][i]; uniforms[i*4]=v.x; uniforms[i*4+1]=v.y; uniforms[i*4+2]=v.z; uniforms[i*4+3]=v.w; }
-        glUniform4fv(cache->uniforms,96,uniforms);
+        /* Upstream often changes only a model/lighting register between
+         * draws. Compare actual values, including direct register writes,
+         * against this linked program's last upload. A prefix upload avoids
+         * assuming adjacent array elements have consecutive GL locations. */
+        unsigned count=C3D_FVUNIF_COUNT;
+        if(cache->uniformsUploaded) {
+            if(!memcmp(cache->uniformValues,C3D_FVUnif[0],sizeof(cache->uniformValues))) count=0;
+            else while(count && !memcmp(&cache->uniformValues[count-1],&C3D_FVUnif[0][count-1],sizeof(C3D_FVec))) --count;
+        }
+        if(count) {
+            float uniforms[C3D_FVUNIF_COUNT*4];
+            for(unsigned i=0;i<count;i++) { C3D_FVec v=C3D_FVUnif[0][i]; uniforms[i*4]=v.x; uniforms[i*4+1]=v.y; uniforms[i*4+2]=v.z; uniforms[i*4+3]=v.w; }
+            glUniform4fv(cache->uniforms,count,uniforms);
+            memcpy(cache->uniformValues,C3D_FVUnif[0],count*sizeof(C3D_FVec)); cache->uniformsUploaded=true;
+        }
     }
     for(int unit=0;unit<3;unit++) {
+        /* A sampler optimized out of this linked shader cannot consume a
+         * texture. Keep checking live CPU bytes for every active sampler. */
+        if(!(cache->samplerMask&(1u<<unit))) continue;
         glActiveTexture(GL_TEXTURE0+unit);
         if(GPU_BOUND_TEXTURES[unit]) {
             if(!gpuTextureId(GPU_BOUND_TEXTURES[unit])) return 0;

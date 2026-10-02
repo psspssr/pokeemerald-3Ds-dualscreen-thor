@@ -25,6 +25,9 @@ static GLfloat blendColor[4];
 static GLenum blendEquations[2]={GL_FUNC_ADD,GL_FUNC_ADD};
 static GLenum blendFactors[4]={GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA};
 static GLuint drawVao,drawVbo[12];
+static C3D_AttrInfo drawAttributes;
+static C3D_BufInfo drawBufferLayout;
+static bool drawLayoutValid;
 static unsigned frameCount;
 static double frameStart,drawingTime;
 static void (*endHook)(void *);
@@ -36,7 +39,7 @@ bool C3D_Init(size_t size)
     (void)size;
     if(!gpuInit()) return false;
     for(int i=0;i<6;i++) C3D_TexEnvInit(&gpuEnvs[i]);
-    if(!drawVao) { glGenVertexArrays(1,&drawVao); glGenBuffers(12,drawVbo); }
+    if(!drawVao) { glGenVertexArrays(1,&drawVao); glGenBuffers(12,drawVbo); drawLayoutValid=false; }
     gpuApplyState(); return true;
 }
 void C3D_Fini(void)
@@ -44,7 +47,7 @@ void C3D_Fini(void)
     gpuC2DFlush();
     while(gpuTargets) C3D_RenderTargetDelete(gpuTargets->target);
     while(gpuTextures) C3D_TexDelete(gpuTextures->tex);
-    glDeleteVertexArrays(1,&drawVao); glDeleteBuffers(12,drawVbo); drawVao=0;
+    glDeleteVertexArrays(1,&drawVao); glDeleteBuffers(12,drawVbo); drawVao=0; drawLayoutValid=false;
 }
 void gpuApplyState(void)
 {
@@ -119,31 +122,59 @@ int BufInfo_Add(C3D_BufInfo *info,const void *data,int stride,int count,u64 perm
 }
 C3D_BufInfo *C3D_GetBufInfo(void) { gpuC2DFlush(); return &gpuBuffers; }
 void C3D_SetBufInfo(C3D_BufInfo *info) { gpuC2DFlush(); gpuBuffers=*info; }
-void C3D_DrawArrays(GPU_Primitive_t primitive,int first,int count)
+static bool vertexLayoutMatches(void)
 {
-    if(first<0 || count<=0 || !gpuTarget || !gpuProgram || !gpuProgram->vertexShader) return;
-    gpuC2DFlush();
-    if(!gpuUseProgram(false)) { CtrHost_SetState(CTR_HOST_EXITING); return; }
-    glBindVertexArray(drawVao);
+    if(!drawLayoutValid || drawAttributes.attrCount!=gpuAttrs.attrCount ||
+       drawAttributes.flags[0]!=gpuAttrs.flags[0] || drawAttributes.flags[1]!=gpuAttrs.flags[1] ||
+       drawAttributes.permutation!=gpuAttrs.permutation ||
+       drawBufferLayout.bufCount!=gpuBuffers.bufCount) return false;
+    for(int b=0;b<gpuBuffers.bufCount;b++) {
+        const C3D_BufCfg *old=&drawBufferLayout.buffers[b],*now=&gpuBuffers.buffers[b];
+        if(old->stride!=now->stride || old->count!=now->count || old->permutation!=now->permutation) return false;
+    }
+    return true;
+}
+static bool configureVertexLayout(void)
+{
+    drawLayoutValid=false;
     for(int i=0;i<16;i++) { glDisableVertexAttribArray(i); glVertexAttrib4f(i,0,0,0,1); }
     static const GLenum formats[]={GL_BYTE,GL_UNSIGNED_BYTE,GL_SHORT,GL_FLOAT};
     static const unsigned sizes[]={1,1,2,4};
     for(int b=0;b<gpuBuffers.bufCount;b++) {
-        C3D_BufCfg *buffer=&gpuBuffers.buffers[b];
-        if(!buffer->data) return;
+        const C3D_BufCfg *buffer=&gpuBuffers.buffers[b];
+        if(buffer->stride<=0 || buffer->count<1 || buffer->count>12) return false;
         glBindBuffer(GL_ARRAY_BUFFER,drawVbo[b]);
-        glBufferData(GL_ARRAY_BUFFER,(size_t)count*buffer->stride,(const char *)buffer->data+(size_t)first*buffer->stride,GL_STREAM_DRAW);
         size_t offset=0;
         for(int a=0;a<buffer->count;a++) {
             unsigned index=(buffer->permutation>>(a*4))&15;
-            if(index>=(unsigned)gpuAttrs.attrCount) return;
+            if(index>=(unsigned)gpuAttrs.attrCount) return false;
             unsigned format=(gpuAttrs.flags[index/8]>>((index%8)*4))&15;
             unsigned reg=(gpuAttrs.permutation>>(index*4))&15;
             unsigned components=(format>>2)+1,type=format&3;
-            if(offset+components*sizes[type]>(unsigned)buffer->stride) return;
+            if(offset+components*sizes[type]>(unsigned)buffer->stride) return false;
             glEnableVertexAttribArray(reg); glVertexAttribPointer(reg,components,formats[type],GL_FALSE,buffer->stride,(const void *)offset);
             offset+=components*sizes[type];
         }
+    }
+    drawAttributes=gpuAttrs; drawBufferLayout=gpuBuffers; drawLayoutValid=true;
+    return true;
+}
+void C3D_DrawArrays(GPU_Primitive_t primitive,int first,int count)
+{
+    if(first<0 || count<=0 || !gpuTarget || !gpuProgram || !gpuProgram->vertexShader) return;
+    if((unsigned)gpuBuffers.bufCount>12 || (unsigned)gpuAttrs.attrCount>12) return;
+    for(int b=0;b<gpuBuffers.bufCount;b++) if(!gpuBuffers.buffers[b].data) return;
+    gpuC2DFlush();
+    if(!gpuUseProgram(false)) { CtrHost_SetState(CTR_HOST_EXITING); return; }
+    glBindVertexArray(drawVao);
+    /* The VAO retains bindings to these fixed VBO names. A different CPU
+     * pointer, first/count or new vertex bytes only replaces their storage;
+     * it does not change the layout. 2D/presentation use separate VAOs. */
+    if(!vertexLayoutMatches() && !configureVertexLayout()) return;
+    for(int b=0;b<gpuBuffers.bufCount;b++) {
+        C3D_BufCfg *buffer=&gpuBuffers.buffers[b];
+        glBindBuffer(GL_ARRAY_BUFFER,drawVbo[b]);
+        glBufferData(GL_ARRAY_BUFFER,(size_t)count*buffer->stride,(const char *)buffer->data+(size_t)first*buffer->stride,GL_STREAM_DRAW);
     }
     gpuApplyState();
     GLenum mode=primitive==GPU_TRIANGLE_STRIP?GL_TRIANGLE_STRIP:primitive==GPU_TRIANGLE_FAN?GL_TRIANGLE_FAN:GL_TRIANGLES;

@@ -4,10 +4,26 @@
 #include <assert.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 #include <ctrshim_apt.h>
 
 static CtrHostState state=CTR_HOST_RUNNING;
 static unsigned gameSpeed=1;
+/* Link wrappers count actual backend/driver work without adding counters to
+ * the production renderer. Pixel checks below still use the real GLES API. */
+static unsigned uniformCalls,uniformVectors,textureBinds,attributeCalls;
+void __real_glUniform4fv(GLint location,GLsizei count,const GLfloat *value);
+void __wrap_glUniform4fv(GLint location,GLsizei count,const GLfloat *value)
+{ uniformCalls++; uniformVectors+=(unsigned)count; __real_glUniform4fv(location,count,value); }
+void __real_glBindTexture(GLenum target,GLuint texture);
+void __wrap_glBindTexture(GLenum target,GLuint texture)
+{ textureBinds++; __real_glBindTexture(target,texture); }
+void __real_glDisableVertexAttribArray(GLuint index);
+void __wrap_glDisableVertexAttribArray(GLuint index)
+{ attributeCalls++; __real_glDisableVertexAttribArray(index); }
+void __real_glVertexAttribPointer(GLuint index,GLint size,GLenum type,GLboolean normalized,GLsizei stride,const void *pointer);
+void __wrap_glVertexAttribPointer(GLuint index,GLint size,GLenum type,GLboolean normalized,GLsizei stride,const void *pointer)
+{ attributeCalls++; __real_glVertexAttribPointer(index,size,type,normalized,stride,pointer); }
 extern GLuint gpuTestScreenFramebuffer(gfxScreen_t screen);
 extern double gpuTestPacingDeadline(void);
 extern unsigned gpuTestPresentCount(void);
@@ -41,6 +57,8 @@ static void pixel(unsigned x,unsigned y,unsigned r,unsigned g,unsigned b,unsigne
 }
 static unsigned morton(unsigned x,unsigned y)
 { return (x&1)|((y&1)<<1)|((x&2)<<1)|((y&2)<<2)|((x&4)<<2)|((y&4)<<3); }
+static double callerCpuTime(void)
+{ struct timespec now; assert(clock_gettime(CLOCK_THREAD_CPUTIME_ID,&now)==0); return now.tv_sec+now.tv_nsec*1e-9; }
 
 int main(int argc,char **argv)
 {
@@ -183,6 +201,73 @@ int main(int argc,char **argv)
     C3D_FVUnifSet(GPU_VERTEX_SHADER,shade,0,0,2,0);
     C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,255,0,0,255);
     C3D_DepthTest(false,GPU_ALWAYS,GPU_WRITE_COLOR); C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,255,255);
+    /* Uniform values belong to a linked program. Reusing a cached program
+     * after another variant must see current values, including direct writes
+     * through Citro3D's public register array without dirty flags. */
+    C3D_FVUnifSet(GPU_VERTEX_SHADER,shade,0,2,0,0);
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,255,0,255);
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,255,0,255);
+    C3D_AlphaTest(true,GPU_GEQUAL,1);
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,255,0,255);
+    C3D_FVUnif[0][shade].x=2; C3D_FVUnif[0][shade].y=0;
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,255,0,0,255);
+    C3D_AlphaTest(false,GPU_ALWAYS,0);
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,255,0,0,255);
+    C3D_FVUnif[0][shade].x=0; C3D_FVUnif[0][shade].z=2;
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,255,255);
+    C2D_TargetClear(target,C2D_Color32(0,0,0,255));
+    C3D_AlphaTest(true,GPU_GREATER,255);
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,0,255);
+    C3D_AlphaTest(true,GPU_GREATER,254);
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,255,255);
+    C3D_AlphaTest(false,GPU_ALWAYS,0);
+    /* Include the third combiner operand and a shader using only sampler2;
+     * inactive-unit pruning must never remove a texture that contributes. */
+    C3D_Tex operands[3]={{0}};
+    const u16 operandColors[]={0xF801,0x07C1,0x003F};
+    for(int unit=0;unit<3;unit++) {
+        assert(C3D_TexInit(&operands[unit],8,8,GPU_RGBA5551));
+        for(unsigned i=0;i<64;i++) ((u16 *)operands[unit].data)[i]=operandColors[unit];
+        C3D_TexBind(unit,&operands[unit]);
+    }
+    C3D_TexEnv *operandEnv=C3D_GetTexEnv(0);
+    C3D_TexEnvSrc(operandEnv,C3D_Both,GPU_TEXTURE0,GPU_TEXTURE1,GPU_TEXTURE2);
+    C3D_TexEnvFunc(operandEnv,C3D_Both,GPU_INTERPOLATE);
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,255,0,255);
+    C3D_TexEnvInit(C3D_GetTexEnv(0));
+    C3D_TexEnvSrc(C3D_GetTexEnv(0),C3D_Both,GPU_TEXTURE2,GPU_PREVIOUS,GPU_PREVIOUS);
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,255,255);
+    for(int unit=0;unit<3;unit++) C3D_TexDelete(&operands[unit]);
+    C3D_TexEnvInit(C3D_GetTexEnv(0));
+    C3D_TexEnvSrc(C3D_GetTexEnv(0),C3D_Both,GPU_PRIMARY_COLOR,GPU_PRIMARY_COLOR,GPU_PRIMARY_COLOR);
+    /* A VAO can keep its layout while data/first/count change, but must
+     * reconfigure when loader order, stride or the number of buffers changes. */
+    struct { short x,y,z,shade; float u,v; u32 pad; } alternate[6];
+    for(int i=0;i<6;i++) {
+        alternate[i].x=triangle[i%3].x+(i>=3?4096:0);
+        alternate[i].y=triangle[i%3].y; alternate[i].z=triangle[i%3].z;
+        alternate[i].shade=triangle[i%3].shade; alternate[i].u=alternate[i].v=0; alternate[i].pad=0;
+    }
+    AttrInfo_Init(C3D_GetAttrInfo()); AttrInfo_AddLoader(C3D_GetAttrInfo(),0,GPU_SHORT,4); AttrInfo_AddLoader(C3D_GetAttrInfo(),1,GPU_FLOAT,2);
+    BufInfo_Init(C3D_GetBufInfo()); BufInfo_Add(C3D_GetBufInfo(),alternate,sizeof(*alternate),2,0x10);
+    C2D_TargetClear(target,C2D_Color32(0,0,0,255));
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,255,255);
+    C2D_TargetClear(target,C2D_Color32(0,0,0,255));
+    C3D_DrawArrays(GPU_TRIANGLES,3,3); pixel(8,8,0,0,0,255);
+    C3D_GetBufInfo()->buffers[0].data=alternate+3;
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,0,255);
+    C3D_GetBufInfo()->buffers[0].data=alternate;
+    C2D_DrawRectSolid(0,0,0,16,16,C2D_Color32(255,0,0,255)); C2D_Flush();
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,255,255);
+    float uv[3][2]={{0}}; short positions[3][4];
+    for(int i=0;i<3;i++) { positions[i][0]=triangle[i].x; positions[i][1]=triangle[i].y; positions[i][2]=triangle[i].z; positions[i][3]=triangle[i].shade; }
+    AttrInfo_Init(C3D_GetAttrInfo()); AttrInfo_AddLoader(C3D_GetAttrInfo(),1,GPU_FLOAT,2); AttrInfo_AddLoader(C3D_GetAttrInfo(),0,GPU_SHORT,4);
+    BufInfo_Init(C3D_GetBufInfo()); BufInfo_Add(C3D_GetBufInfo(),uv,sizeof(*uv),1,0); BufInfo_Add(C3D_GetBufInfo(),positions,sizeof(*positions),1,1);
+    C2D_TargetClear(target,C2D_Color32(0,0,0,255));
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,255,255);
+    BufInfo_Init(C3D_GetBufInfo()); BufInfo_Add(C3D_GetBufInfo(),triangle,sizeof(*triangle),2,0x10);
+    C2D_TargetClear(target,C2D_Color32(0,0,0,255));
+    C3D_DrawArrays(GPU_TRIANGLES,0,3); pixel(8,8,0,0,255,255);
     /* The depth-plane pass relies on the RGB write mask preserving coverage. */
     C3D_Tex maskTexture={0}; assert(C3D_TexInitVRAM(&maskTexture,16,16,GPU_RGBA5551));
     C3D_RenderTarget *mask=C3D_RenderTargetCreateFromTex(&maskTexture,GPU_TEXFACE_2D,0,-1); assert(mask);
@@ -276,6 +361,30 @@ int main(int argc,char **argv)
             C2D_Flush(); glFinish();
         }
         printf("BENCH 17 independently transformed sprites sharing an unchanged atlas: %.3f ms/frame\n",(gpuNow()-start)*1000/60);
+        /* Separate driver submission from large atlas scans and display
+         * swaps. The real translated voxel shader changes one register in
+         * the second case, as its lighting/model parameters do between draws. */
+        C3D_BindProgram(&program);
+        for(int i=0;i<6;i++) C3D_TexEnvInit(C3D_GetTexEnv(i));
+        C3D_TexEnvSrc(C3D_GetTexEnv(0),C3D_Both,GPU_PRIMARY_COLOR,GPU_PRIMARY_COLOR,GPU_PRIMARY_COLOR);
+        for(int unit=0;unit<3;unit++) C3D_TexBind(unit,NULL);
+        C3D_AlphaTest(false,GPU_ALWAYS,0); C3D_ColorLogicOp(GPU_LOGICOP_COPY);
+        C3D_DepthTest(false,GPU_ALWAYS,GPU_WRITE_COLOR);
+        C3D_FVUnifSet(GPU_VERTEX_SHADER,shade,2,0,0,0);
+        for(int changed=0;changed<2;changed++) {
+            C3D_DrawArrays(GPU_TRIANGLES,0,3); glFinish();
+            uniformCalls=uniformVectors=textureBinds=attributeCalls=0;
+            start=gpuNow();
+            double cpuStart=callerCpuTime();
+            for(int i=0;i<4000;i++) {
+                if(changed) C3D_FVUnif[0][shade].x=(i&1)?2:1;
+                C3D_DrawArrays(GPU_TRIANGLES,0,3);
+            }
+            glFinish();
+            printf("BENCH voxel %s uniforms, 4000 draws: %.3f ms, %u uniform calls, %u vec4 values, %u texture binds, %u attribute layout calls, %.3f ms caller CPU\n",
+                   changed?"changing":"unchanged",(gpuNow()-start)*1000,uniformCalls,uniformVectors,textureBinds,attributeCalls,(callerCpuTime()-cpuStart)*1000);
+            pixel(8,8,255,0,0,255);
+        }
         C3D_TexDelete(&atlas);
     }
     C2D_Fini(); C3D_Fini(); shaderProgramFree(&program); DVLB_Free(binary); gfxExit(); return 0;
