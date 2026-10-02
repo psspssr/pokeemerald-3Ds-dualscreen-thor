@@ -99,9 +99,17 @@ jobs:
           fi
           df -h "$RUNNER_TEMP"
       - name: Install emulator and harness toolchain
-        # Match the locally verified dual-display/GLES harness while compiling
-        # and targeting API 35. Current emulators enforce a 6 GB userdata floor.
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'emulator' 'system-images;android-34;google_apis;x86_64'
+        # Keep API 34 and real GLES/SurfaceView rendering, without the Google
+        # apps whose first-boot jobs exhausted the hosted runner. ATD images
+        # disable hardware drawing and are unsuitable for these pixel tests.
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'system-images;android-34;default;x86_64'
+      - name: Pin the locally validated Android emulator
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/emerald-emulator.zip" https://dl.google.com/android/repository/emulator-linux_x64-15507667.zip
+          echo "1eade4cf2df6ea8eeead4902c635897ba12aaa32aac4389eaae0fdb498a5b830  $RUNNER_TEMP/emerald-emulator.zip" | sha256sum --check -
+          unzip -q "$RUNNER_TEMP/emerald-emulator.zip" -d "$RUNNER_TEMP/emerald-emulator"
+          echo "EMERALD_EMULATOR=$RUNNER_TEMP/emerald-emulator/emulator/emulator" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/emerald-emulator/emulator/emulator" -version
       - name: Build harness APKs and lint before starting the emulator
         working-directory: android/app
         run: |
@@ -118,10 +126,14 @@ jobs:
           # AVD directories. Give both processes the same explicit location.
           export ANDROID_AVD_HOME="$RUNNER_TEMP/thor-avd"
           mkdir -p "$ANDROID_AVD_HOME"
-          echo no | avdmanager create avd --force --name thor-ci --path "$ANDROID_AVD_HOME/thor-ci.avd" --package 'system-images;android-34;google_apis;x86_64' --device pixel_2
+          echo no | avdmanager create avd --force --name thor-ci --path "$ANDROID_AVD_HOME/thor-ci.avd" --package 'system-images;android-34;default;x86_64' --device pixel_2
           test -f "$ANDROID_AVD_HOME/thor-ci.ini"
-          "$ANDROID_HOME/emulator/emulator" -list-avds
-          "$ANDROID_HOME/emulator/emulator" -avd thor-ci -port 5554 -no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -gpu swiftshader_indirect > emulator.log 2>&1 &
+          "$EMERALD_EMULATOR" -accel-check
+          "$EMERALD_EMULATOR" -list-avds
+          cp "$ANDROID_HOME/system-images/android-34/default/x86_64/source.properties" emulator-image.properties
+          # A smaller primary phone panel reduces software-composition load.
+          # The test's separate Thor bottom display remains exactly 1240x1080.
+          "$EMERALD_EMULATOR" -avd thor-ci -port 5554 -accel on -cores 2 -memory 2048 -skin 720x1280 -dpi-device 320 -no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -gpu swiftshader > emulator.log 2>&1 &
           emulator_pid=$!
           deadline=$((SECONDS + 300))
           while ((SECONDS < deadline)); do
@@ -134,16 +146,48 @@ jobs:
               # AOSP CTS also preconfirms this tutorial: its SystemUI window
               # otherwise intercepts the test's injected control touches.
               timeout 10 adb shell settings put secure immersive_mode_confirmations confirmed
+              timeout 10 adb shell input keyevent 224
               timeout 10 adb shell wm dismiss-keyguard
-              timeout 10 adb shell input keyevent 82
+              timeout 10 adb shell input keyevent 3
               timeout 10 adb shell settings put global window_animation_scale 0
               timeout 10 adb shell settings put global transition_animation_scale 0
               timeout 10 adb shell settings put global animator_duration_scale 0
-              exit 0
+              break
             fi
             sleep 2
           done
-          cat emulator.log
+          if [ "$booted" != 1 ]; then
+            cat emulator.log
+            exit 1
+          fi
+          # boot_completed precedes some first-boot UI work. Require a stable,
+          # focused launcher and reject an OS ANR before starting our tests.
+          healthy=0
+          deadline=$((SECONDS + 90))
+          while ((SECONDS < deadline)); do
+            timeout 10 adb shell dumpsys window displays > emulator-startup-window.txt
+            if grep -q 'Application Not Responding' emulator-startup-window.txt; then
+              cat emulator-startup-window.txt
+              exit 1
+            fi
+            if grep -Eqi 'mCurrentFocus=.*launcher' emulator-startup-window.txt; then
+              healthy=$((healthy + 1))
+              if ((healthy == 3)); then
+                timeout 15 adb logcat -d -s ActivityManager:E > emulator-startup.log
+                if grep -q 'ANR in ' emulator-startup.log; then
+                  cat emulator-startup.log
+                  exit 1
+                fi
+                adb shell wm size
+                adb shell wm density
+                exit 0
+              fi
+            else
+              healthy=0
+            fi
+            sleep 2
+          done
+          cat emulator-startup-window.txt
           exit 1
       - name: App input, storage and secondary-display instrumentation
         working-directory: android/app
@@ -170,5 +214,8 @@ jobs:
             android/app/build/reports/
             android/app/build/outputs/androidTest-results/
             emulator.log
+            emulator-image.properties
+            emulator-startup.log
+            emulator-startup-window.txt
             logcat.txt
             build/gpu-tests/result.log

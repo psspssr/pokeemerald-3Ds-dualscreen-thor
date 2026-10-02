@@ -1,4 +1,5 @@
 #include "gpu_internal.h"
+#include "pacing.h"
 #include <android/native_window.h>
 #include <time.h>
 #include <errno.h>
@@ -29,8 +30,9 @@ static void lifecycle(CtrAptEvent event,void *user)
         gpuC2DFlush();
         for(int i=0;i<CTR_HOST_MAX_WINDOWS;i++) destroyWindow(i);
     }
-    /* A resumed game starts a fresh pacing interval, with its FBOs retained. */
-    nextVblank=0;
+    /* Anchor a resumed game's first frame at resume, not after its drawing.
+     * Its FBOs remain intact; a long pause cannot leave stale deadlines. */
+    nextVblank=event==CTR_APT_RESUME?gpuNow():0;
 }
 
 double gpuNow(void)
@@ -38,8 +40,8 @@ double gpuNow(void)
 void gpuPace(void)
 {
     double now=gpuNow();
-    if(!nextVblank || now>nextVblank+framePeriod*4) nextVblank=now;
-    nextVblank+=framePeriod;
+    nextVblank=gpuPacingDeadline(now,nextVblank,framePeriod);
+    if(nextVblank<=now) return;
     struct timespec deadline={(time_t)nextVblank,(long)((nextVblank-(time_t)nextVblank)*1e9)};
     while(clock_nanosleep(CLOCK_MONOTONIC,TIMER_ABSTIME,&deadline,NULL)==EINTR) {}
 }
@@ -90,6 +92,7 @@ bool gpuInit(void)
     listenerRegistered=CtrApt_AddListener(lifecycle,NULL);
     if(!listenerRegistered) goto fail;
     initialized=true;
+    nextVblank=gpuNow();
     __android_log_print(ANDROID_LOG_INFO,"EmeraldGPU","GLES %s, %s",glGetString(GL_VERSION),glGetString(GL_RENDERER));
     return true;
 fail:
@@ -135,7 +138,7 @@ void gpuShutdown(void)
         eglTerminate(display);
     }
     memset(screens,0,sizeof(screens)); memset(windows,0,sizeof(windows));
-    display=EGL_NO_DISPLAY; pbuffer=EGL_NO_SURFACE; context=EGL_NO_CONTEXT; initialized=false;
+    display=EGL_NO_DISPLAY; pbuffer=EGL_NO_SURFACE; context=EGL_NO_CONTEXT; initialized=false; nextVblank=0;
 }
 
 void gpuFlushScreens(void)
@@ -242,4 +245,5 @@ Result GSPGPU_InvalidateDataCache(const void *address,u32 size) { (void)address;
 #ifdef CTR_GPU_TEST
 /* Present-day GPU readback for the isolated conformance binary only. */
 GLuint gpuTestScreenFramebuffer(gfxScreen_t screen) { return screens[screen].fbo; }
+double gpuTestPacingDeadline(void) { return nextVblank; }
 #endif

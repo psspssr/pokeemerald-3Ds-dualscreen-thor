@@ -8,6 +8,7 @@
 
 static CtrHostState state=CTR_HOST_RUNNING;
 extern GLuint gpuTestScreenFramebuffer(gfxScreen_t screen);
+extern double gpuTestPacingDeadline(void);
 static CtrAptListener gpuListener;
 bool CtrApt_AddListener(CtrAptListener listener,void *user) { (void)user;gpuListener=listener;return true; }
 void CtrApt_RemoveListener(CtrAptListener listener,void *user) { (void)listener;(void)user;gpuListener=NULL; }
@@ -177,7 +178,9 @@ int main(int argc,char **argv)
     C3D_DepthTest(false,GPU_ALWAYS,GPU_WRITE_RED|GPU_WRITE_GREEN|GPU_WRITE_BLUE);
     C2D_DrawRectSolid(0,0,0,16,16,C2D_Color32(255,0,255,200));
     pixel(2,13,255,0,255,255); pixel(2,2,255,0,255,0);
-    assert(gpuListener); gpuListener(CTR_APT_SUSPEND,NULL); gpuListener(CTR_APT_RESUME,NULL);
+    assert(gpuListener); gpuListener(CTR_APT_SUSPEND,NULL); assert(gpuTestPacingDeadline()==0);
+    double resumedBefore=gpuNow(); gpuListener(CTR_APT_RESUME,NULL);
+    assert(gpuTestPacingDeadline()>=resumedBefore && gpuTestPacingDeadline()<=gpuNow());
     pixel(2,2,255,0,255,0);
 
     /* The bottom menu copies GPU columns over a CPU canvas, leaving the

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host regressions for byte-exact PICA texture layout and shader translation."""
+"""Host regressions for PICA textures, shader translation and frame deadlines."""
 import ctypes
 import importlib.util
 from pathlib import Path
@@ -14,17 +14,20 @@ picasso = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(picasso)
 
 
-class TextureTests(unittest.TestCase):
+class CpuBackendTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
         library = Path(cls.temp.name) / "decode.so"
         subprocess.run(["cc", "-shared", "-fPIC", "-Wall", "-Wextra", "-Werror",
                         "-I" + str(ROOT / "android/gpu/include"),
-                        str(ROOT / "android/gpu/src/texture_decode.c"), "-o", str(library)], check=True)
+                        str(ROOT / "android/gpu/src/texture_decode.c"),
+                        str(ROOT / "android/gpu/src/pacing.c"), "-o", str(library)], check=True)
         cls.lib = ctypes.CDLL(str(library))
         cls.lib.gpuDecodeTexture.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_int]
         cls.lib.gpuDecodeTexture.restype = ctypes.c_bool
+        cls.lib.gpuPacingDeadline.argtypes = [ctypes.c_double, ctypes.c_double, ctypes.c_double]
+        cls.lib.gpuPacingDeadline.restype = ctypes.c_double
 
     @classmethod
     def tearDownClass(cls):
@@ -76,6 +79,44 @@ class TextureTests(unittest.TestCase):
         data = ctypes.create_string_buffer(256)
         self.assertFalse(self.lib.gpuDecodeTexture(data, data, 8, 8, 12))
         self.assertFalse(self.lib.gpuDecodeTexture(data, data, 7, 8, 0))
+
+    def test_under_budget_frames_keep_59_83_hz_cadence(self):
+        period = 1.0 / 59.83
+        start = previous = 1000.0
+        for frame in range(1, 601):
+            now = previous + 0.004 + (frame % 7) * 0.0005
+            deadline = self.lib.gpuPacingDeadline(now, previous, period)
+            self.assertGreater(deadline, now)
+            self.assertAlmostEqual(deadline, start + frame * period, places=9)
+            previous = deadline
+
+    def test_over_budget_frames_never_add_a_sleep(self):
+        period = 1.0 / 59.83
+        for work_periods in (1.01, 2, 4, 5, 20):
+            with self.subTest(work_periods=work_periods):
+                previous = 1000.0
+                now = previous + work_periods * period
+                self.assertLessEqual(self.lib.gpuPacingDeadline(now, previous, period), now)
+
+    def test_sustained_slow_presentation_has_no_periodic_extra_wait(self):
+        period = 1.0 / 59.83
+        now = previous = 1000.0
+        for _ in range(600):
+            now += 0.04
+            previous = self.lib.gpuPacingDeadline(now, previous, period)
+            self.assertEqual(max(0, previous - now), 0)
+        self.assertAlmostEqual(now, 1024.0, places=8)
+
+    def test_resume_starts_new_phase_with_remaining_frame_budget(self):
+        period = 1.0 / 59.83
+        resume = 10000.0
+        # The lifecycle callback anchors previous to resume. Rendering for6ms
+        # consumes that budget; pacing waits the remainder, not a fresh period.
+        deadline = self.lib.gpuPacingDeadline(resume + 0.006, resume, period)
+        self.assertAlmostEqual(deadline, resume + period)
+        self.assertAlmostEqual(deadline - resume - 0.006, period - 0.006)
+        # Work that already exceeds the resumed frame budget doesn't sleep.
+        self.assertLessEqual(self.lib.gpuPacingDeadline(resume + 0.080, resume, period), resume + 0.080)
 
 
 class ShaderTests(unittest.TestCase):
