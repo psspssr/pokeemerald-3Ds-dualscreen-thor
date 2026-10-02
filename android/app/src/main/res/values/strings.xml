@@ -14,6 +14,8 @@
     <string name="settings_button">Settings</string>
     <string name="quit_button">Quit</string>
     <string name="native_missing">The game could not start. Install a complete build for a device with 32-bit ARM support.</string>
+    <string name="native_failed">The game stopped with error %1$d. Check the data pack in Settings, then restart the game.</string>
+    <string name="file_working">Copying file…</string>
 
     <!-- Menu -->
     <string name="menu_title">Paused</string>
@@ -51,7 +53,7 @@
     <string name="pref_dual_controls_summary">Touching outside the picture shows the controls</string>
     <string name="pref_import_pak">Import data pack (emerald3ds.pak)…</string>
     <string name="pref_import_save">Import save…</string>
-    <string name="pref_import_save_summary">A 3DS emerald3ds.sav works as is. Replaces the current save (a backup is kept).</string>
+    <string name="pref_import_save_summary">Import an Emerald GBA, emulator or 3DS .sav. Raw saves and mGBA RTC trailers are supported; emulator clock overrides are not transferred. A backup is kept. Save states are not supported.</string>
     <string name="pref_export_save">Export save…</string>
     <string name="pref_data_location">Data folder</string>
     <string name="pref_about">About</string>
@@ -64,7 +66,7 @@
     <string name="ok">OK</string>
     <string name="import_done">Imported.</string>
     <string name="import_bad_pak">That file is not an emerald3ds.pak data pack.</string>
-    <string name="import_bad_save">That file is not a save (expected at most 128 KiB).</string>
+    <string name="import_bad_save">Expected a raw Emerald .sav of 128 KiB, a 64 KiB recovery save, or an mGBA save with a valid RTC trailer. Emulator save states are not supported.</string>
     <string name="import_failed">Import failed: %1$s</string>
     <string name="export_done">Save exported.</string>
     <string name="export_none">There is no save yet.</string>
@@ -75,6 +77,6 @@
 An Android port of <b>Pokémon Emerald 3Ds Dual Screen</b> by ZallaxDev (MIT licence), github.com/ZallaxDev/pokeemerald-3Ds-dualscreen, which compiles unchanged on top of a re-implementation of the 3DS libraries.<br><br>
 Built on the <b>pret/pokeemerald</b> decompilation (github.com/pret/pokeemerald).<br><br>
 Contains code from devkitPro <b>libctru</b>, <b>citro3d</b> and <b>citro2d</b> (zlib licence).<br><br>
-No game content is included: the game data is generated from your own cartridge dump.<br><br>
+Engine-only builds require a data pack generated for the same Android build using your own cartridge dump. Development builds may embed game data.<br><br>
 This is an unofficial fan project, not affiliated with or endorsed by Nintendo, Game Freak, Creatures or The Pokémon Company. Pokémon and Pokémon Emerald are trademarks of their respective owners.]]></string>
 </resources>

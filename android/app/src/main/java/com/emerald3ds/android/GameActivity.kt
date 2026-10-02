@@ -4,6 +4,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
+import android.hardware.input.InputManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -27,32 +28,36 @@ import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import java.io.IOException
 import java.lang.ref.WeakReference
 
 /**
- * The only game activity. It is never recreated (configChanges), extracts the
+ * The only game activity. It retains file work across recreation, extracts the
  * RomFS when the APK changed, asks for the data pack if missing, then starts
  * origin's main() once per process and feeds it surfaces, layout, input and
  * pause state.
  */
 class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverlayView.Listener,
-    PhysicalInput.Callbacks, DisplayManager.DisplayListener, GamePresentation.Host {
+    PhysicalInput.Callbacks, DisplayManager.DisplayListener, GamePresentation.Host, InputManager.InputDeviceListener {
 
     private enum class Phase { STARTING, EXTRACTING, NEED_PAK, ERROR, RUNNING }
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var files: GameFiles
+    internal lateinit var fileModel: GameFilesModel
+        private set
     private lateinit var settings: AppSettings
     private lateinit var overlay: ControlsOverlayView
     private lateinit var physical: PhysicalInput
     private lateinit var displayManager: DisplayManager
+    private lateinit var inputManager: InputManager
 
     private lateinit var root: FrameLayout
     private lateinit var statusPanel: View
@@ -72,6 +77,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     private var dualActive = false
     private var resumed = false
     private var menuShown = false
+    private var menuDialog: AlertDialog? = null
     private var exiting = false
 
     private val importPak = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -85,8 +91,8 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         super.onCreate(savedInstanceState)
         current = WeakReference(this)
         NativeBridge.appContext = applicationContext
-        files = GameFiles(this)
-        files.ensureDirs()
+        fileModel = ViewModelProvider(this)[GameFilesModel::class.java]
+        files = fileModel.files
         settings = AppSettings.load(this)
         setContentView(R.layout.activity_game)
 
@@ -108,6 +114,8 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             overlay, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         )
         physical = PhysicalInput(this)
+        inputManager = getSystemService(InputManager::class.java)
+        inputManager.registerInputDeviceListener(this, handler)
 
         root.setOnApplyWindowInsetsListener { _, insets ->
             val cutout = insets.displayCutout
@@ -121,12 +129,22 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
 
         displayManager = getSystemService(DisplayManager::class.java)
         displayManager.registerDisplayListener(this, handler)
+        fileModel.state.observe(this, ::onFileState)
+        GameFilesModel.pauseHolds.observe(this) {
+            updateInputEnabled()
+            if (!acceptsGameInput()) physical.clear()
+            if (!exiting) NativeBridge.setState(
+                if (acceptsGameInput()) NativeBridge.STATE_RUNNING else NativeBridge.STATE_PAUSED
+            )
+        }
         enterImmersive()
         proceed()
     }
 
     override fun onDestroy() {
         displayManager.unregisterDisplayListener(this)
+        inputManager.unregisterInputDeviceListener(this)
+        menuDialog?.dismiss()
         dismissPresentation()
         if (!exiting) handler.removeCallbacksAndMessages(null)
         if (current?.get() === this) current = null
@@ -154,7 +172,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         updatePresentation()
         relayout()
         if (phase == Phase.NEED_PAK) proceed()
-        if (!menuShown) NativeBridge.setState(NativeBridge.STATE_RUNNING)
+        if (acceptsGameInput()) NativeBridge.setState(NativeBridge.STATE_RUNNING)
         updateInputEnabled()
     }
 
@@ -192,18 +210,10 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
 
     private fun proceed() {
         when {
+            NativeBridge.gameExitStatus?.let { it != 0 } == true -> showNativeFailure(NativeBridge.gameExitStatus!!)
             NativeBridge.isStarted() -> showGame()
-            files.needsExtraction() -> extract()
             !NativeBridge.loaded -> showError(getString(R.string.native_missing))
-            else -> {
-                try {
-                    files.applyPendingImports()
-                    if (BuildConfig.HOST_HARNESS || files.pakFile.isFile || files.hasEmbeddedGameData()) startGame()
-                    else showNeedPak()
-                } catch (e: IOException) {
-                    showError(getString(R.string.import_failed, e.message))
-                }
-            }
+            fileModel.state.value == null -> fileModel.prepare()
         }
     }
 
@@ -216,29 +226,35 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         findViewById<View>(R.id.status_buttons).visibility = if (buttons) View.VISIBLE else View.GONE
     }
 
-    private fun extract() {
-        phase = Phase.EXTRACTING
-        showStatus(getString(R.string.extracting), null, progress = true, buttons = false)
-        statusProgress.isIndeterminate = true
-        Thread({
-            try {
-                files.extractRomfs { done, total ->
-                    runOnUiThread {
-                        statusProgress.isIndeterminate = false
-                        statusProgress.max = total
-                        statusProgress.progress = done
-                    }
-                }
-                runOnUiThread { proceed() }
-            } catch (e: IOException) {
-                Log.e(TAG, "RomFS extraction failed", e)
-                runOnUiThread { showError(getString(R.string.extract_failed, e.message ?: e.toString())) }
+    private fun onFileState(state: GameFilesModel.State?) {
+        if (state == null || exiting) return
+        if (state.busy) {
+            phase = Phase.EXTRACTING
+            updateInputEnabled()
+            showStatus(getString(if (state.action == GameFilesModel.Action.PREPARE)
+                R.string.extracting else R.string.file_working), null, progress = true, buttons = false)
+            statusProgress.isIndeterminate = state.total == 0
+            if (state.total > 0) {
+                statusProgress.max = state.total
+                statusProgress.progress = state.done
             }
-        }, "romfs-extract").start()
+            return
+        }
+        fileModel.consumeResult()
+        if (state.error != null) {
+            showError(getString(if (state.action == GameFilesModel.Action.PREPARE)
+                R.string.extract_failed else R.string.import_failed, state.error))
+        } else if (state.action == GameFilesModel.Action.PREPARE) {
+            if (state.ready) startGame() else showNeedPak()
+        } else {
+            Toast.makeText(this, R.string.import_done, Toast.LENGTH_SHORT).show()
+            proceed()
+        }
     }
 
     private fun showError(message: String) {
         phase = Phase.ERROR
+        updateInputEnabled()
         showStatus(message, null, progress = false, buttons = true)
         buttonPrimary.text = getString(R.string.retry)
         buttonPrimary.setOnClickListener { proceed() }
@@ -247,6 +263,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
 
     private fun showNeedPak() {
         phase = Phase.NEED_PAK
+        updateInputEnabled()
         @Suppress("DEPRECATION")
         val body = Html.fromHtml(getString(R.string.pak_missing_body, files.pakFile.absolutePath))
         showStatus(getString(R.string.pak_missing_title), body, progress = false, buttons = true)
@@ -257,19 +274,13 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     private fun importFromStatus(uri: Uri, kind: GameFiles.Kind) {
-        try {
-            files.stageImport(uri, kind)
-            if (!NativeBridge.isStarted()) files.applyPendingImports()
-            Toast.makeText(this, R.string.import_done, Toast.LENGTH_SHORT).show()
-        } catch (e: IOException) {
-            Toast.makeText(this, getString(R.string.import_failed, e.message), Toast.LENGTH_LONG).show()
-        }
-        if (phase == Phase.NEED_PAK) proceed()
+        fileModel.importFile(uri, kind)
     }
 
     private fun startGame() {
         NativeBridge.init(files.romfsDir.absolutePath, files.sdmcDir.absolutePath)
-        NativeBridge.setState(if (resumed && !menuShown) NativeBridge.STATE_RUNNING else NativeBridge.STATE_PAUSED)
+        NativeBridge.setState(if (resumed && !menuShown && !GameFilesModel.exportPending)
+            NativeBridge.STATE_RUNNING else NativeBridge.STATE_PAUSED)
         if (!NativeBridge.start()) {
             showError("The game thread could not be started.")
             return
@@ -281,13 +292,16 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         phase = Phase.RUNNING
         statusPanel.visibility = View.GONE
         relayout()
+        NativeBridge.setState(if (acceptsGameInput()) NativeBridge.STATE_RUNNING else NativeBridge.STATE_PAUSED)
     }
 
     private fun updateInputEnabled() {
-        val enabled = resumed && phase == Phase.RUNNING && !menuShown && !exiting
+        val enabled = acceptsGameInput()
         overlay.inputEnabled = enabled
         presentation?.touchView?.inputEnabled = enabled
     }
+
+    private fun acceptsGameInput() = resumed && phase == Phase.RUNNING && !menuShown && !exiting && !GameFilesModel.exportPending
 
     // ── Surfaces and layout ──────────────────────────────────────────────
 
@@ -313,12 +327,14 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         val h = if (surfaceHeight > 0) surfaceHeight else root.height
         if (w <= 0 || h <= 0) return
         val p = presentation
+        p?.setKeepScreenOn(settings.keepScreenOn)
         val dual = p != null && p.surfaceWidth > 0 && p.surfaceHeight > 0
         if (dual != dualActive) {
             dualActive = dual
             /* In dual-display mode the built-in controls are expected; touch brings ours back. */
-            overlay.setAutoHidden(dual)
+            overlay.setAutoHidden(dual && settings.controlsVisibility != ControlsVisibility.ALWAYS)
         }
+        if (settings.controlsVisibility == ControlsVisibility.ALWAYS) overlay.setAutoHidden(false)
         val allowed = when {
             settings.controlsVisibility == ControlsVisibility.NEVER -> false
             dual -> settings.dualControls
@@ -382,6 +398,9 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
                         presentation = null
                         p.touchView.releaseAll()
                         relayout()
+                        // Android dismisses a Presentation if its display's
+                        // metrics change. Recreate it for the new metrics.
+                        handler.post { if (resumed && !exiting) updatePresentation() }
                     }
                 }
                 presentation = p
@@ -412,20 +431,25 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     // ── Input ────────────────────────────────────────────────────────────
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (phase == Phase.RUNNING && !menuShown && physical.onKey(event)) return true
+        if (menuShown && menuDialog?.dispatchKeyEvent(event) == true) return true
+        if (acceptsGameInput() && physical.onKey(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
-        if (phase == Phase.RUNNING && !menuShown && physical.onMotion(ev)) return true
+        if (acceptsGameInput() && physical.onMotion(ev)) return true
         return super.dispatchGenericMotionEvent(ev)
     }
 
     override fun onPhysicalInput() {
-        if (settings.controlsVisibility == ControlsVisibility.AUTO || dualActive) overlay.setAutoHidden(true)
+        if (settings.controlsVisibility == ControlsVisibility.AUTO) overlay.setAutoHidden(true)
     }
 
     override fun onMenuKey() = onBackKey()
+
+    override fun onInputDeviceAdded(deviceId: Int) {}
+    override fun onInputDeviceChanged(deviceId: Int) = physical.removeDevice(deviceId)
+    override fun onInputDeviceRemoved(deviceId: Int) = physical.removeDevice(deviceId)
 
     // ── Menu, settings, exit ─────────────────────────────────────────────
 
@@ -442,7 +466,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         physical.clear()
         InputHub.clear()
         val items = arrayOf(getString(R.string.menu_resume), getString(R.string.menu_settings), getString(R.string.menu_quit))
-        MaterialAlertDialogBuilder(this)
+        menuDialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.menu_title)
             .setItems(items) { _, which ->
                 when (which) {
@@ -451,16 +475,26 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
                 }
             }
             .setOnDismissListener {
+                menuDialog = null
                 menuShown = false
                 updateInputEnabled()
-                if (resumed && !exiting) NativeBridge.setState(NativeBridge.STATE_RUNNING)
+                if (acceptsGameInput()) NativeBridge.setState(NativeBridge.STATE_RUNNING)
                 enterImmersive()
             }
-            .show()
+            .create()
+        menuDialog?.show()
     }
 
     private fun openSettings() {
         startActivity(Intent(this, SettingsActivity::class.java))
+    }
+
+    private fun showNativeFailure(status: Int) {
+        NativeBridge.setState(NativeBridge.STATE_PAUSED)
+        physical.clear()
+        showError(getString(R.string.native_failed, status))
+        buttonPrimary.text = getString(R.string.restart_now)
+        buttonPrimary.setOnClickListener { RestartActivity.restart(this) }
     }
 
     private fun quitGame() {
@@ -494,8 +528,9 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         fun onNativeGameExit(status: Int) {
             val activity = current?.get()
             Log.i(TAG, "native game exit $status, activity=${activity != null}")
-            if (activity != null && !activity.isDestroyed) activity.exitProcess()
-            else Process.killProcess(Process.myPid())
+            if (activity != null && !activity.isDestroyed) {
+                if (status == 0) activity.exitProcess() else activity.showNativeFailure(status)
+            } else if (status == 0) Process.killProcess(Process.myPid())
         }
     }
 }

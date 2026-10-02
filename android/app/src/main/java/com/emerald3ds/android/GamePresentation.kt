@@ -42,7 +42,6 @@ class GamePresentation(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
         val surface = SurfaceView(context)
         surfaceView = surface
@@ -62,6 +61,11 @@ class GamePresentation(
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        if (enabled) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         surfaceWidth = width

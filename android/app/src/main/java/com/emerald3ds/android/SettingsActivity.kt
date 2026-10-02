@@ -2,16 +2,18 @@ package com.emerald3ds.android
 
 import android.os.Bundle
 import android.text.Html
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import java.io.IOException
 
 class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,6 +36,9 @@ class SettingsActivity : AppCompatActivity() {
 
     class SettingsFragment : PreferenceFragmentCompat() {
         private lateinit var files: GameFiles
+        internal lateinit var fileModel: GameFilesModel
+            private set
+        private var dialog: AlertDialog? = null
 
         private val importPak = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) import(uri, GameFiles.Kind.PAK)
@@ -45,17 +50,13 @@ class SettingsActivity : AppCompatActivity() {
             ActivityResultContracts.CreateDocument("application/octet-stream")
         ) { uri ->
             if (uri == null) return@registerForActivityResult
-            try {
-                files.exportSave(uri)
-                toast(getString(R.string.export_done))
-            } catch (e: IOException) {
-                toast(getString(R.string.export_failed, e.message))
-            }
+            fileModel.exportSave(uri)
         }
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.preferences, rootKey)
-            files = GameFiles(requireContext())
+            fileModel = ViewModelProvider(this)[GameFilesModel::class.java]
+            files = fileModel.files
             click("import_pak") { importPak.launch(arrayOf("*/*")) }
             click("import_save") { importSave.launch(arrayOf("*/*")) }
             click("export_save") {
@@ -65,6 +66,40 @@ class SettingsActivity : AppCompatActivity() {
             click("about") { showAbout() }
             findPreference<Preference>("data_location")?.summary = files.dataDir.absolutePath
             findPreference<Preference>("about")?.summary = getString(R.string.pref_version, BuildConfig.VERSION_NAME)
+        }
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            fileModel.state.observe(viewLifecycleOwner) { state ->
+                val busy = state?.busy == true
+                for (key in listOf("import_pak", "import_save", "export_save"))
+                    findPreference<Preference>(key)?.isEnabled = !busy
+                findPreference<Preference>("data_location")?.summary =
+                    if (busy) getString(R.string.file_working) else files.dataDir.absolutePath
+                if (state == null || busy) return@observe
+                fileModel.consumeResult()
+                if (state.error != null) {
+                    toast(getString(if (state.action == GameFilesModel.Action.EXPORT_SAVE)
+                        R.string.export_failed else R.string.import_failed, state.error))
+                } else if (state.action == GameFilesModel.Action.EXPORT_SAVE) {
+                    toast(getString(R.string.export_done))
+                } else if (!NativeBridge.isStarted()) {
+                    toast(getString(R.string.import_done))
+                } else {
+                    dialog = MaterialAlertDialogBuilder(requireContext())
+                        .setTitle(R.string.import_restart_title)
+                        .setMessage(R.string.import_restart_body)
+                        .setPositiveButton(R.string.restart_now) { _, _ -> RestartActivity.restart(requireActivity()) }
+                        .setNegativeButton(R.string.cancel, null)
+                        .show()
+                }
+            }
+        }
+
+        override fun onDestroyView() {
+            dialog?.dismiss()
+            dialog = null
+            super.onDestroyView()
         }
 
         private fun click(key: String, action: () -> Unit) {
@@ -82,29 +117,13 @@ class SettingsActivity : AppCompatActivity() {
          * process before the game starts.
          */
         private fun import(uri: android.net.Uri, kind: GameFiles.Kind) {
-            try {
-                files.stageImport(uri, kind)
-                if (!NativeBridge.isStarted()) files.applyPendingImports()
-            } catch (e: IOException) {
-                toast(getString(R.string.import_failed, e.message))
-                return
-            }
-            if (!NativeBridge.isStarted()) {
-                toast(getString(R.string.import_done))
-                return
-            }
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.import_restart_title)
-                .setMessage(R.string.import_restart_body)
-                .setPositiveButton(R.string.restart_now) { _, _ -> RestartActivity.restart(requireActivity()) }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
+            fileModel.importFile(uri, kind)
         }
 
         private fun showAbout() {
             @Suppress("DEPRECATION")
             val body = Html.fromHtml(getString(R.string.about_body, BuildConfig.VERSION_NAME))
-            MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.about_title).setMessage(body)
+            dialog = MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.about_title).setMessage(body)
                 .setPositiveButton(R.string.ok, null).show()
         }
     }

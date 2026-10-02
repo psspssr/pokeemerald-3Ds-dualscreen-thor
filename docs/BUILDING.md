@@ -48,7 +48,7 @@ of scratch space. Repeating the command reuses build outputs.
 
 | Output | Location |
 |---|---|
-| Development APK, embedded game data | `android/app/build/outputs/apk/debug/app-debug.apk` |
+| Development APK, embedded game data | `android/app/build/outputs/apk/debug/emerald3ds-android-debug.apk` |
 | Native libraries and packaged assets | `build/android-out/` |
 | Generated source/build tree | `build/upstream/` |
 | Unstripped native executable and link maps | `build/upstream/3ds_port/emerald3ds.elf`, `build/upstream/3ds_port/build/*.map` |
@@ -68,7 +68,7 @@ python3 tools/bootstrap.py --make --apk --release --out build/android-release-ou
 ```
 
 This packages engine assets without the game data. The result is
-`android/app/build/outputs/apk/release/app-release-unsigned.apk`; apply your own
+`android/app/build/outputs/apk/release/emerald3ds-android-release-unsigned.apk`; apply your own
 release signing configuration before installing or distributing it.
 
 A release needs `emerald3ds.pak` generated for the **same Android build**.
@@ -91,9 +91,36 @@ the upstream release provenance checks. The upstream builder documentation
 describes that workflow in [origin/builder/README.md](../origin/builder/README.md).
 An engine-only APK by itself does not provide that recipe.
 
-Saves remain the original 128 KiB flash format. Use **Settings → Export save**
-before switching builds. Imported data and saves are staged for the next
-game launch, so they do not replace files while the game is using them.
+Saves use Emerald's original raw 128 KiB flash format, without an Android
+header. **Settings → Import save** accepts a GBA/emulator/3DS `.sav` of 128 KiB
+or a 64 KiB first-slot recovery image; the game fills a missing second half
+with erased flash bytes. Emulator save states are unsupported; export a raw
+battery/flash save from the emulator first.
+**Export save** writes the raw file; choose the filename your emulator expects
+(commonly the ROM basename plus `.sav`). Export pauses the native game through
+completion so an in-progress save write cannot be copied halfway through.
+
+The port keeps its voxel/camera options separately at
+`sdmc/3ds/emerald3ds/settings.txt`; Android screen and control preferences are
+app settings. Neither is inserted into the GBA `.sav`. Transfer the raw save
+alone to a GBA emulator, and keep the settings file separately if retaining
+port options. Importing a replacement keeps the previous raw save as
+`emerald3ds.sav.bak`. Imported files apply at the next game launch.
+
+mGBA 0.10.2 may append a 16-byte RTC record, producing a 131,088-byte file.
+The importer checks that exact size, BCD/calendar fields, RTC control bits and
+Unix timestamp before removing the trailer. It also recognizes mGBA's initial
+zero-time/control-0x40 record. This format has no identifying signature, so
+these are structural checks rather than proof of which program wrote it.
+The format is defined by mGBA's
+[RTC savedata code](https://github.com/mgba-emu/mgba/blob/0.10.2/src/gba/savedata.c#L591)
+and [RTC initialization](https://github.com/mgba-emu/mgba/blob/0.10.2/src/gba/cart/gpio.c#L85).
+
+The original import file is untouched. A best-effort copy of the last imported
+RTC trailer is retained as `last-imported-mgba-rtc.bin` for reference; it is
+never loaded or appended to later exports. Android uses the device clock, so
+an emulator's clock override is **not transferred**. Exports remain canonical
+raw flash saves for GBA hardware and other emulators.
 
 ## Install and run the real game
 
@@ -101,7 +128,7 @@ With USB debugging enabled and the device connected:
 
 ```sh
 adb shell getprop ro.product.cpu.abilist
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb install -r android/app/build/outputs/apk/debug/emerald3ds-android-debug.apk
 adb shell am start -n com.emerald3ds.android/.GameActivity
 ```
 

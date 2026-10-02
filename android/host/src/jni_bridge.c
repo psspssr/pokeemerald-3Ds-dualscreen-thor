@@ -149,6 +149,14 @@ Java_com_emerald3ds_android_NativeBridge_nativeIsStarted(JNIEnv *env, jclass cls
     return CtrHost_GameStarted() ? JNI_TRUE : JNI_FALSE;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeAwaitPaused(JNIEnv *env, jclass cls, jint timeoutMs)
+{
+    (void)env;
+    (void)cls;
+    return CtrHost_WaitUntilPaused(Clamp(timeoutMs, 0, 60000)) ? JNI_TRUE : JNI_FALSE;
+}
+
 static void SetSurface(JNIEnv *env, int index, jobject surface)
 {
     ANativeWindow *window;

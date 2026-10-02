@@ -82,6 +82,10 @@ void CtrHost_GetLayout(CtrHostLayout *out);
 CtrHostState CtrHost_GetState(void);
 /* Blocks while paused. Returns the state it leaves in (RUNNING or EXITING). */
 CtrHostState CtrHost_WaitWhilePaused(void);
+/* For storage workers: waits until the game has reached its pause point,
+ * after its current frame and synchronous save writes. False on timeout or
+ * while running/exiting; true before the game has been started. */
+bool CtrHost_WaitUntilPaused(int timeoutMs);
 /*
  * The current window with a reference held (ANativeWindow_acquire), or NULL.
  * *generation changes whenever the window is replaced or removed, so the GPU

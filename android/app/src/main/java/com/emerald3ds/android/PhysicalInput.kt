@@ -20,8 +20,11 @@ class PhysicalInput(private val callbacks: Callbacks) {
 
     var labelMapping = false
 
-    private var gamepadKeys = 0
-    private var keyboardKeys = 0
+    // Track physical keys individually: left/right Shift and multiple
+    // controllers may hold the same logical 3DS button at the same time.
+    private val gamepadKeys = mutableMapOf<Pair<Int, Int>, Int>()
+    private val keyboardKeys = mutableMapOf<Pair<Int, Int>, Int>()
+    private var motionDevice: Int? = null
 
     private fun gamepadKey(keyCode: Int): Int = when (keyCode) {
         KeyEvent.KEYCODE_BUTTON_A -> if (labelMapping) CtrKeys.A else CtrKeys.B
@@ -60,6 +63,7 @@ class PhysicalInput(private val callbacks: Callbacks) {
 
     /** Returns true if the event was consumed. */
     fun onKey(event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
         val code = event.keyCode
         val down = event.action == KeyEvent.ACTION_DOWN
         when (code) {
@@ -79,12 +83,13 @@ class PhysicalInput(private val callbacks: Callbacks) {
         val keyboard = if (pad == 0) keyboardKey(code) else 0
         if (pad == 0 && keyboard == 0) return false
         if (down && event.repeatCount > 0) return true
+        val identity = event.deviceId to code
         if (pad != 0) {
-            gamepadKeys = if (down) gamepadKeys or pad else gamepadKeys and pad.inv()
-            InputHub.setKeys(InputHub.SRC_GAMEPAD, gamepadKeys)
+            if (down) gamepadKeys[identity] = pad else gamepadKeys.remove(identity)
+            InputHub.setKeys(InputHub.SRC_GAMEPAD, gamepadKeys.values.fold(0) { a, b -> a or b })
         } else {
-            keyboardKeys = if (down) keyboardKeys or keyboard else keyboardKeys and keyboard.inv()
-            InputHub.setKeys(InputHub.SRC_KEYBOARD, keyboardKeys)
+            if (down) keyboardKeys[identity] = keyboard else keyboardKeys.remove(identity)
+            InputHub.setKeys(InputHub.SRC_KEYBOARD, keyboardKeys.values.fold(0) { a, b -> a or b })
         }
         if (down) callbacks.onPhysicalInput()
         return true
@@ -93,6 +98,7 @@ class PhysicalInput(private val callbacks: Callbacks) {
     fun onMotion(event: MotionEvent): Boolean {
         val joystick = event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_GAMEPAD)
         if (!joystick || event.action != MotionEvent.ACTION_MOVE) return false
+        motionDevice = event.deviceId
         val device = event.device
 
         val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
@@ -131,7 +137,28 @@ class PhysicalInput(private val callbacks: Callbacks) {
     }
 
     fun clear() {
-        gamepadKeys = 0
-        keyboardKeys = 0
+        gamepadKeys.clear()
+        keyboardKeys.clear()
+        motionDevice = null
+        InputHub.setKeys(InputHub.SRC_GAMEPAD, 0)
+        InputHub.setKeys(InputHub.SRC_KEYBOARD, 0)
+        clearMotion()
+    }
+
+    fun removeDevice(deviceId: Int) {
+        gamepadKeys.keys.removeAll { it.first == deviceId }
+        keyboardKeys.keys.removeAll { it.first == deviceId }
+        InputHub.setKeys(InputHub.SRC_GAMEPAD, gamepadKeys.values.fold(0) { a, b -> a or b })
+        InputHub.setKeys(InputHub.SRC_KEYBOARD, keyboardKeys.values.fold(0) { a, b -> a or b })
+        if (motionDevice == deviceId) {
+            motionDevice = null
+            clearMotion()
+        }
+    }
+
+    private fun clearMotion() {
+        InputHub.setKeys(InputHub.SRC_HAT, 0)
+        InputHub.setKeys(InputHub.SRC_AXES, 0)
+        InputHub.setCircle(InputHub.SRC_AXES, 0, 0)
     }
 }

@@ -52,19 +52,21 @@ class GameFilesTest {
     }
 
     @Test fun invalidImportPreservesCurrentAndPreviouslyStagedSave() {
-        files.saveFile.writeBytes(byteArrayOf(1, 2, 3))
-        files.stageImport(input("good.sav", byteArrayOf(4, 5, 6)), GameFiles.Kind.SAVE)
-        for (bad in listOf(ByteArray(0), ByteArray(128 * 1024 + 1))) {
+        val old = ByteArray(128 * 1024) { 1 }
+        val recovery = ByteArray(64 * 1024) { 2 }
+        files.saveFile.writeBytes(old)
+        files.stageImport(input("good.sav", recovery), GameFiles.Kind.SAVE)
+        for (bad in listOf(ByteArray(0), ByteArray(1), ByteArray(128 * 1024 - 1), ByteArray(128 * 1024 + 1))) {
             try {
                 files.stageImport(input("bad.sav", bad), GameFiles.Kind.SAVE)
                 fail("invalid save accepted")
             } catch (_: IOException) { }
-            assertArrayEquals(byteArrayOf(1, 2, 3), files.saveFile.readBytes())
+            assertArrayEquals(old, files.saveFile.readBytes())
             assertTrue(files.hasPendingImports())
             assertFalse(File(files.dataDir, "emerald3ds.sav.tmp").exists())
         }
         files.applyPendingImports()
-        assertArrayEquals(byteArrayOf(4, 5, 6), files.saveFile.readBytes())
+        assertArrayEquals(recovery, files.saveFile.readBytes())
     }
 
     @Test fun dataPackValidationAndFailedApplyDoNotReportSuccess() {
@@ -94,5 +96,56 @@ class GameFilesTest {
         assertFalse(files.hasEmbeddedGameData())
         File(files.romfsDir, "data.embedded").writeText("embedded\n")
         assertTrue(files.hasEmbeddedGameData())
+    }
+
+    private fun mgbaFooter() = "26100205123319406f88bf6a00000000".chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
+    @Test fun mgbaRtcTrailerIsArchivedAndOnlyRawFlashIsImportedAndExported() {
+        val raw = ByteArray(128 * 1024) { (it % 251).toByte() }
+        val footer = mgbaFooter() // Observed mGBA 0.10.2 RTC layout; synthetic flash data.
+        val uri = input("mgba.sav", raw + footer)
+        files.stageImport(uri, GameFiles.Kind.SAVE)
+        assertArrayEquals(raw + footer, File(uri.path!!).readBytes())
+        assertArrayEquals(footer, File(files.dataDir, GameFiles.MGBA_RTC_ARCHIVE).readBytes())
+        files.applyPendingImports()
+        assertArrayEquals(raw, files.saveFile.readBytes())
+        val out = File(dir, "gba-export.sav")
+        files.exportSave(Uri.fromFile(out))
+        assertEquals(128L * 1024, out.length())
+        assertArrayEquals(raw, out.readBytes())
+    }
+
+    @Test fun unrelatedOrMalformedTrailersDoNotReplaceAStagedSave() {
+        val old = ByteArray(128 * 1024) { 1 }
+        val replacement = ByteArray(128 * 1024) { 2 }
+        files.saveFile.writeBytes(old)
+        files.stageImport(input("good.sav", replacement), GameFiles.Kind.SAVE)
+        val malformed = listOf(
+            ByteArray(16), // Arbitrary zero padding is not mGBA's initialized RTC.
+            mgbaFooter().apply { this[1] = 0x1a }, // Invalid BCD month.
+            mgbaFooter().apply { this[1] = 2; this[2] = 0x30 }, // February 30.
+            mgbaFooter().apply { this[3] = 7 }, // Invalid weekday.
+            mgbaFooter().apply { this[4] = 0x24 }, // Invalid 24-hour time.
+            mgbaFooter().apply { this[7] = 1 }, // Unsupported FlashGBX filler/control.
+            mgbaFooter().apply { this[15] = 0x7f }, // Implausible Unix timestamp.
+        )
+        for (footer in malformed) {
+            try {
+                files.stageImport(input("bad.sav", replacement + footer), GameFiles.Kind.SAVE)
+                fail("malformed RTC trailer accepted")
+            } catch (_: IOException) { }
+            assertArrayEquals(old, files.saveFile.readBytes())
+            assertTrue(files.hasPendingImports())
+        }
+        files.applyPendingImports()
+        assertArrayEquals(replacement, files.saveFile.readBytes())
+    }
+
+    @Test fun mgbaInitializedRtcBeforeFirstClockReadIsAccepted() {
+        val raw = ByteArray(128 * 1024) { 0xff.toByte() }
+        val footer = ByteArray(16).apply { this[7] = 0x40 }
+        files.stageImport(input("mgba-new.sav", raw + footer), GameFiles.Kind.SAVE)
+        files.applyPendingImports()
+        assertArrayEquals(raw, files.saveFile.readBytes())
     }
 }

@@ -10,8 +10,8 @@ import android.view.Surface
 
 /**
  * JNI surface of libemerald.so (android/host/src/jni_bridge.c). Every native
- * method is called on the UI thread; onGameExit and vibrate are called by
- * native code from the game thread.
+ * setter is called on the UI thread; awaitPaused is called by the file worker.
+ * onGameExit and vibrate are called by native code from the game thread.
  */
 object NativeBridge {
     private const val TAG = "Emerald"
@@ -36,6 +36,10 @@ object NativeBridge {
     @Volatile
     var appContext: Context? = null
 
+    @Volatile
+    var gameExitStatus: Int? = null
+        private set
+
     @JvmStatic private external fun nativeInit(romfsDir: String, sdmcDir: String)
     @JvmStatic private external fun nativeStart(): Boolean
     @JvmStatic private external fun nativeIsStarted(): Boolean
@@ -46,6 +50,7 @@ object NativeBridge {
     )
     @JvmStatic private external fun nativeSetInput(keys: Int, circleX: Int, circleY: Int, touchX: Int, touchY: Int)
     @JvmStatic private external fun nativeSetState(state: Int)
+    @JvmStatic private external fun nativeAwaitPaused(timeoutMs: Int): Boolean
 
     fun init(romfsDir: String, sdmcDir: String) {
         if (loaded) nativeInit(romfsDir, sdmcDir)
@@ -77,8 +82,12 @@ object NativeBridge {
         if (loaded) nativeSetState(state)
     }
 
+    /** File worker only: wait for the game to finish its current frame/save. */
+    fun awaitPaused(timeoutMs: Int = 2000): Boolean = gameExitStatus != null || !loaded || nativeAwaitPaused(timeoutMs)
+
     @JvmStatic
     fun onGameExit(status: Int) {
+        gameExitStatus = status
         Log.i(TAG, "game exited ($status)")
         Handler(Looper.getMainLooper()).post { GameActivity.onNativeGameExit(status) }
     }

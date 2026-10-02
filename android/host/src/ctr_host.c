@@ -45,6 +45,7 @@ static HostWindow sWindows[CTR_HOST_MAX_WINDOWS];
 static CtrHostLayout sLayout;
 static CtrHostInput sInput;
 static CtrHostState sState = CTR_HOST_RUNNING;
+static bool sPauseAcknowledged;
 
 static void CopyPath(char *dst, const char *src)
 {
@@ -231,6 +232,7 @@ void CtrHost_SetState(CtrHostState state)
     if (sState != CTR_HOST_EXITING && sState != state)
     {
         sState = state;
+        sPauseAcknowledged = false;
         /* Keys held when the activity went away must not stay held. */
         if (state != CTR_HOST_RUNNING)
             memset(&sInput, 0, sizeof(sInput));
@@ -254,11 +256,31 @@ CtrHostState CtrHost_WaitWhilePaused(void)
     CtrHostState state;
 
     pthread_mutex_lock(&sLock);
+    sPauseAcknowledged = sState == CTR_HOST_PAUSED;
+    pthread_cond_broadcast(&sCond);
     while (sState == CTR_HOST_PAUSED)
         pthread_cond_wait(&sCond, &sLock);
+    sPauseAcknowledged = false;
     state = sState;
     pthread_mutex_unlock(&sLock);
     return state;
+}
+
+bool CtrHost_WaitUntilPaused(int timeoutMs)
+{
+    struct timespec deadline;
+    bool ready;
+
+    pthread_mutex_lock(&sLock);
+    DeadlineAfterMs(&deadline, timeoutMs > 0 ? timeoutMs : 0);
+    while (sStarted && sState == CTR_HOST_PAUSED && !sPauseAcknowledged)
+    {
+        if (pthread_cond_timedwait(&sCond, &sLock, &deadline) == ETIMEDOUT)
+            break;
+    }
+    ready = !sStarted || (sState == CTR_HOST_PAUSED && sPauseAcknowledged);
+    pthread_mutex_unlock(&sLock);
+    return ready;
 }
 
 static void *GameThread(void *arg)

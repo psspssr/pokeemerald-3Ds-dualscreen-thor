@@ -4,8 +4,10 @@ import android.graphics.PointF
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.KeyEvent
 import android.widget.FrameLayout
 import androidx.test.core.app.ActivityScenario
+import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -147,6 +149,26 @@ class ControlsInputTest {
             assertEquals(CtrKeys.L, sentKeys())
             inject(t0, MotionEvent.ACTION_UP, listOf(pl))
             assertEquals(0, sentKeys())
+        }
+    }
+
+    @Test
+    fun choosingAlwaysRestoresControlsHiddenByPhysicalInput() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(instrumentation.targetContext)
+        prefs.edit().putString("controls_visibility", "auto").commit()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitForLayout(overlay(scenario))
+            scenario.onActivity {
+                it.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Z))
+                it.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_Z))
+            }
+            instrumentation.waitForIdleSync()
+            assertTrue(overlay(scenario).autoHidden)
+            scenario.moveToState(Lifecycle.State.CREATED)
+            prefs.edit().putString("controls_visibility", "always").commit()
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            waitForLayout(overlay(scenario))
+            assertTrue(overlay(scenario).controlsVisible)
         }
     }
 }

@@ -7,6 +7,11 @@ import android.util.Log
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.time.DateTimeException
+import java.time.LocalDate
 
 /**
  * App storage seen by the game: romfs:/ is the RomFS extracted from the APK
@@ -24,7 +29,7 @@ class GameFiles(private val context: Context) {
     enum class Kind(val fileName: String) { PAK(PAK_NAME), SAVE(SAVE_NAME) }
 
     fun ensureDirs() {
-        dataDir.mkdirs()
+        if (!dataDir.isDirectory && !dataDir.mkdirs()) throw IOException("could not create data folder")
     }
 
     fun hasEmbeddedGameData(): Boolean = File(romfsDir, "data.embedded").isFile
@@ -40,14 +45,15 @@ class GameFiles(private val context: Context) {
 
     /** Copies assets/romfs/ to filesDir/romfs/; the stamp is written last. */
     fun extractRomfs(progress: (done: Int, total: Int) -> Unit) {
-        stampFile.delete()
-        romfsDir.deleteRecursively()
-        romfsDir.mkdirs()
+        if (stampFile.exists() && !stampFile.delete()) throw IOException("could not clear extraction stamp")
+        if (romfsDir.exists() && !romfsDir.deleteRecursively()) throw IOException("could not replace game assets")
+        if (!romfsDir.mkdirs() && !romfsDir.isDirectory) throw IOException("could not create game assets folder")
         val assets = context.assets
         val files = ArrayList<String>()
         fun walk(path: String) {
-            val children = assets.list(path) ?: return
+            val children = assets.list(path) ?: throw IOException("cannot list asset $path")
             if (children.isEmpty()) {
+                if (path == ASSET_ROOT) throw IOException("APK has no game assets")
                 files += path
                 return
             }
@@ -57,21 +63,25 @@ class GameFiles(private val context: Context) {
         val buffer = ByteArray(256 * 1024)
         files.forEachIndexed { index, path ->
             val target = File(romfsDir, path.removePrefix("$ASSET_ROOT/"))
-            target.parentFile?.mkdirs()
-            try {
-                assets.open(path).use { input ->
-                    target.outputStream().use { output ->
-                        while (true) {
-                            val n = input.read(buffer)
-                            if (n < 0) break
-                            output.write(buffer, 0, n)
-                        }
-                    }
-                }
+            val input = try {
+                assets.open(path)
             } catch (e: FileNotFoundException) {
                 /* An empty directory lists like a file. */
-                target.delete()
-                target.mkdirs()
+                if (!target.mkdirs() && !target.isDirectory) throw IOException("could not create $target", e)
+                null
+            }
+            input?.use {
+                val parent = target.parentFile!!
+                if (!parent.isDirectory && !parent.mkdirs()) throw IOException("could not create $parent")
+                // A failure opening/writing the output is not an empty asset
+                // directory. Propagate it and leave the extraction unstamped.
+                target.outputStream().use { output ->
+                    while (true) {
+                        val n = it.read(buffer)
+                        if (n < 0) break
+                        output.write(buffer, 0, n)
+                    }
+                }
             }
             progress(index + 1, files.size)
         }
@@ -123,23 +133,78 @@ class GameFiles(private val context: Context) {
                     val n = stream.read(buffer)
                     if (n < 0) break
                     total += n
-                    if (kind == Kind.SAVE && total > SAVE_MAX_BYTES)
+                    if (kind == Kind.SAVE && total > SAVE_MAX_BYTES + MGBA_RTC_BYTES)
                         throw IOException(context.getString(R.string.import_bad_save))
                     out.write(buffer, 0, n)
                 }
             } }
+            var rtcFooter: ByteArray? = null
             val ok = when (kind) {
                 Kind.PAK -> temp.length() >= 64 && temp.inputStream().use { s ->
                     val magic = ByteArray(8)
                     s.read(magic) == 8 && magic.contentEquals(PAK_MAGIC)
                 }
-                Kind.SAVE -> temp.length() in 1..SAVE_MAX_BYTES
+                Kind.SAVE -> {
+                    rtcFooter = normalizeSave(temp)
+                    true
+                }
             }
             if (!ok) throw IOException(
                     context.getString(if (kind == Kind.PAK) R.string.import_bad_pak else R.string.import_bad_save)
                 )
             // Same-directory rename replaces a previous pending import atomically.
             if (!temp.renameTo(pendingFile(kind))) throw IOException("could not stage import")
+            rtcFooter?.let(::archiveRtcFooter)
+        } finally {
+            temp.delete()
+        }
+    }
+
+    /** mGBA 0.10.2's GBASavedataRTCBuffer has no magic or signature. Accept
+     * its exact shape with plausible RTC fields, never arbitrary extra data.
+     * The app uses the device clock; only the flash image reaches the game.
+     */
+    private fun normalizeSave(temp: File): ByteArray? {
+        if (temp.length() == SAVE_MAX_BYTES || temp.length() == SAVE_MAX_BYTES / 2) return null
+        if (temp.length() != SAVE_MAX_BYTES + MGBA_RTC_BYTES)
+            throw IOException(context.getString(R.string.import_bad_save))
+        return RandomAccessFile(temp, "rw").use { file ->
+            val footer = ByteArray(MGBA_RTC_BYTES)
+            file.seek(SAVE_MAX_BYTES)
+            file.readFully(footer)
+            if (!plausibleMgbaRtc(footer)) throw IOException(context.getString(R.string.import_bad_save))
+            file.setLength(SAVE_MAX_BYTES)
+            footer
+        }
+    }
+
+    private fun plausibleMgbaRtc(footer: ByteArray): Boolean {
+        val control = footer[7].toInt() and 0xff
+        val latch = ByteBuffer.wrap(footer, 8, 8).order(ByteOrder.LITTLE_ENDIAN).long
+        // MinIRQ, 24-hour mode and power-off are the defined control bits.
+        if (control and 0xC8.inv() != 0 || latch !in 0L..253402300799L) return false
+        // GBAHardwareInitRTC initializes exactly this state before a clock read.
+        if (control == 0x40 && latch == 0L && (0..6).all { footer[it] == 0.toByte() }) return true
+        fun bcd(index: Int): Int {
+            val v = footer[index].toInt() and 0xff
+            return if (v and 15 > 9 || v ushr 4 > 9) -1 else (v ushr 4) * 10 + (v and 15)
+        }
+        val year = bcd(0)
+        if (year !in 0..99 || bcd(3) !in 0..6 || bcd(5) !in 0..59 || bcd(6) !in 0..59) return false
+        if (bcd(4) !in 0..(if (control and 0x40 != 0) 23 else 11)) return false
+        return try { LocalDate.of(2000 + year, bcd(1), bcd(2)); true }
+        catch (_: DateTimeException) { false }
+    }
+
+    private fun archiveRtcFooter(footer: ByteArray) {
+        val temp = File(dataDir, MGBA_RTC_ARCHIVE + ".tmp")
+        try {
+            temp.writeBytes(footer)
+            if (!temp.renameTo(File(dataDir, MGBA_RTC_ARCHIVE))) throw IOException("could not archive RTC footer")
+        } catch (e: IOException) {
+            // This optional archive is never read or attached to future exports.
+            // The input document remains intact even if archiving fails.
+            Log.w(TAG, "save imported, but RTC footer archive was not written", e)
         } finally {
             temp.delete()
         }
@@ -157,8 +222,11 @@ class GameFiles(private val context: Context) {
         const val PAK_NAME = "emerald3ds.pak"
         const val SAVE_NAME = "emerald3ds.sav"
         private const val PENDING_SUFFIX = ".import"
-        /* Port_SaveInit accepts any size up to the 128 KiB flash image. */
+        /* Raw Emerald flash saves are 128 KiB; a 64 KiB first-slot image can
+         * be recovered by origin, which fills the missing half with 0xFF. */
         private const val SAVE_MAX_BYTES = 128L * 1024L
+        private const val MGBA_RTC_BYTES = 16
+        internal const val MGBA_RTC_ARCHIVE = "last-imported-mgba-rtc.bin"
         private val PAK_MAGIC = byteArrayOf(0x45, 0x4D, 0x33, 0x44, 0x50, 0x41, 0x4B, 0x00) // "EM3DPAK\0"
     }
 }

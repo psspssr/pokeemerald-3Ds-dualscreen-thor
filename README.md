@@ -38,8 +38,9 @@ Because origin is never edited, its new commits are taken with one command
   keyboards, mapped by position like a Nintendo console by default.
 - **Voxel overworld.** Origin's Citro3D renderer through the OpenGL ES backend.
   Enable it in **OPTION → VOXEL 3D** on the bottom screen.
-- **3DS saves.** The save is the same 128 KiB file the 3DS version writes
-  (`/3ds/emerald3ds/emerald3ds.sav`); import or export it from Settings.
+- **GBA save format.** Import or export raw Emerald `.sav` files from Settings.
+  The game writes the same 128 KiB flash format used by the GBA and 3DS port;
+  port-only options stay in a separate settings file.
 
 ## Requirements
 

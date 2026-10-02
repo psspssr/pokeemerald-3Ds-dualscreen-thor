@@ -14,6 +14,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.SurfaceView
+import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
@@ -90,6 +91,8 @@ class DualDisplayTest {
             val s = HostProbe.snapshot()
             presentation(scenario)?.surfaceWidth == 1240 && s[7] == 1 && s[17] > 0
         }
+        val frame = HostProbe.snapshot()[17]
+        waitUntil("new bottom surface has not drawn") { HostProbe.snapshot()[17] > frame + 1 }
     }
 
     private fun snapshot(surface: SurfaceView, name: String): Bitmap {
@@ -138,7 +141,19 @@ class DualDisplayTest {
             touch(display!!.display.displayId, MotionEvent.ACTION_DOWN, 930f, 540f, t)
             waitUntil("secondary touch did not reach native host") { HostProbe.snapshot()[1] and CtrKeys.TOUCH != 0 }
             assertArrayEquals(intArrayOf(240, 120), HostProbe.snapshot().sliceArray(4..5))
-            snapshot(p.surfaceView, "thor-bottom-touch")
+            // Count from after input arrived; frames drawn while Android was
+            // injecting the event say nothing about its visible response.
+            val touchFrame = HostProbe.snapshot()[17]
+            waitUntil("touch frame was not drawn") { HostProbe.snapshot()[17] > touchFrame + 1 }
+            val deadline = SystemClock.uptimeMillis() + 2000
+            var pixel: Int
+            do {
+                assertTrue("touch released before visual response", HostProbe.snapshot()[1] and CtrKeys.TOUCH != 0)
+                pixel = snapshot(p.surfaceView, "thor-bottom-touch").getPixel(930, 540)
+                if (pixel == Color.rgb(255, 48, 48)) break
+                SystemClock.sleep(30)
+            } while (SystemClock.uptimeMillis() < deadline)
+            assertEquals(Color.rgb(255, 48, 48), pixel)
             touch(display!!.display.displayId, MotionEvent.ACTION_UP, 930f, 540f, t)
             assertEquals(0, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
             val before = HostProbe.snapshot()
@@ -208,6 +223,70 @@ class DualDisplayTest {
             assertEquals(CtrKeys.B, HostProbe.snapshot()[1])
             scenario.moveToState(Lifecycle.State.CREATED)
             assertEquals(0, HostProbe.snapshot()[1])
+        }
+    }
+
+    @Test fun keyboardAliasesAndControllerRemovalReleaseOnlyTheirOwnInputs() {
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitUntil("game not started") { NativeBridge.isStarted() }
+            fun key(code: Int, action: Int, device: Int = 101) {
+                val t = SystemClock.uptimeMillis()
+                scenario.onActivity { it.dispatchKeyEvent(KeyEvent(t, t, action, code, 0, 0, device, 0)) }
+            }
+            key(KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.ACTION_DOWN)
+            key(KeyEvent.KEYCODE_SHIFT_RIGHT, KeyEvent.ACTION_DOWN)
+            key(KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.ACTION_UP)
+            assertEquals(CtrKeys.SELECT, HostProbe.snapshot()[1])
+            key(KeyEvent.KEYCODE_SHIFT_RIGHT, KeyEvent.ACTION_UP)
+            assertEquals(0, HostProbe.snapshot()[1])
+            key(KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN, 101)
+            key(KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_DOWN, 202)
+            scenario.onActivity { it.onInputDeviceRemoved(101) }
+            assertEquals(CtrKeys.B, HostProbe.snapshot()[1])
+            key(KeyEvent.KEYCODE_BUTTON_A, KeyEvent.ACTION_UP, 202)
+            assertEquals(0, HostProbe.snapshot()[1])
+
+            val t = SystemClock.uptimeMillis()
+            val coords = MotionEvent.PointerCoords().apply { x = 1f; y = 0f }
+            val event = MotionEvent.obtain(t, t, MotionEvent.ACTION_MOVE, 1,
+                arrayOf(MotionEvent.PointerProperties().apply { id = 0 }), arrayOf(coords),
+                0, 0, 1f, 1f, 303, 0, InputDevice.SOURCE_JOYSTICK, 0)
+            scenario.onActivity { it.dispatchGenericMotionEvent(event) }
+            event.recycle()
+            assertTrue(HostProbe.snapshot()[2] > 0)
+            scenario.onActivity { it.onInputDeviceRemoved(303) }
+            assertEquals(0, HostProbe.snapshot()[2])
+            assertEquals(0, HostProbe.snapshot()[1])
+        }
+    }
+
+    @Test fun secondaryMenuBackAndActivityRecreationKeepBothWindowsWorking() {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putBoolean("keep_screen_on", false).commit()
+        addDisplay()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitDual(scenario)
+            val p = presentation(scenario)!!
+            scenario.onActivity {
+                assertEquals(0, p.window!!.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                p.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_MODE))
+            }
+            assertEquals(NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
+            scenario.onActivity {
+                p.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK))
+                p.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK))
+            }
+            waitUntil("secondary-focused Back did not close menu") { HostProbe.snapshot()[0] == NativeBridge.STATE_RUNNING }
+            scenario.recreate()
+            waitDual(scenario)
+            val before = HostProbe.snapshot()
+            waitUntil("recreated surfaces did not draw") {
+                val now = HostProbe.snapshot()
+                now[16] > before[16] && now[17] > before[17]
+            }
+            inst.runOnMainSync { display!!.resize(1000, 1000, 240) }
+            waitUntil("changed display metrics did not recreate bottom window") {
+                presentation(scenario)?.surfaceWidth == 1000 && presentation(scenario)?.surfaceHeight == 1000
+            }
         }
     }
 }
