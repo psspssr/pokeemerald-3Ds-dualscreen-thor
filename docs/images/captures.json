@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-10-02",
+  "code_commit": "2c9a5bd3ae754596b6f91245a5c81011f4b8c829",
+  "apk_sha256": "5699b568db9975769fea4bf33c398730129a0fc00f0046d11de4c9f18b345433",
+  "environment": "Android API 30 emulator, ARMv7 game through native bridge, SwiftShader",
+  "layout": "Combined landscape at 1920x1080 with gamepad controls hidden; optional portrait at 1080x1920 with touch controls visible. Original FPS overlay retained.",
+  "capture": "Unmodified adb screencap PNGs; no pixel editing or generated scenes",
+  "images": [
+    {
+      "file": "voxel-world.png",
+      "source": "readme-voxel-town.png",
+      "scene": "Textured Littleroot houses and trees with the bottom-screen map",
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "sha256": "ee3727c2c582cf63f09214f8b5b2ee226d0ba9ba9efffb483cfc369f471fc08e"
+    },
+    {
+      "file": "battle.png",
+      "source": "readme-battle-moves.png",
+      "scene": "Natural Route 101 encounter with touch move selection: Torchic and Poochyena",
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "sha256": "a655dc75e0727bc0f87d34394e651e4904e43c86343edee8b06c3093f787557e"
+    },
+    {
+      "file": "party-summary.png",
+      "source": "readme-party-summary.png",
+      "scene": "Torchic summary in Professor Birch's lab",
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "sha256": "2df2bca9e151b2f6d25a376ed53609763aa2906c8d67365b43c18631670b17ee"
+    },
+    {
+      "file": "portrait-controls.png",
+      "source": "readme-portrait-controls.png",
+      "scene": "Portrait phone layout with on-screen gamepad controls",
+      "dimensions": [
+        1080,
+        1920
+      ],
+      "sha256": "5cde8003653159de44c51890ff55798e379187189af23f7576959bbd5c83255b"
+    }
+  ]
+}

@@ -1,97 +1,144 @@
-<h1 align="center">Pokémon Emerald Dual Screen for Android</h1>
-
 <p align="center">
-  An Android port of
-  <a href="https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen">Pokémon Emerald 3Ds Dual Screen</a>
-  by ZallaxDev: the game on the top screen, the touch interface on the bottom
-  screen, and the optional voxel overworld — on Android phones and dual-display handhelds.
+  <img src="android/app/src/main/res/drawable-nodpi/ic_launcher_art.png" width="160" alt="Emerald dragon wrapped around two glowing emerald facets">
 </p>
 
----
+<h1 align="center">Pokémon Emerald Dual Screen</h1>
 
-The 3DS port ("origin") is included unmodified in
-[`origin/`](origin/) and compiled as is — the decompilation, origin's patches,
-its bottom-screen UI, its GPU compositor and its voxel renderer. Underneath it,
-this repository re-implements the 3DS system libraries (libctru, Citro3D,
-Citro2D) for Android on OpenGL ES 3, AAudio and app storage. The goal is to
-preserve upstream behavior and its save format while adapting display and input.
+<p align="center"><strong>Emerald on Android. Built for two screens.</strong></p>
 
-Development and testing happen on `main` in
-[`psspssr/pokeemerald-3Ds-dualscreen-thor`](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor).
-The [build guide](docs/BUILDING.md) distinguishes the full ARM game from the
-separate emulator display/input harness and explains the runtime checks.
-The [validation report](docs/VALIDATION.md) records real-game emulator results,
-GBA save interchange, performance measurements and hardware coverage limits.
+<p align="center">
+  Explore Hoenn with the game above, touch controls below, and an optional voxel overworld.<br>
+  Designed for the AYN Thor, with layouts for phones and other Android handhelds.
+</p>
 
-Because origin is never edited, its new commits are taken with one command
-(see [Updating from origin](docs/UPDATING_FROM_ORIGIN.md)).
+<p align="center">
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/workflows/android.yml"><img src="https://img.shields.io/badge/CI-test_results-147d64?logo=githubactions&logoColor=white" alt="Open Android build and test results"></a>
+  <a href="#compatibility"><img src="https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white" alt="Android 9 or newer"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Port_code-MIT-147d64" alt="Android port code licensed under MIT"></a>
+</p>
 
-## Features
+<p align="center">
+  <a href="#build-and-play">Build and play</a> ·
+  <a href="docs/AYN_THOR.md">Thor setup</a> ·
+  <a href="docs/VALIDATION.md">Test results</a> ·
+  <a href="docs/UPDATING_FROM_ORIGIN.md">Upstream updates</a>
+</p>
 
-- **Made for the AYN Thor.** The top screen on the Thor's top display, the
-  touch screen on its bottom display, the built-in controls as the 3DS's
-  ([details](docs/AYN_THOR.md)).
-- **Phones too: both screens on one display.** Portrait stacks them like the console;
-  landscape puts them side by side, or the top screen large with the bottom
-  screen beside it or on demand.
-- **Touch screen.** The bottom screen is the touch interface origin designed
-  (map, party, bag, Pokédex, PokéNav, save, options), driven by your finger.
-- **Controls.** On-screen D-pad, circle pad and buttons; physical gamepads and
-  keyboards, mapped by position like a Nintendo console by default.
-- **Voxel overworld.** Origin's Citro3D renderer through the OpenGL ES backend.
-  Enable it in **OPTION → VOXEL 3D** on the bottom screen.
-- **GBA save format.** Import or export raw Emerald `.sav` files from Settings.
-  The game writes the same 128 KiB flash format used by the GBA and 3DS port;
-  port-only options stay in a separate settings file.
+An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen), built on [pret/pokeemerald](https://github.com/pret/pokeemerald). The upstream game, bottom-screen interface and voxel renderer are preserved; Android supplies the graphics, audio, storage and input support.
 
-## Requirements
+## See it in action
 
-- Android 9 (API 28) or newer on a device that can run **32-bit ARM**
-  (`armeabi-v7a`) apps. Origin's data pipeline uses 32-bit pointers, as the
-  3DS does; phones that dropped 32-bit support cannot run it.
-- OpenGL ES 3.0.
+<p align="center">
+  <a href="docs/images/voxel-world.png"><img src="docs/images/voxel-world.png" width="960" alt="Voxel Littleroot Town beside the bottom-screen Hoenn map and touch menu"></a>
+  <br><em>The voxel overworld, with your map and menus always within reach.</em>
+</p>
 
-Check actual device support with `adb shell getprop ro.product.cpu.abilist`;
-it must include `armeabi-v7a`. A data pack must match the Android build's ABI;
-stock 3DS data packs are not interchangeable with Android packs.
+<table>
+  <tr>
+    <td width="50%"><a href="docs/images/battle.png"><img src="docs/images/battle.png" width="480" alt="A wild Pokémon battle with move choices on the bottom touch screen"></a></td>
+    <td width="50%"><a href="docs/images/party-summary.png"><img src="docs/images/party-summary.png" width="480" alt="Torchic's party summary beside the overworld in Professor Birch's lab"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Touch battle commands</strong><br>Choose your next move on the bottom screen.</td>
+    <td align="center"><strong>Your party at a glance</strong><br>View stats, abilities and moves beside the game.</td>
+  </tr>
+</table>
 
-## Building
+<sub>Actual ARM Android build, captured in an emulator with the combined landscape layout. Click an image for full resolution. [Screenshot details](docs/images/README.md).</sub>
+
+<details>
+  <summary><strong>See the portrait phone layout</strong></summary>
+  <p align="center">
+    <a href="docs/images/portrait-controls.png"><img src="docs/images/portrait-controls.png" width="360" alt="Portrait Android layout with the voxel world above the map and on-screen gamepad controls below"></a>
+    <br>Both screens and touch controls on one display.
+  </p>
+</details>
+
+## Made for handheld play
+
+| Feature | In the game |
+|---|---|
+| **Two displays** | A separate window for the bottom touch screen. Reverse display ordering in Settings, or fall back to a combined layout when the second display disconnects. |
+| **Phones and tablets** | Portrait and landscape layouts, with on-screen controls for play on one display. |
+| **Voxel overworld** | Switch between the original 2D presentation and upstream's voxel scenery through **OPTION → VOXEL 3D**. |
+| **Touch menus** | Use the bottom screen for the map, party, bag, battle commands, save and options. |
+| **Physical controls** | Gamepad and keyboard support, with a Nintendo-style positional layout by default and an alternative Xbox-style mapping. |
+| **Portable saves** | Import and export standard Emerald `.sav` files. Keep Android and voxel preferences separately from your game progress. |
+
+## Compatibility
+
+The game requires **Android 9 or newer, OpenGL ES 3.0, and 32-bit ARM app support** (`armeabi-v7a`). The current game build does not run on devices whose firmware supports only 64-bit apps.
+
+On a connected device, check:
 
 ```sh
-python3 tools/bootstrap.py --make --apk
+adb shell getprop ro.product.cpu.abilist
 ```
 
-This fetches pret/pokeemerald at the commit origin pins, applies origin's
-patches, builds the decomp tools, compiles the whole tree for Android and
-packages the APK. Requirements and details: [docs/BUILDING.md](docs/BUILDING.md).
+The result must include `armeabi-v7a`. The AYN Thor is the primary design target; actual support depends on its firmware. See [Thor display and control setup](docs/AYN_THOR.md) for layout, scaling and device checks.
 
-**No game content is in this repository.** The build compiles the
-decompilation's source tree on your machine; do not distribute the resulting
-APK.
+The real ARM game has been tested on an Android emulator through the opening sequence, starter selection, battle, touch menus and save/load. Two-display touch, background/resume and display removal have also been exercised. **Physical Thor testing and sustained hardware performance measurements remain open.** The [validation report](docs/VALIDATION.md) records the tested build, evidence and coverage limits.
 
-## Documentation
+## Build and play
 
-| Guide | What's inside |
+Development happens on `main`. Start with the [Linux build prerequisites and Android SDK setup](docs/BUILDING.md#install-the-tools), then:
+
+```sh
+git clone https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor.git
+cd pokeemerald-3Ds-dualscreen-thor
+python3 tools/bootstrap.py --make --apk -j4
+```
+
+Install the resulting development APK on a compatible device:
+
+```sh
+adb install -r android/app/build/outputs/apk/debug/emerald3ds-android-debug.apk
+```
+
+The build fetches the pinned upstream engine, generates its data, compiles the Android port and packages the app. Generated game data and development APKs are for local use and are not published by CI. Engine-only packaging and matching data packs are covered in the [build guide](docs/BUILDING.md#engine-only-build-and-data-packs).
+
+## Bring your save
+
+Use **Settings → Import save** to bring in an Emerald battery/flash save, then restart the game. Use **Export save** to take your progress back to a GBA emulator.
+
+Game-created saves use the standard **128 KiB raw `.sav` format**, with no Android header. Real saves have been transferred between this port and the original GBA game running in mGBA. The importer also handles mGBA's optional RTC trailer; emulator save states are a different format and are not supported. [Save formats and transfer details →](docs/BUILDING.md#engine-only-build-and-data-packs)
+
+## Follow upstream
+
+The original 3DS project is kept unchanged in [`origin/`](origin/), with its exact revision recorded in [`origin.lock`](origin.lock). Android changes live outside that tree.
+
+Preview an update:
+
+```sh
+python3 tools/sync_origin.py --dry-run
+```
+
+From a clean checkout, import and rebuild:
+
+```sh
+python3 tools/sync_origin.py && python3 tools/bootstrap.py --make --apk -j4
+```
+
+The updater checks source integrity and reports newly required 3DS APIs. New upstream revisions still need build and gameplay validation. See the [update guide](docs/UPDATING_FROM_ORIGIN.md) for version selection, safeguards and the acceptance checklist.
+
+## Project guides
+
+| Guide | Details |
 |---|---|
-| [Building](docs/BUILDING.md) | Requirements, build, install, testing on the emulator. |
-| [Validation](docs/VALIDATION.md) | Tested builds, real-game results, save compatibility and remaining hardware checks. |
-| [Android architecture](docs/ANDROID_ARCHITECTURE.md) | How origin runs on Android unmodified. |
-| [Updating from origin](docs/UPDATING_FROM_ORIGIN.md) | Taking new commits of the 3DS port. |
-| [Origin's documentation](origin/docs/) | The game port itself: engine, assets, voxel overworld. |
+| [Build and test](docs/BUILDING.md) | Toolchain setup, APKs, data packs, saves and emulator tests. |
+| [AYN Thor](docs/AYN_THOR.md) | Display routing, scaling, controls and hardware checks. |
+| [Validation](docs/VALIDATION.md) | Real-game results, save interchange and performance measurements. |
+| [Architecture](docs/ANDROID_ARCHITECTURE.md) | How the unchanged 3DS project runs on Android. |
+| [Update upstream](docs/UPDATING_FROM_ORIGIN.md) | Preview, import and validate new versions. |
+| [Icon artwork](docs/ICON.md) | The launcher artwork and its generation provenance. |
 
-## Credits and licences
+## Credits and licensing
 
-- **Pokémon Emerald 3Ds Dual Screen** by ZallaxDev and contributors, MIT
-  ([origin/LICENSE-PORT.md](origin/LICENSE-PORT.md)). Join their
-  [Discord](https://discord.com/invite/tfqHF8496P) and support the original
-  project on [Ko-fi](https://ko-fi.com/zallax).
-- **pret/pokeemerald**, the decompilation, fetched at build time and not
-  relicensed.
-- **libctru, citro3d, citro2d** (devkitPro), zlib — their interfaces, and the
-  parts noted in `THIRD_PARTY.md` files, are re-implemented or reused here.
-- The Android port's own code is MIT ([LICENSE](LICENSE)). See
-  [NOTICE.md](NOTICE.md).
+- **ZallaxDev and contributors** — [Pokémon Emerald 3Ds Dual Screen](https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen), the upstream game port and touch interface. [Support the original project](https://ko-fi.com/zallax) · [Community](https://discord.com/invite/tfqHF8496P).
+- **pret** — [pokeemerald](https://github.com/pret/pokeemerald), the Emerald decompilation used by the upstream engine.
+- **gradenGnostic/pokeemerald-multiplatform contributors** — voxel logic adapted by the 3DS project; see its [attribution](origin/3ds_port/src/voxel/NOTICE.md).
+- **devkitPro** — libctru, Citro3D and Citro2D interfaces; implementation and licence details are recorded in the relevant `THIRD_PARTY.md` files.
 
-This is an unofficial fan project, not affiliated with or endorsed by
-Nintendo, Game Freak, Creatures or The Pokémon Company. Pokémon and Pokémon
-Emerald are trademarks of their respective owners.
+The Android port's original code is [MIT licensed](LICENSE). Imported projects retain their own terms; see [NOTICE.md](NOTICE.md) and [upstream provenance](origin/docs/PROVENANCE.md). The code licence does not grant rights to Pokémon game assets. Screenshots show the game running in the Android port.
+
+This is an unofficial fan project, unaffiliated with Nintendo, Game Freak, Creatures or The Pokémon Company. Pokémon and Pokémon Emerald are their respective owners' trademarks.

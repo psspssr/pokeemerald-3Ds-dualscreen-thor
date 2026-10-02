@@ -1,15 +1,14 @@
 # Validation — 2026-10-02
 
 The complete ARM game builds, runs on an Android emulator, and exchanges real
-saves with the original GBA game. Outdoor voxel rendering, the secondary
-touch window, Home/resume and display removal were exercised. **Final CI,
-broader gameplay and physical Thor validation remain open.**
+saves with the original GBA game. The opening sequence, first battle, outdoor
+voxel rendering, secondary touch window, Home/resume and display removal were
+exercised. **All three CI jobs passed.** Physical Thor testing and a full-game
+playthrough are outside this validation's coverage.
 
-Code checkpoint: `d9f48e11772d1cee66b4ae91b395f7204ce8062a`, including the
-secondary-touch, streamed-material, frame-pacing and clean-emulator fixes.
-Earlier development SHAs changed during the author-identity correction.
-Session commits now use the verified `psspssr` GitHub account identity;
-the original imported history was preserved.
+Code checkpoint: `2c9a5bd3ae754596b6f91245a5c81011f4b8c829`, including the
+secondary-touch, streamed-material, frame-pacing, framebuffer-coherency and
+clean-emulator fixes.
 Use the pinned sources and APK hash below to identify this test build.
 
 ## Sources and build
@@ -20,8 +19,8 @@ Use the pinned sources and APK hash below to identify this test build.
 | Unchanged `origin/` Git tree | `6d909815a5ffaede2e8f31ea0df5d08a6acee73a`, checked against the actual upstream commit |
 | pret/pokeemerald pin | `76463dac15cad36aca5e2b3f6366abf9e53f814f` |
 | Production ABI | `armeabi-v7a` only; strict native link and fixed-address loader checks passed |
-| Development APK | `android/app/build/outputs/apk/debug/emerald3ds-android-debug.apk`, **34,722,799 bytes** |
-| APK SHA-256 | `cb8a7550852ff468884996b09237ee78d6a9c4680bbcd744b45a8c40ce83bce5` |
+| Development APK | `android/app/build/outputs/apk/debug/emerald3ds-android-debug.apk`, **34,722,831 bytes** |
+| APK SHA-256 | `5699b568db9975769fea4bf33c398730129a0fc00f0046d11de4c9f18b345433` |
 
 Both packaged native libraries were byte-compared with the native build
 outputs. Packaging checks also matched the embedded-data marker, engine ABI,
@@ -33,20 +32,23 @@ remain local test artifacts.
 
 | Check | Result and boundary | Local evidence under `build/evidence/` |
 |---|---|---|
-| App build and lint | Debug and separate harness APKs built; lint passed. | `app-unbuffered-build.log` |
+| App build and lint | Debug and separate harness APKs built; lint passed. The final framebuffer fix also passed a full ARM/APK rebuild and engine-only native build. | `app-unbuffered-build.log`, `native-framebuffer-{build,release}.log` |
 | App instrumentation | **19 tests passed** on API 34: the original 15 passed in both 1080×1920 portrait and 1920×1080 landscape; three mGBA tests and the secondary-drag regression passed in expanded suites. Fresh-data runs with the corrected fullscreen fixture and the final AOSP image also passed all 19. | `app-review-{portrait,landscape}.log`, `app-review-mgba-instrumentation.log`, `app-unbuffered-instrumentation.log`, `app-ci-fixture-instrumentation.log`, `ci-aosp-instrumentation.log` |
 | Thor-sized app window | A 1240×1080 presentation display rendered independently; visible touch response, coordinates, reversed ordering, display loss/reconnect, resize, recreation and pause were checked. This row uses the harness renderer. | `test-evidence/thor-*.png`, app instrumentation logs |
 | System shim | Production filesystem, allocation, input, thread/lock, PCM and lifecycle tests passed with ASan and UBSan. | `shim-tests.log` |
 | Host graphics | **15 tests passed** for texture layout/conversion, shader translation and frame pacing, including rejected unsupported inputs and overdue/resumed frame deadlines. | `gpu-host-final.log` |
-| Android GLES backend | **46 pixel assertions passed**: the original 39 cover 2D rendering, texture edits, TexEnv, blending/depth, rotated screens, framebuffer sampling, voxel shaders, batching and mixed CPU/GPU output; seven further checks cover arena texture views and safe reuse. | `gpu-sprite-batch-after.log`, `gpu-arena-texture-test.log` |
+| Android GLES backend | **55 pixel assertions passed**: the original 39 cover 2D rendering, texture edits, TexEnv, blending/depth, rotated screens, framebuffer sampling, voxel shaders, batching and mixed CPU/GPU output; seven checks cover arena texture views/reuse and nine cover CPU redraw ownership, clean gaps, startup, format changes and full flushes. | `gpu-sprite-batch-after.log`, `gpu-arena-texture-test.log`, `gpu-framebuffer-coherence-final.log` |
 | Tooling | **30 tests passed**, including updater safety, save validation, discarded startup code, truly absent definitions and missing link inputs. | `tool-tests-final.log` |
-| Real game and saves | The ARM APK ran on an API 30 emulator with ARM translation: intro, character creation, starting area, save/load, GBA interchange, textured outdoor voxel rendering, dual-screen Save/Options, Home/resume and unplug fallback. | Game screenshots, save reports, `game-final-dual-resumed.png`, `game-final-display-fallback.png` |
+| Real game and saves | The ARM APK ran on an API 30 emulator with ARM translation: introduction, clock/May/Birch events, starter choice, first battle, Bag pockets, Party/Summary, Options, save/load, GBA interchange, textured voxel rendering, dual-screen touch, Home/resume and unplug fallback. The final APK reloaded the post-battle save and passed menu/touch/lifecycle checks. | `gameplay-qa-report.json`, game screenshots and save reports, `game-final-dual-resumed.png`, `game-final-display-fallback.png` |
+| GitHub CI | [Run 37011831800](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37011831800) passed source/host checks, full ARM debug and engine-only release builds, SDK coverage, all **19 app tests**, and all **55 GLES assertions** at the exact code checkpoint above. | `ci-final-2c9-app.log`, `ci-final-2c9-reports/` |
 | Audio | The real game opened a **44,100 Hz AAudio stream**. A production NDSP probe produced 701 PCM frames with 1,401 nonzero samples. The emulator host used `-no-audio`, so output was **not auditioned**. | `vanilla-save-in-android.log`, `native-audio-probe.log` |
 | Launcher | The new adaptive launcher artwork was built and visually checked in the Android launcher. | `launcher-icon.png`; [icon source and prompt](ICON.md) |
 
 Logs, screenshots, ROMs, saves and APKs in `build/evidence/` are local and are
 **not committed**. This report preserves the outcomes and artifact identities;
-the commands below reproduce the automated checks.
+the commands below reproduce the automated checks. A curated set of unmodified
+gameplay screenshots is published separately in [the README gallery](../README.md#see-it-in-action),
+with [capture provenance](images/README.md).
 
 ## Performance and frame pacing
 
@@ -110,7 +112,32 @@ by the importer; raw exports contain no Android header or stale RTC trailer.
 Port options stay separate, and emulator clock overrides are not transferred.
 See [save formats and transfer instructions](BUILDING.md#engine-only-build-and-data-packs).
 
-## Findings resolved and work remaining
+The natural opening sequence then reached Torchic selection and the first
+Zigzagoon battle. Two Scratch attacks were chosen on the real secondary
+touchscreen; HP changed from 20 to 17 and 17 EXP was awarded. After Birch's
+healing event, a normal save produced counter **3**, two valid slots and a
+one-Pokémon party. The original GBA ROM in mGBA loaded that save and displayed
+the same level-5 Torchic, Adamant nature, Blaze ability, Route 101 origin and
+trainer A in Party/Summary. Save SHA-256:
+
+```text
+aa7afc7c1e164ab1b1a54d381f2f1f3fbb83a7d4242c5879df10a814959295c0
+```
+
+That first battle ran on APK `cb8a7550…`; the final APK `5699b568…` then changed
+framebuffer coherency and passed Continue with the same Torchic, Bag-to-Map
+restoration, Options, secondary Party touch and Home/resume. No new ANR or app
+crash was observed. Evidence: `gameplay-qa-report.json`,
+`gameplay-torchic-android.{sav,json}`, `gameplay-torchic-mgba.log`, and
+`gameplay-torchic-gba-{loaded,party,summary}.png`.
+
+The final APK also completed a naturally encountered level-3 Poochyena battle
+on Route 101 while capturing the README gallery. Touch Fight/Scratch worked,
+Torchic earned 23 EXP, and the game returned to the voxel overworld and map.
+Evidence: `readme-battle{,-moves,-win,-return-world}.png`. Portrait layout and
+visible phone controls were captured from the same running build.
+
+## Runtime findings and coverage limits
 
 The real API 30 ARM run exposed a secondary-display **MOVE-event ANR** that
 the API 34 harness had not reproduced. The UI thread was idle while native
@@ -136,6 +163,16 @@ were visually confirmed in the real game (`game-voxel-textured.png`,
 secondary display restored the combined layout and on-screen controls without
 a new ANR (`game-paused.log`, `game-resumed.log`, final screenshots above).
 
+Final graphics review reproduced another transition edge: the GPU could replace
+screen pixels, then a CPU repaint with bytes identical to its previous image
+was skipped. Explicit flushes now mark the affected columns as CPU-owned, and
+uploads preserve clean gaps that may still contain GPU output. Initialization,
+format changes and full-buffer flushes also mark columns explicitly, fixing an
+all-white startup case. Both old-code failures were reproduced before repair;
+the expanded **55-assertion** device suite and **15-test** host suite passed.
+Evidence: `gpu-framebuffer-coherence-before.log`, `gpu-framebuffer-white-before.log`,
+`gpu-framebuffer-coherence-final.log`, and `gpu-framebuffer-host-final.log`.
+
 CI also exposed a fixture issue: the system's first-run fullscreen tutorial
 intercepted injected control taps. Its focus window and interception were
 captured, then reproduced locally. Setting
@@ -153,16 +190,13 @@ fresh AOSP fixture passed all **19 app tests and 46 GLES assertions** locally;
 see `ci-aosp-instrumentation.log`, `ci-aosp-gpu.log` and
 `ci-aosp-after-tests-system.log`.
 
-Remaining acceptance work at this checkpoint:
+Coverage limits at this checkpoint:
 
-- **Not yet covered:** broader battles/menus, long gameplay sessions, full-game
-  progression, audible audio quality, and sustained performance/thermal tests.
+- **Not yet covered:** later battles, Pokédex/PokéNav/PC menus, long gameplay
+  sessions, full-game progression, audible audio quality, and sustained
+  hardware performance/thermal tests.
 - **Hardware pending:** no physical AYN Thor was tested. Lid behavior, actual
   panel timing and model/firmware ABI support still require device checks.
-- **CI pending:** [run 37009341606](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37009341606)
-  tests the final code and emulator fixture. Earlier runs exposed hosted-runner
-  dependencies and fixture issues described above; the final run must finish
-  before CI can be called green.
 
 The renderer targets the current pin's **straight-line PICA shaders and
 uncompressed textures**; it does not implement the entire 3DS graphics API.

@@ -94,7 +94,9 @@ An engine-only APK by itself does not provide that recipe.
 Saves use Emerald's original raw 128 KiB flash format, without an Android
 header. **Settings → Import save** accepts a GBA/emulator/3DS `.sav` of 128 KiB
 or a 64 KiB first-slot recovery image; the game fills a missing second half
-with erased flash bytes. Emulator save states are unsupported; export a raw
+with erased flash bytes in memory. A recovery file remains 64 KiB on disk
+until an in-game save writes the full flash image, and an earlier export
+retains that size. Emulator save states are unsupported; export a raw
 battery/flash save from the emulator first.
 **Export save** writes the raw file; choose the filename your emulator expects
 (commonly the ROM basename plus `.sav`). Export pauses the native game through
