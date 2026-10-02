@@ -82,11 +82,21 @@ $(ROMFS_SHADER_OUTS): build/android/tileset_art.stamp
 $(ROOT)/graphics/%.4bpp: $(ROOT)/graphics/%.png
 	+$(MAKE) -C $(ROOT) $(patsubst $(ROOT)/%,%,$@)
 
+# The bottom UI opens this tilemap by filename. Clang removes the unused
+# game INCBIN symbol, so origin's symbol-driven asset exporter cannot see it.
+# Stage the source bytes explicitly, before hashing the complete data ABI.
+ANDROID_DIRECT_ASSETS := romfs/graphics/party_menu/slot_wide_empty.bin
+$(ANDROID_DIRECT_ASSETS): romfs/%: $(ROOT)/%
+	@mkdir -p $(dir $@)
+	cp $< $@
+ROMFS_DATA_OUTS += $(ANDROID_DIRECT_ASSETS)
+romfs/engine/abi.bin: $(ANDROID_DIRECT_ASSETS)
+
 # ── The Android layer: shim (libctru), GPU (citro3d/citro2d), host (JNI) ─────
 ANDROID_SRCS := $(wildcard $(ANDROID_DIR)/shim/src/*.c $(ANDROID_DIR)/shim/src/*/*.c $(ANDROID_DIR)/shim/src/*/*/*.c)
 ANDROID_SRCS += $(wildcard $(ANDROID_DIR)/gpu/src/*.c $(ANDROID_DIR)/gpu/src/*/*.c $(ANDROID_DIR)/gpu/src/*/*/*.c)
 ANDROID_SRCS += $(wildcard $(ANDROID_DIR)/host/src/*.c $(ANDROID_DIR)/host/src/*/*.c $(ANDROID_DIR)/host/src/*/*/*.c)
-ANDROID_SRCS += $(ANDROID_NATIVE)/src/load_address.c
+ANDROID_SRCS += $(ANDROID_NATIVE)/src/load_address.c $(ANDROID_NATIVE)/src/save_abi.c
 ANDROID_OBJS := $(patsubst $(ANDROID_DIR)/%.c,build/android/%.o,$(ANDROID_SRCS))
 ANDROID_CFLAGS := -O2 -g -std=gnu11 -Wall -Wextra -ffunction-sections -fdata-sections \
 	-DCTR_LOAD_ADDRESS=$(LOAD_ADDRESS)
@@ -95,6 +105,11 @@ $(ANDROID_OBJS): build/config
 build/android/%.o: $(ANDROID_DIR)/%.c
 	@mkdir -p $(dir $@)
 	"$(CC)" $(CPPFLAGS) $(ANDROID_CFLAGS) -MMD -MP -c $< -o $@
+
+# Compile-time save compatibility assertions use origin's game types/flags.
+build/android/native/src/save_abi.o: $(ANDROID_NATIVE)/src/save_abi.c
+	@mkdir -p $(dir $@)
+	"$(CC)" $(FULLFLAGS) $(FULLCFLAGS) -std=gnu11 -MMD -MP -c $< -o $@
 
 -include $(ANDROID_OBJS:.o=.d)
 
