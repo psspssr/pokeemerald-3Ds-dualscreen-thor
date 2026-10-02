@@ -29,6 +29,8 @@ jobs:
         run: python3 tools/check_shim_coverage.py --headers-only
       - name: System shim with address and undefined-behavior sanitizers
         run: python3 android/shim/test/run_host_tests.py
+      - name: Texture and shader regressions
+        run: python3 android/gpu/test/test_gpu.py
 
   arm-game-build:
     runs-on: ubuntu-24.04
@@ -101,9 +103,11 @@ jobs:
       - name: App input, storage and secondary-display instrumentation
         working-directory: android/app
         run: ./gradlew --no-daemon connectedHarnessAndroidTest lintHarness
+      - name: GLES pixel conformance
+        run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018" bash android/gpu/test/run-emulator.sh
       - name: Capture emulator log
         if: always()
-        run: adb logcat -d > logcat.txt || true
+        run: timeout 30 adb logcat -d > logcat.txt || true
       - name: Keep emulator test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
