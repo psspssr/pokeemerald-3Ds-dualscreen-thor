@@ -49,9 +49,9 @@ and records their exact commit and tree; the build then picks them up.
    `3ds_port/`, `tools/`, `builder/` overlaid.
 2. It checks and applies `patches/android/*.patch` in filename order, rejecting
    context drift and preserving warm-build timestamps when the series is
-   unchanged. The current overlays clip wrapped field windows, keep battle
-   level-up panels above the message box, and connect the optional QoL
-   rules/save backups implemented under `android/native/`.
+   unchanged. The current overlays clip wrapped field windows, keep level-up
+   panels and caught-Pokémon registration pages fully visible, and connect
+   the optional QoL rules/save backups implemented under `android/native/`.
 3. It copies `android/` to `build/upstream/android/` and builds the decomp
    tools (`make tools generated`).
 4. `make -C build/upstream/3ds_port -f ../android/native/Makefile` includes origin's

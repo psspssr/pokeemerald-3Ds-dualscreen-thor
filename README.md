@@ -18,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.1">Download Android preview</a> ·
   <a href="#build-and-play">Build and play</a> ·
   <a href="docs/AYN_THOR.md">Thor setup</a> ·
   <a href="docs/VALIDATION.md">Test results</a> ·
@@ -78,9 +79,13 @@ adb shell getprop ro.product.cpu.abilist
 
 The result must include `armeabi-v7a`. The AYN Thor is the primary design target; actual support depends on its firmware. See [Thor display and control setup](docs/AYN_THOR.md) for layout, scaling and device checks.
 
-The real ARM game has been tested on an Android emulator through the opening sequence, starter selection, battle, touch menus and save/load. Two-display touch, background/resume and display removal have also been exercised. **Physical Thor testing and sustained hardware performance measurements remain open.** The [validation report](docs/VALIDATION.md) records the tested build, evidence and coverage limits.
+The real ARM game has been tested on an Android emulator through the opening sequence, starter selection, wild and rival battles, level-ups, captures, touch menus and save/load. Two-display touch, background/resume and display removal have also been exercised. **Physical Thor testing and sustained hardware performance measurements remain open.** The [validation report](docs/VALIDATION.md) records the tested build, evidence and coverage limits.
 
 ## Build and play
+
+Download the signed **[0.1.0-alpha.1 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.1)** and install `emerald-thor-0.1.0-alpha.1-armeabi-v7a.apk` on a compatible device. This private preview includes matching game data and can start immediately. Downloads currently require access to this repository. If replacing a development APK, export your save first: release and debug signing keys differ.
+
+To build from source:
 
 Development happens on `main`. Start with the [Linux build prerequisites and Android SDK setup](docs/BUILDING.md#install-the-tools), then:
 
@@ -96,7 +101,7 @@ Install the resulting development APK on a compatible device:
 adb install -r android/app/build/outputs/apk/debug/emerald3ds-android-debug.apk
 ```
 
-The build fetches the pinned upstream engine, generates its data, compiles the Android port and packages the app. Generated game data and development APKs are for local use and are not published by CI. Engine-only packaging and matching data packs are covered in the [build guide](docs/BUILDING.md#engine-only-build-and-data-packs).
+The build fetches the pinned upstream engine, generates its data, compiles the Android port and packages the app. CI publishes diagnostics; signed preview downloads are prepared and tested separately. Engine-only packaging and matching data packs are covered in the [build guide](docs/BUILDING.md#engine-only-build-and-data-packs).
 
 ## Bring your save
 
@@ -133,10 +138,11 @@ The updater checks source integrity and reports newly required 3DS APIs. New ups
 | Guide | Details |
 |---|---|
 | [Build and test](docs/BUILDING.md) | Toolchain setup, APKs, data packs, saves and emulator tests. |
+| [Release an APK](docs/RELEASING.md) | Stable signing, exact-artifact testing and verified GitHub uploads. |
 | [AYN Thor](docs/AYN_THOR.md) | Display routing, scaling, controls and hardware checks. |
 | [Quality of life](docs/QUALITY_OF_LIFE.md) | Opt-in speed, shiny odds, party EXP, backup and encounter settings. |
 | [Validation](docs/VALIDATION.md) | Real-game results, save interchange and performance measurements. |
-| [Architecture](docs/ANDROID_ARCHITECTURE.md) | How the unchanged 3DS project runs on Android. |
+| [Architecture](docs/ANDROID_ARCHITECTURE.md) | How the 3DS engine runs on Android. |
 | [Update upstream](docs/UPDATING_FROM_ORIGIN.md) | Preview, import and validate new versions. |
 | [Icon artwork](docs/ICON.md) | The launcher artwork and its generation provenance. |
 
