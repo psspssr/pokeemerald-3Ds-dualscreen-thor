@@ -57,11 +57,11 @@ jobs:
           sudo apt-get install -y build-essential binutils-arm-linux-gnueabi gcc-arm-linux-gnueabi libpng-dev python3-pil
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'
       - name: Build the real ARM game and debug APK
-        run: python3 tools/bootstrap.py --make --apk -j2
+        run: python3 tools/bootstrap.py --ndk "$ANDROID_HOME/ndk/27.2.12479018" --make --apk -j2
       - name: Native SDK symbol coverage
         run: python3 tools/check_shim_coverage.py
       - name: Build engine-only release APK
-        run: python3 tools/bootstrap.py --make --apk --release --out build/android-release-out -j2
+        run: python3 tools/bootstrap.py --ndk "$ANDROID_HOME/ndk/27.2.12479018" --make --apk --release --out build/android-release-out -j2
       - name: Keep build diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -90,8 +90,18 @@ jobs:
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: platform-tools
+      - name: Make room for emulator userdata on the hosted runner
+        run: |
+          # Android and this C/Kotlin project do not use the runner's .NET SDKs.
+          # Never remove software from a self-hosted machine.
+          if [ "${RUNNER_ENVIRONMENT:-}" = github-hosted ]; then
+            sudo rm -rf /usr/share/dotnet
+          fi
+          df -h "$RUNNER_TEMP"
       - name: Install emulator and harness toolchain
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'emulator' 'system-images;android-35;google_apis;x86_64'
+        # Match the locally verified dual-display/GLES harness while compiling
+        # and targeting API 35. Current emulators enforce a 6 GB userdata floor.
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018' 'emulator' 'system-images;android-34;google_apis;x86_64'
       - name: Start emulator
         timeout-minutes: 7
         run: |
@@ -100,7 +110,7 @@ jobs:
           # AVD directories. Give both processes the same explicit location.
           export ANDROID_AVD_HOME="$RUNNER_TEMP/thor-avd"
           mkdir -p "$ANDROID_AVD_HOME"
-          echo no | avdmanager create avd --force --name thor-ci --path "$ANDROID_AVD_HOME/thor-ci.avd" --package 'system-images;android-35;google_apis;x86_64' --device pixel_2
+          echo no | avdmanager create avd --force --name thor-ci --path "$ANDROID_AVD_HOME/thor-ci.avd" --package 'system-images;android-34;google_apis;x86_64' --device pixel_2
           test -f "$ANDROID_AVD_HOME/thor-ci.ini"
           "$ANDROID_HOME/emulator/emulator" -list-avds
           "$ANDROID_HOME/emulator/emulator" -avd thor-ci -port 5554 -no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -gpu swiftshader_indirect > emulator.log 2>&1 &
