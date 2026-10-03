@@ -16,7 +16,7 @@
     <string name="mystery_events_details">%1$s\n\n%2$s</string>
     <string name="mystery_events_activated">Event activated. Save normally in the game to keep it.</string>
     <string name="mystery_events_no_game">Continue a saved adventure, or save normally after starting a new game.</string>
-    <string name="mystery_events_busy">Return to the overworld and finish any dialogue before activating an event.</string>
+    <string name="mystery_events_busy">Finish any dialogue and return to the regular overworld outside a Frontier challenge before activating an event.</string>
     <string name="mystery_events_failed">The event could not be activated. Return to the game and try again.</string>
     <string name="mystery_events_unavailable">Event status is unavailable. Return to the game, then reopen this menu.</string>
     <string name="mystery_events_bag_full">Make room in the Bag before activating this event.</string>

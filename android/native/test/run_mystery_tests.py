@@ -41,11 +41,18 @@ with tempfile.TemporaryDirectory(prefix="emerald-mystery-test-") as directory:
     common = ["-std=gnu11", "-O1", "-g", "-ffunction-sections", "-fdata-sections",
               "-fno-omit-frame-pointer", "-fsanitize=address,undefined"]
     objects = []
-    # Extract these two independent, unchanged engine functions to avoid
-    # retaining the entire Pokedex/menu asset graph in a host unit test.
-    extracted = '#include "global.h"\n#include "pokemon.h"\n#include "pokedex.h"\n'
+    # Extract independent, unchanged engine helpers to avoid retaining the
+    # entire Pokedex/menu asset graph in a host unit test.
+    extracted = ('#include "global.h"\n#include "pokemon.h"\n#include "pokedex.h"\n'
+                 '#include "overworld.h"\n#include "event_data.h"\n'
+                 '#include "constants/layouts.h"\n#include "constants/maps.h"\n'
+                 '#include "constants/battle_frontier.h"\n')
     extracted += function("src/pokedex.c", "s8 GetSetPokedexFlag(u16 nationalDexNo, u8 caseID)")
     extracted += function("src/script_pokemon_util.c", "u8 ScriptGiveMon(u16 species, u8 level, u16 item, u32 unused1, u32 unused2, u8 unused3)")
+    extracted += function("src/load_save.c", "void SavePlayerParty(void)")
+    extracted += function("src/load_save.c", "void LoadPlayerParty(void)")
+    extracted += function("src/battle_pike.c", "bool8 InBattlePike(void)")
+    extracted += function("src/field_specials.c", "bool8 InMultiPartnerRoom(void)")
     (work / "gift_dex.c").write_text(extracted)
     item = (TREE / "src/item.c").read_text()
     for line in ['#include "data/text/item_descriptions.h"', '#include "data/items.h"']:

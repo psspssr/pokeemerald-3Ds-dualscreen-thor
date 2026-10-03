@@ -2,11 +2,13 @@
 #include <stdbool.h>
 #include "android_mystery.h"
 #include "ctr_mystery.h"
+#include "battle_pike.h"
 #include "battle_pyramid.h"
 #include "decoration.h"
 #include "decoration_inventory.h"
 #include "event_data.h"
 #include "field_message_box.h"
+#include "field_specials.h"
 #include "item.h"
 #include "main.h"
 #include "overworld.h"
@@ -72,6 +74,10 @@ static int sessionStatus(void)
         || ScriptContext_IsEnabled() || ArePlayerFieldControlsLocked()
         || !IsFieldMessageBoxHidden() || gPlayerAvatar.preventStep
         || gPlayerAvatar.tileTransitionState != T_NOT_MOVING
+        /* These freely walkable rooms use a reduced challenge party. A gift
+         * would be discarded by LoadPlayerParty while its caught bit stayed
+         * set. Other Frontier rooms remain in scripts; lobbies are allowed. */
+        || InBattlePike() || InMultiPartnerRoom()
         || CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE
         || FlagGet(FLAG_STORING_ITEMS_IN_PYRAMID_BAG))
         return CTR_MYSTERY_BUSY;

@@ -13,6 +13,7 @@
 #include "decoration_inventory.h"
 #include "event_data.h"
 #include "item.h"
+#include "load_save.h"
 #include "main.h"
 #include "overworld.h"
 #include "palette.h"
@@ -25,6 +26,8 @@
 #include "constants/battle_frontier.h"
 #include "constants/decorations.h"
 #include "constants/flags.h"
+#include "constants/layouts.h"
+#include "constants/maps.h"
 #include "constants/region_map_sections.h"
 
 static struct SaveBlock1 world;
@@ -35,6 +38,7 @@ struct SaveBlock2 *gSaveBlock2Ptr = &trainer;
 struct PokemonStorage *gPokemonStoragePtr = &storage;
 struct Main gMain;
 struct PlayerAvatar gPlayerAvatar;
+struct MapHeader gMapHeader;
 struct PaletteFadeControl gPaletteFade;
 bool8 gLinkTransferringData;
 u16 gSaveFileStatus;
@@ -127,6 +131,7 @@ static int status(unsigned id) {
 static void reset(void) {
     memset(&world,0,sizeof(world));memset(&trainer,0,sizeof(trainer));memset(&storage,0,sizeof(storage));
     memset(&gMain,0,sizeof(gMain));memset(&gPlayerAvatar,0,sizeof(gPlayerAvatar));
+    memset(&gMapHeader,0,sizeof(gMapHeader));
     memset(&gPaletteFade,0,sizeof(gPaletteFade));memset(gPlayerParty,0,sizeof(struct Pokemon)*PARTY_SIZE);
     gSaveBlock1Ptr=&world;gSaveBlock2Ptr=&trainer;gPokemonStoragePtr=&storage;
     trainer.encryptionKey=0xa5bb2233;memset(trainer.playerName,0xbb,PLAYER_NAME_LENGTH);trainer.playerName[PLAYER_NAME_LENGTH]=EOS;
@@ -138,6 +143,64 @@ static void reset(void) {
     FlagSet(FLAG_SYS_POKEDEX_GET);gPlayerPartyCount=1;
     CreateMon(&gPlayerParty[0],SPECIES_TORCHIC,5,0,TRUE,0x132357,OT_ID_PLAYER_ID,0);
     CtrMystery_ContinueSession();SeedRng(0x1234);gRng2Value=0x5678;
+}
+
+static void temporaryChallengeParties(void) {
+    const u16 layouts[] = {
+        LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_THREE_PATH_ROOM,
+        LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_NORMAL,
+        LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_WILD_MONS,
+        LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_UNUSED,
+        LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM,
+    };
+    const u16 species[] = {SPECIES_JIRACHI,SPECIES_CELEBI};
+    for(unsigned area=0;area<ARRAY_COUNT(layouts);area++)for(unsigned gift=0;gift<2;gift++) {
+        reset();
+        gPlayerPartyCount=PARTY_SIZE;
+        for(unsigned i=1;i<PARTY_SIZE;i++)gPlayerParty[i]=gPlayerParty[0];
+        SavePlayerParty();
+        /* The real challenge saves the full party, then reduces it to the
+         * selected three (two while finding a Tower multi-battle partner). */
+        gPlayerPartyCount=area==4?2:3;
+        memset(&gPlayerParty[gPlayerPartyCount],0,(PARTY_SIZE-gPlayerPartyCount)*sizeof(struct Pokemon));
+        gMapHeader.mapLayoutId=layouts[area];
+        if(area==4) {
+            world.location.mapGroup=MAP_GROUP(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM);
+            world.location.mapNum=MAP_NUM(MAP_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM);
+            VarSet(VAR_FRONTIER_BATTLE_MODE,FRONTIER_MODE_MULTIS);
+        }
+        takeSnapshot();
+        for(unsigned id=0;id<CTR_MYSTERY_EVENT_COUNT;id++) {
+            assert(status(id)==CTR_MYSTERY_BUSY);
+            assert(CtrMystery_Activate(id)==CTR_MYSTERY_RESULT_BUSY);
+        }
+        unchanged();
+        LoadPlayerParty();
+        assert(gPlayerPartyCount==PARTY_SIZE);
+        assert(!GetSetPokedexFlag(SpeciesToNationalPokedexNum(species[gift]),FLAG_GET_CAUGHT));
+        /* Leaving the facility restores normal eligibility; no sticky flag
+         * or story progression is required. A normal empty slot accepts it. */
+        gMapHeader.mapLayoutId=LAYOUT_ROUTE101;
+        world.location.mapGroup=MAP_GROUP(MAP_ROUTE101);
+        world.location.mapNum=MAP_NUM(MAP_ROUTE101);
+        gPlayerPartyCount=PARTY_SIZE-1;
+        memset(&gPlayerParty[PARTY_SIZE-1],0,sizeof(struct Pokemon));
+        assert(status(CTR_MYSTERY_JIRACHI+gift)==CTR_MYSTERY_AVAILABLE);
+        assert(CtrMystery_Activate(CTR_MYSTERY_JIRACHI+gift)==CTR_MYSTERY_RESULT_ACTIVATED);
+        assert(GetMonData(&gPlayerParty[PARTY_SIZE-1],MON_DATA_SPECIES)==species[gift]);
+    }
+    const u16 lobbies[] = {
+        LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_LOBBY,LAYOUT_BATTLE_FRONTIER_BATTLE_DOME_LOBBY,
+        LAYOUT_BATTLE_FRONTIER_BATTLE_PALACE_LOBBY,LAYOUT_BATTLE_FRONTIER_BATTLE_ARENA_LOBBY,
+        LAYOUT_BATTLE_FRONTIER_BATTLE_FACTORY_LOBBY,LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_LOBBY,
+        LAYOUT_BATTLE_FRONTIER_BATTLE_PYRAMID_LOBBY,
+    };
+    for(unsigned i=0;i<ARRAY_COUNT(lobbies);i++) {
+        reset();gMapHeader.mapLayoutId=lobbies[i];takeSnapshot();
+        assert(status(CTR_MYSTERY_JIRACHI)==CTR_MYSTERY_AVAILABLE);
+        unchanged();
+    }
+    puts("PASS actual Pike/multi-room predicates prevent temporary-party gift loss; real party restoration retains unclaimed gifts, outside and all seven lobbies remain eligible");
 }
 static void assertBlocked(int expected,int result) {
     takeSnapshot();
@@ -242,4 +305,4 @@ static void dolls(void) {
     reset();failDecorCall=2;takeSnapshot();assert(CtrMystery_Activate(CTR_MYSTERY_REGI_DOLLS)==CTR_MYSTERY_RESULT_FAILED);unchanged();
     puts("PASS missing-doll restoration, owned/placed deduplication, category capacity and rollback on partial insertion failure");
 }
-int main(void) {sessions();islands();gifts();dolls();puts("All Mystery Events engine checks passed");return 0;}
+int main(void) {sessions();islands();gifts();dolls();temporaryChallengeParties();puts("All Mystery Events engine checks passed");return 0;}
