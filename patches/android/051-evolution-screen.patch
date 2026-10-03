@@ -10,7 +10,7 @@
 +# too, including after returning from the move replacement screen.
  CTR_GBA_CENTRED_SRCS := region_map field_region_map main_menu naming_screen wallclock \
 -	pokemon_summary_screen
-+	pokemon_summary_screen evolution_scene
++	pokemon_summary_screen evolution_scene evolution_graphics
  CTR_GBA_CENTRED_OBJS := $(patsubst %,build/root/src/%.o,$(CTR_GBA_CENTRED_SRCS))
  $(CTR_GBA_CENTRED_OBJS): FULLCFLAGS += -DCTR_GBA_STAGE -include $(abspath compat/ctr_gba_centred.h)
  $(CTR_GBA_CENTRED_OBJS): compat/ctr_gba_centred.h $(ROOT)/include/gba/defines.h

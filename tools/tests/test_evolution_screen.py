@@ -28,7 +28,7 @@ class EvolutionScreenTests(unittest.TestCase):
         # Evaluate the real target-specific make assignments. This catches a
         # source-list change that fails to reach this translation unit's flags.
         probe = tree / "probe.mk"
-        probe.write_text(source[start:end] + "\nbuild/root/src/evolution_scene.o:\n"
+        probe.write_text(source[start:end] + "\nbuild/root/src/evolution_scene.o build/root/src/evolution_graphics.o:\n"
                          "\t@printf '%s\\n' '$(FULLCFLAGS)'\n")
         (tree / "compat").mkdir()
         (tree / "compat/ctr_gba_centred.h").write_bytes(
@@ -39,6 +39,10 @@ class EvolutionScreenTests(unittest.TestCase):
                                "ROOT=" + str(tree), "build/root/src/evolution_scene.o"],
                               cwd=tree, check=True, capture_output=True, text=True)
         cls.flags = shlex.split(made.stdout.strip())
+        made = subprocess.run(["make", "--no-print-directory", "-s", "-f", str(probe),
+                               "ROOT=" + str(tree), "build/root/src/evolution_graphics.o"],
+                              cwd=tree, check=True, capture_output=True, text=True)
+        cls.graphics_flags = shlex.split(made.stdout.strip())
 
         video = (ROOT / "origin/3ds_port/src/3ds_video.c").read_text()
         start = video.index("static void DrawTextBg(unsigned bg)\n")
@@ -93,6 +97,9 @@ void probe(unsigned centred,float *out)
 
     def test_evolution_build_flags_redirect_both_callbacks_to_centred_top(self):
         self.assertIn("-DCTR_GBA_STAGE", self.flags)
+        # The scene's hard-coded (120,64) Pokemon and its helper unit's
+        # DISPLAY_WIDTH/2 sparkles must share the same coordinate system.
+        self.assertEqual(self.graphics_flags, self.flags)
         c = self.tree / "callback.c"
         c.write_text("typedef void (*Callback)(void);\n"
                      "void SetVBlankCallback(Callback);\n"
