@@ -1,6 +1,7 @@
 # Optional quality-of-life settings
 
-Open the Android pause menu, then **Settings → Gameplay → Quality of life**.
+Press **L1 + R1 together** or keyboard **Escape** to open the Android pause
+menu, then choose **Settings → Gameplay → Quality of life**.
 Every feature starts **off**. Preferences are stored by Android, separately
 from the original Emerald `.sav` format.
 
@@ -18,6 +19,8 @@ starts at 4×, but play remains at normal speed until activated:
 The toggle is runtime state and starts off on a new app launch. Held input is
 released when the app pauses, opens a menu or loses its controller. A trigger
 already held across a pause does not count as another toggle press.
+If its release happened outside the app, an extra press-and-release may be
+needed after returning. Releases inside the pause menu and Settings are tracked.
 
 Game logic advances multiple times per displayed frame; the renderer keeps its
 59.83 Hz target rather than asking the displays to draw 240 frames per second.
@@ -27,15 +30,26 @@ not play a delayed backlog.
 
 ## Shiny odds
 
-The selector offers normal odds and boosts of up to **4×, 16× or 64×**.
-The displayed odds are approximate targets. Only newly generated ordinary wild
-encounters are affected. Existing Pokémon, starters, gifts, trainers, roamers
-and fixed/scripted creation retain their original behavior.
+The selector has five choices:
+
+| Choice | Setting |
+|---|---|
+| **Original — 1 in 8,192** | Default; boost off |
+| **1 in 2,048** | Approximate target |
+| **1 in 512** | Approximate target |
+| **1 in 256** | Approximate target |
+| **1 in 128** | Approximate target |
+
+Boosted odds are approximate targets, not guaranteed encounter rates. Only
+newly generated ordinary wild encounters are affected. Existing Pokémon,
+starters, gifts, trainers, roamers and fixed/scripted creation retain their
+original behavior.
 
 The boost creates a genuine Gen III shiny personality before the Pokémon is
 encrypted. It preserves nature, gender, ability parity and species-specific
 Unown/Wurmple constraints. If those constraints cannot be satisfied together,
-the original personality is retained. Natural shinies are never removed, and
+the original personality is retained, so the achieved shiny rate can be lower
+than the selected target. Natural shinies are never removed, and
 no extra random-number draws are introduced. A boosted shiny stays shiny when
 its save is opened in the original GBA game or a compatible emulator.
 

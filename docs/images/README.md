@@ -18,6 +18,10 @@ the port's MIT code licence does not relicense them.
 
 ## Gameplay screenshots
 
+[shiny-odds.png](shiny-odds.png) shows the actual five-choice Android picker,
+with original odds selected. It is an unedited capture from the local signed
+alpha.5 development probe. [Build and capture details](shiny-odds-capture.json).
+
 These are unmodified screenshots of the actual Android ARM game and app,
 captured on 2026-10-02 and 2026-10-03. Each capture record identifies its build;
 [VALIDATION.md](../VALIDATION.md) records the tested coverage.

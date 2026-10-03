@@ -1,0 +1,13 @@
+{
+  "file": "shiny-odds.png",
+  "captured_at": "2026-10-03T10:41:53.088765+00:00",
+  "environment": "API 30 Android emulator; real ARMv7 game with native bridge; 1080\u00d71920 portrait, 420 dpi",
+  "capture": "Unmodified adb screencap of the real Android preference dialog. Original odds selected; all five entries visible. No pixel edits.",
+  "build": "Release-signed local 0.1.0-alpha.5-probe, version code 4",
+  "code_commit": "3293874bed037560469e274408542ab19997ddc3",
+  "apk_sha256": "bd05aa081c4e8705045abb123604a90b2ed1f3e145022b58b5b1bf525cdd5a39",
+  "engine_abi": "07329dad",
+  "sha256": "6608b003639e1e784fa033aff3a2aa2f66eb1aebdd7099afb5b20550e36654ec",
+  "source": "build/evidence/pause-odds/shiny-odds-picker.png",
+  "note": "Illustrates the shiny picker. This probe precedes the later held-shoulder input correction; no pause-shortcut correctness is claimed by this capture."
+}

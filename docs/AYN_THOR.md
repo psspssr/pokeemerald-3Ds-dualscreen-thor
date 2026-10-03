@@ -1,4 +1,4 @@
-# Target device: AYN Thor
+# AYN Thor setup and controls
 
 The primary target is the [AYN Thor](https://www.ayntec.com/products/ayn-thor),
 a clamshell Android handheld with two touch screens and built-in controls —
@@ -36,11 +36,9 @@ Dual-display mode is the default when a second built-in display is present:
   default in dual-display mode. If enabled in Settings with automatic
   visibility, use **Show controls / Hide controls** in the pause menu.
   Tapping outside the game picture also reveals them when using Fit mode.
-- **Mapping**: by position like a Nintendo console (Thor's bottom face button
-  is 3DS B, right is A, left is Y, top is X); left stick is the circle pad;
-  L1/R1 are L/R. With optional fast-forward controls enabled, R2 toggles the
-  selected 2×/4× rate and L2 holds it. A label-based mapping is in Settings for
-  controllers set to the Xbox layout.
+- **Pause and settings**: press **L1 + R1 together** to open the Android
+  pause menu. Choose Resume to continue, or Settings to change the layout and
+  gameplay options. Individual L1/R1 presses still send the game's L/R inputs.
 - **Refresh target**: both screens use one 59.83 Hz game clock and separate
   EGL surfaces. The renderer requests no per-window vsync wait, though the
   display driver can still block during presentation. The actual 120 Hz and
@@ -51,6 +49,43 @@ Dual-display mode is the default when a second built-in display is present:
   dismissed and recreated with the activity. If the second
   display disappears, both screens move to the top display (a single-display
   layout) until it returns.
+
+## Controls and shortcuts
+
+The default face-button layout follows Nintendo positions. The Settings
+**Face button mapping → By label** option follows the controller's reported
+A/B/X/Y labels instead.
+
+| Game input / action | Thor or gamepad | Keyboard |
+|---|---|---|
+| D-pad / movement | D-pad; left stick is the circle pad | Arrow keys |
+| A — confirm | Right face button | X |
+| B — back | Bottom face button | Z |
+| X | Top face button | S |
+| Y | Left face button | A |
+| L / R | L1 / R1 individually | Q / W |
+| Start | Start | Enter |
+| Select | Select | Backspace or either Shift |
+| App pause menu / Settings | **L1 + R1 together**; Android Back also works | Escape |
+| Toggle fast-forward | R2 | Pause-menu action |
+| Hold fast-forward | L2 | Tab |
+
+Release the shortcut buttons before pressing them again. If you released a
+button while another app had focus, one extra press-and-release may be needed
+after returning.
+
+Enable fast-forward controls and select **2× or 4×** in
+**Settings → Gameplay → Quality of life** first. Audio is muted while speeding
+up. [Fast-forward behavior and other options](QUALITY_OF_LIFE.md).
+
+Touch the bottom display directly for game menus. To use optional on-screen
+buttons, enable **On-screen controls in dual-display mode**; with Auto
+visibility, choose **Show on-screen controls** from the pause menu. These
+buttons are hidden by default when a second display is connected.
+
+For a single-display device using landscape **Top screen only**, clicking
+either stick switches between the top and bottom game screens. It does not
+change the assignment of two physical displays.
 
 ## Screen scaling
 
@@ -72,9 +107,9 @@ scaling and control placement.
 
 ## Other dual-display handhelds
 
-Some devices report the bottom screen as the primary display and the top as
-the secondary one (AYANEO Pocket DS, Retroid's dual-screen add-on). Settings
-→ Display has "Top screen on: main display / second display" for them.
+Some devices report their displays in the opposite order. Use
+**Settings → Dual display → Top screen on** to choose the main or second
+display for the top game screen.
 
 ## Testing
 

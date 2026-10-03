@@ -1,5 +1,40 @@
 # Validation — Android previews
 
+## 0.1.0-alpha.5 — controller pause and shiny odds
+
+The release candidate adds **L1 + R1** for the app pause menu and five shiny
+choices: **Original (1 in 8,192), about 1 in 2,048, 512, 256 or 128**. Existing
+preferences retain their meaning; all boosts remain optional. The README now
+contains a compact controller/keyboard command sheet.
+
+All **74 app instrumentation tests** and release lint pass locally. Coverage
+includes both display windows, Settings, individual shoulders, controller
+identity, canceled events, held/repeated input, digital/analogue trigger
+combinations, disabling fast-forward and the five-choice preference mapping.
+Host checks and the native gameplay sanitizer suite also pass. The native
+engine and data ABI remain `07329dad`.
+
+Real ARM-game checks on API 30 used a kernel virtual controller, so events
+passed through Android's input dispatcher. This reproduced a held-button bug:
+after another key was pressed, Android could deliver a hardware repeat as a
+new DOWN with fresh timestamps and repeat count zero. Shortcut guards now
+require an observed release. Digital and analogue R2 release evidence are
+tracked independently, including releases inside the pause menu and Settings.
+
+The final matching-source probe passed separated and same-report held-repeat
+replays for L1/R1 and R2, both trigger release orders in instrumentation, and
+real mixed-trigger partial/full-release checks. Genuine releases rearmed the
+shortcuts; held repeats did not reopen pause or flip fast-forward. The probe
+APK SHA-256 is
+`b79f4586a86e42a8dc0de6367cd779536d078045739620a3af10a7aaae86dfcb`.
+Screenshots and test logs are recorded in `build/evidence/pause-odds/`.
+
+The emulator display-progress test now allows a bounded wait for both
+surfaces to advance, retaining its running-state, display-assignment and
+pixel checks. It no longer treats a single slow software-rendering interval
+as a hardware frame-rate requirement. Physical Thor, audible output and
+sustained hardware performance remain unverified.
+
 ## 0.1.0-alpha.4 — full panels and gameplay repairs
 
 The [alpha.4 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.4)
