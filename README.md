@@ -30,11 +30,19 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 ## See it in action
 
 <p align="center">
-  <a href="docs/images/voxel-world.png"><img src="docs/images/voxel-world.png" width="960" alt="Voxel Littleroot Town beside the bottom-screen Hoenn map and touch menu"></a>
-  <br><em>The voxel overworld, with your map and menus always within reach.</em>
+  <a href="docs/images/classic-town.png"><img src="docs/images/classic-town.png" width="960" alt="Classic 2D Oldale Town and its Pokémon Center beside the bottom-screen Hoenn map and touch menu"></a>
+  <br><em>Classic 2D Hoenn, with your map and menus always within reach.</em>
 </p>
 
 <table>
+  <tr>
+    <td width="50%"><a href="docs/images/classic-route.png"><img src="docs/images/classic-route.png" width="480" alt="Original 2D Route 101 with trees, tall grass and ledges, with voxel rendering disabled"></a></td>
+    <td width="50%"><a href="docs/images/voxel-world.png"><img src="docs/images/voxel-world.png" width="480" alt="The optional voxel view of Littleroot Town beside the same bottom-screen touch menu"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>The original 2D look</strong><br>Explore Hoenn with voxel rendering off.</td>
+    <td align="center"><strong>An optional new perspective</strong><br>Switch the voxel overworld on in OPTION.</td>
+  </tr>
   <tr>
     <td width="50%"><a href="docs/images/battle.png"><img src="docs/images/battle.png" width="480" alt="A wild Pokémon battle with move choices on the bottom touch screen"></a></td>
     <td width="50%"><a href="docs/images/party-summary.png"><img src="docs/images/party-summary.png" width="480" alt="Torchic's party summary beside the overworld in Professor Birch's lab"></a></td>

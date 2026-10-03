@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-10-03",
+  "release": "v0.1.0-alpha.3",
+  "code_commit": "814a1a3eaa4ec3dad4de0065c483bf19406f2f59",
+  "apk_sha256": "f584eb7cb60009c20076f588b81e19873ecb42127a5b6f9e4f0907738564bc00",
+  "environment": "Android API30 emulator, actual ARMv7 game through native bridge, SwiftShader",
+  "layout": "Combined landscape1920x1080, controls hidden, VOXEL3D off. These are single-window gallery captures, not photographs of physical Thor panels.",
+  "capture": "Unmodified adb screencap PNGs; normal gameplay inputs, no save/progression/memory or pixel edits",
+  "images": [
+    {
+      "file": "classic-town.png",
+      "source": "fullscreen-sweep/classic-town.png",
+      "scene": "Classic 2D Oldale Town and Pokemon Center beside the bottom-screen Hoenn map",
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "sha256": "2e25147c26cb482412254dd77547f50ac5868997b19f35e17a91f5e6585a0868"
+    },
+    {
+      "file": "classic-route.png",
+      "source": "fullscreen-sweep/gallery-north.png",
+      "scene": "Classic 2D Route 101 trees, grass and ledges beside the touch map",
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "sha256": "4704c5855c16788bdaca32917f7e06c047d6c22e1beb1e6f14159f0361e2637a"
+    }
+  ]
+}
