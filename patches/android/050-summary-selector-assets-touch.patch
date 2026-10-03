@@ -1,0 +1,333 @@
+diff --git a/src/pokemon_summary_screen.c b/src/pokemon_summary_screen.c
+--- a/src/pokemon_summary_screen.c
++++ b/src/pokemon_summary_screen.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "main.h"
+ #include "battle.h"
+ #include "battle_anim.h"
+@@ -1522,10 +1525,88 @@
+ 
+ void CtrSummary_Tap(s16 x, s16 y)
+ {
++    if (gMain.callback2 != MainCB2 || sMonSummaryScreen == NULL
++        || (sMonSummaryScreen->mode == SUMMARY_MODE_SELECT_MOVE
++            && (gPaletteFade.active || MenuHelpers_ShouldWaitForLinkRecv() == TRUE
++                || FuncIsActiveTask(Task_ShowPowerAccWindow)
++                || (!FuncIsActiveTask(Task_HandleReplaceMoveInput)
++                    && !FuncIsActiveTask(Task_HandleInputCantForgetHMsMoves)))))
++    {
++        sCtrTap.pending = FALSE;
++        return;
++    }
+     sCtrTap.pending = TRUE;
+     sCtrTap.x = x;
+     sCtrTap.y = y;
+     sCtrTap.frame = gMain.vblankCounter1;
++}
++
++enum CtrSummaryMoveTouch
++{
++    CTR_MOVE_TOUCH_NONE = -1, CTR_MOVE_TOUCH_OK = -2, CTR_MOVE_TOUCH_BACK = -3,
++    CTR_MOVE_TOUCH_PREV = -4, CTR_MOVE_TOUCH_NEXT = -5,
++};
++
++static s16 CtrSummary_MoveTouchChoice(void)
++{
++    s16 x = sCtrTap.x, y = sCtrTap.y;
++    if (!sCtrTap.pending)
++        return CTR_MOVE_TOUCH_NONE;
++    sCtrTap.pending = FALSE;
++    if (gMain.callback2 != MainCB2 || sMonSummaryScreen == NULL
++        || sMonSummaryScreen->mode != SUMMARY_MODE_SELECT_MOVE
++        || gPaletteFade.active || MenuHelpers_ShouldWaitForLinkRecv() == TRUE
++        || FuncIsActiveTask(Task_ShowPowerAccWindow)
++        || gMain.vblankCounter1 - sCtrTap.frame > 30
++        || x < 0 || x >= DISPLAY_WIDTH || y < 0 || y >= DISPLAY_HEIGHT)
++        return CTR_MOVE_TOUCH_NONE;
++    if (y < 16 && x >= 176)
++        return x < 208 ? CTR_MOVE_TOUCH_OK : CTR_MOVE_TOUCH_BACK;
++    if (y < 16 && x >= 86 && x < 150)
++    {
++        s16 page = (x - 86) / 16;
++        if (page >= sMonSummaryScreen->minPageIndex && page <= sMonSummaryScreen->maxPageIndex
++            && page != sMonSummaryScreen->currPageIndex)
++            return page < sMonSummaryScreen->currPageIndex ? CTR_MOVE_TOUCH_PREV : CTR_MOVE_TOUCH_NEXT;
++    }
++    if (x >= 80 && y >= 32 && y < 112)
++    {
++        s16 row = (y - 32) / 16;
++        if (row == MAX_MON_MOVES || sMonSummaryScreen->summary.moves[row] != MOVE_NONE)
++            return row;
++    }
++    return CTR_MOVE_TOUCH_NONE;
++}
++
++static u16 CtrSummary_MoveTouchKeys(s16 choice)
++{
++    switch (choice)
++    {
++    case CTR_MOVE_TOUCH_OK: return A_BUTTON;
++    case CTR_MOVE_TOUCH_BACK: return B_BUTTON;
++    case CTR_MOVE_TOUCH_PREV: return DPAD_LEFT;
++    case CTR_MOVE_TOUCH_NEXT: return DPAD_RIGHT;
++    default: return 0;
++    }
++}
++
++static void CtrSummary_SelectTouchedMove(u8 taskId, s16 row, bool8 warning)
++{
++    s16 *data = gTasks[taskId].data;
++    // A row tap only previews. OK (or A) confirms through the existing rules.
++    if (warning && row == sMonSummaryScreen->firstMoveIndex)
++        return;
++    data[0] = MAX_MON_MOVES;
++    if (warning)
++        data[1] = 1;
++    for (unsigned step = 0; step <= MAX_MON_MOVES && sMonSummaryScreen->firstMoveIndex != row; ++step)
++        ChangeSelectedMove(data, 1, &sMonSummaryScreen->firstMoveIndex);
++    KeepMoveSelectorVisible(SPRITE_ARR_ID_MOVE_SELECTOR1);
++    if (warning)
++    {
++        data[1] = 0;
++        gTasks[taskId].func = Task_HandleReplaceMoveInput;
++    }
+ }
+ 
+ static bool8 CtrSummary_TouchInput(u8 taskId)
+@@ -2223,6 +2304,9 @@
+ 
+ static void Task_SetHandleReplaceMoveInput(u8 taskId)
+ {
++#ifdef PLATFORM_3DS
++    sCtrTap.pending = FALSE;
++#endif
+     SetNewMoveTypeIcon();
+     CreateMoveSelectorSprites(SPRITE_ARR_ID_MOVE_SELECTOR1);
+     gTasks[taskId].func = Task_HandleReplaceMoveInput;
+@@ -2231,30 +2315,42 @@
+ static void Task_HandleReplaceMoveInput(u8 taskId)
+ {
+     s16 *data = gTasks[taskId].data;
++    u16 keys = gMain.newKeys;
++#ifdef PLATFORM_3DS
++    s16 touch = CtrSummary_MoveTouchChoice();
++    keys |= CtrSummary_MoveTouchKeys(touch);
++#endif
+ 
+     if (MenuHelpers_ShouldWaitForLinkRecv() != TRUE)
+     {
+         if (gPaletteFade.active != TRUE)
+         {
+-            if (JOY_NEW(DPAD_UP))
++#ifdef PLATFORM_3DS
++            if (touch >= 0)
++            {
++                CtrSummary_SelectTouchedMove(taskId, touch, FALSE);
++                return;
++            }
++#endif
++            if ((keys & (DPAD_UP)))
+             {
+                 data[0] = 4;
+                 ChangeSelectedMove(data, -1, &sMonSummaryScreen->firstMoveIndex);
+             }
+-            else if (JOY_NEW(DPAD_DOWN))
++            else if ((keys & (DPAD_DOWN)))
+             {
+                 data[0] = 4;
+                 ChangeSelectedMove(data, 1, &sMonSummaryScreen->firstMoveIndex);
+             }
+-            else if (JOY_NEW(DPAD_LEFT) || GetLRKeysPressed() == MENU_L_PRESSED)
++            else if ((keys & (DPAD_LEFT)) || GetLRKeysPressed() == MENU_L_PRESSED)
+             {
+                 ChangePage(taskId, -1);
+             }
+-            else if (JOY_NEW(DPAD_RIGHT) || GetLRKeysPressed() == MENU_R_PRESSED)
++            else if ((keys & (DPAD_RIGHT)) || GetLRKeysPressed() == MENU_R_PRESSED)
+             {
+                 ChangePage(taskId, 1);
+             }
+-            else if (JOY_NEW(A_BUTTON))
++            else if ((keys & (A_BUTTON)))
+             {
+                 if (CanReplaceMove() == TRUE)
+                 {
+@@ -2270,7 +2366,7 @@
+                     ShowCantForgetHMsWindow(taskId);
+                 }
+             }
+-            else if (JOY_NEW(B_BUTTON))
++            else if ((keys & (B_BUTTON)))
+             {
+                 StopPokemonAnimations();
+                 PlaySE(SE_SELECT);
+@@ -2308,9 +2404,21 @@
+ {
+     s16 *data = gTasks[taskId].data;
+     u16 move;
++    u16 keys = gMain.newKeys;
++#ifdef PLATFORM_3DS
++    s16 touch = CtrSummary_MoveTouchChoice();
++    keys |= CtrSummary_MoveTouchKeys(touch);
++#endif
+     if (FuncIsActiveTask(Task_ShowPowerAccWindow) != 1)
+     {
+-        if (JOY_NEW(DPAD_UP))
++#ifdef PLATFORM_3DS
++        if (touch >= 0)
++        {
++            CtrSummary_SelectTouchedMove(taskId, touch, TRUE);
++            return;
++        }
++#endif
++        if ((keys & (DPAD_UP)))
+         {
+             data[1] = 1;
+             data[0] = 4;
+@@ -2318,7 +2426,7 @@
+             data[1] = 0;
+             gTasks[taskId].func = Task_HandleReplaceMoveInput;
+         }
+-        else if (JOY_NEW(DPAD_DOWN))
++        else if ((keys & (DPAD_DOWN)))
+         {
+             data[1] = 1;
+             data[0] = 4;
+@@ -2326,7 +2434,7 @@
+             data[1] = 0;
+             gTasks[taskId].func = Task_HandleReplaceMoveInput;
+         }
+-        else if (JOY_NEW(DPAD_LEFT) || GetLRKeysPressed() == MENU_L_PRESSED)
++        else if ((keys & (DPAD_LEFT)) || GetLRKeysPressed() == MENU_L_PRESSED)
+         {
+             if (sMonSummaryScreen->currPageIndex != PSS_PAGE_BATTLE_MOVES)
+             {
+@@ -2340,7 +2448,7 @@
+                 HandleAppealJamTilemap(9, -2, move);
+             }
+         }
+-        else if (JOY_NEW(DPAD_RIGHT) || GetLRKeysPressed() == MENU_R_PRESSED)
++        else if ((keys & (DPAD_RIGHT)) || GetLRKeysPressed() == MENU_R_PRESSED)
+         {
+             if (sMonSummaryScreen->currPageIndex != PSS_PAGE_CONTEST_MOVES)
+             {
+@@ -2354,7 +2462,7 @@
+                 HandleAppealJamTilemap(9, -2, move);
+             }
+         }
+-        else if (JOY_NEW(A_BUTTON | B_BUTTON))
++        else if ((keys & (A_BUTTON | B_BUTTON)))
+         {
+             ClearWindowTilemap(PSS_LABEL_WINDOW_PORTRAIT_SPECIES);
+             if (!gSprites[sMonSummaryScreen->spriteIds[SPRITE_ARR_ID_STATUS]].invisible)
+@@ -2448,15 +2556,20 @@
+     CpuFill16(unkStruct->field_4, alloced, unkStruct->field_6 * 2 * unkStruct->field_7);
+     if (unkStruct->field_6 != c)
+     {
++        const u16 *gfx = unkStruct->gfx;
++#ifdef PORT_BRIDGE
++        // Resolve the base before offsets can alias another tiny INCBIN stub.
++        gfx = Port_ResolveAssetPointer(gfx);
++#endif
+         if (!d)
+         {
+             for (i = 0; i < unkStruct->field_7; i++)
+-                CpuCopy16(&unkStruct->gfx[c + unkStruct->field_6 * i], &alloced[unkStruct->field_6 * i], (unkStruct->field_6 - c) * 2);
++                CpuCopy16(&gfx[c + unkStruct->field_6 * i], &alloced[unkStruct->field_6 * i], (unkStruct->field_6 - c) * 2);
+         }
+         else
+         {
+             for (i = 0; i < unkStruct->field_7; i++)
+-                CpuCopy16(&unkStruct->gfx[unkStruct->field_6 * i], &alloced[c + unkStruct->field_6 * i], (unkStruct->field_6 - c) * 2);
++                CpuCopy16(&gfx[unkStruct->field_6 * i], &alloced[c + unkStruct->field_6 * i], (unkStruct->field_6 - c) * 2);
+         }
+     }
+ 
+@@ -2617,6 +2730,11 @@
+ static void TilemapFiveMovesDisplay(u16 *dst, u16 palette, bool8 remove)
+ {
+     u16 i, id;
++    const u16 *tilemap = gSummaryScreen_MoveEffect_Cancel_Tilemap;
++#ifdef PORT_BRIDGE
++    // The executable contains one u16, not the 60 tile entries used below.
++    tilemap = Port_ResolveAssetPointer(tilemap);
++#endif
+ 
+     palette *= 0x1000;
+     id = 0x56A;
+@@ -2624,18 +2742,18 @@
+     {
+         for (i = 0; i < 20; i++)
+         {
+-            dst[id + i] = gSummaryScreen_MoveEffect_Cancel_Tilemap[i] + palette;
+-            dst[id + i + 0x20] = gSummaryScreen_MoveEffect_Cancel_Tilemap[i] + palette;
+-            dst[id + i + 0x40] = gSummaryScreen_MoveEffect_Cancel_Tilemap[i + 20] + palette;
++            dst[id + i] = tilemap[i] + palette;
++            dst[id + i + 0x20] = tilemap[i] + palette;
++            dst[id + i + 0x40] = tilemap[i + 20] + palette;
+         }
+     }
+     else // Remove
+     {
+         for (i = 0; i < 20; i++)
+         {
+-            dst[id + i] = gSummaryScreen_MoveEffect_Cancel_Tilemap[i + 20] + palette;
+-            dst[id + i + 0x20] = gSummaryScreen_MoveEffect_Cancel_Tilemap[i + 40] + palette;
+-            dst[id + i + 0x40] = gSummaryScreen_MoveEffect_Cancel_Tilemap[i + 40] + palette;
++            dst[id + i] = tilemap[i + 20] + palette;
++            dst[id + i + 0x20] = tilemap[i + 40] + palette;
++            dst[id + i + 0x40] = tilemap[i + 40] + palette;
+         }
+     }
+ }
+@@ -2860,6 +2978,25 @@
+     BlitBitmapToWindow(windowId, button, x, 0, 16, 16);
+ }
+ 
++#ifdef PLATFORM_3DS
++static void CtrSummary_PrintMoveTouchButtons(void)
++{
++    static const u8 back[] = _("BACK");
++    if (sMonSummaryScreen->mode != SUMMARY_MODE_SELECT_MOVE)
++        return;
++    FillWindowPixelBuffer(PSS_LABEL_WINDOW_PROMPT_CANCEL, PIXEL_FILL(0));
++    PrintTextOnWindow(PSS_LABEL_WINDOW_PROMPT_CANCEL, gText_Ok, 4, 1, 0, 0);
++    PrintTextOnWindow(PSS_LABEL_WINDOW_PROMPT_CANCEL, back, 34, 1, 0, 0);
++}
++
++static void CtrSummary_PutMoveTouchButtons(u8 page)
++{
++    if (sMonSummaryScreen->mode == SUMMARY_MODE_SELECT_MOVE
++        && (page == PSS_PAGE_BATTLE_MOVES || page == PSS_PAGE_CONTEST_MOVES))
++        PutWindowTilemap(PSS_LABEL_WINDOW_PROMPT_CANCEL);
++}
++#endif
++
+ static void PrintPageNamesAndStats(void)
+ {
+     int stringXPos;
+@@ -2877,6 +3014,9 @@
+         iconXPos = 0;
+     PrintAOrBButtonIcon(PSS_LABEL_WINDOW_PROMPT_CANCEL, FALSE, iconXPos);
+     PrintTextOnWindow(PSS_LABEL_WINDOW_PROMPT_CANCEL, gText_Cancel2, stringXPos, 1, 0, 0);
++#ifdef PLATFORM_3DS
++    CtrSummary_PrintMoveTouchButtons();
++#endif
+ 
+     stringXPos = GetStringRightAlignXOffset(FONT_NORMAL, gText_Info, 62);
+     iconXPos = stringXPos - 16;
+@@ -2964,6 +3104,10 @@
+         }
+         break;
+     }
++
++#ifdef PLATFORM_3DS
++    CtrSummary_PutMoveTouchButtons(page);
++#endif
+ 
+     for (i = 0; i < ARRAY_COUNT(sMonSummaryScreen->windowIds); i++)
+         PutWindowTilemap(sMonSummaryScreen->windowIds[i]);
