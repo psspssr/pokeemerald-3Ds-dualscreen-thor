@@ -10,6 +10,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.widget.FrameLayout
+import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ActivityScenario
@@ -64,6 +65,18 @@ class PauseShortcutTest {
         KeyEvent.ACTION_UP, press.keyCode, 0, 0, press.deviceId, 0, 0, press.source)
 
     private fun send(input: PhysicalInput, event: KeyEvent) { assertTrue(input.onKey(event)) }
+
+    private fun keyAt(code: Int, time: Long, device: Int = 7, eventTime: Long = time) =
+        KeyEvent(time, eventTime, KeyEvent.ACTION_DOWN, code, 0, 0, device, 0, 0, InputDevice.SOURCE_GAMEPAD)
+
+    private fun resumeBoundary(input: PhysicalInput): Long {
+        repeat(100) {
+            val before = SystemClock.uptimeMillis()
+            input.onInputResumed()
+            if (SystemClock.uptimeMillis() == before) return before
+        }
+        error("could not observe a single-millisecond input boundary")
+    }
 
     @Test fun bothOrdersAndMappingsPauseOnceBeforeReentrantClear() {
         inst.runOnMainSync {
@@ -167,6 +180,150 @@ class PauseShortcutTest {
         }
     }
 
+    @Test fun hardwareRepeatsWithRebasedDownTimeCannotReopenPause() {
+        inst.runOnMainSync {
+            for (first in listOf(KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1)) {
+                val second = if (first == KeyEvent.KEYCODE_BUTTON_L1) KeyEvent.KEYCODE_BUTTON_R1 else KeyEvent.KEYCODE_BUTTON_L1
+                val owner = Owner()
+                val input = owner.input
+                send(input, down(first)); send(input, down(second))
+                assertEquals(1, owner.pauses)
+                input.onInputResumed()
+                // Linux EV_KEY repeats can arrive with repeatCount=0 and a
+                // downTime rebased by an unrelated key on the same controller.
+                val l2 = down(KeyEvent.KEYCODE_BUTTON_L2)
+                send(input, l2); send(input, up(l2))
+                SystemClock.sleep(2)
+                val later = SystemClock.uptimeMillis()
+                repeat(3) {
+                    send(input, keyAt(first, l2.downTime, eventTime = later))
+                    send(input, keyAt(second, l2.downTime, eventTime = later))
+                }
+                assertEquals("rebased hardware repeat reopened pause", 1, owner.pauses)
+                assertEquals(0, InputHub.sentKeys)
+                // A release may still be missed while another Activity owns
+                // input. Separate fresh presses must remain usable afterward.
+                send(input, down(first)); send(input, down(second))
+                assertEquals(2, owner.pauses)
+                assertEquals(0, InputHub.sentKeys)
+            }
+        }
+    }
+
+    @Test fun sameTimestampOtherKeyCannotRearmBlockedShoulders() {
+        inst.runOnMainSync {
+            val owner = Owner()
+            val input = owner.input
+            send(input, down(KeyEvent.KEYCODE_BUTTON_L1)); send(input, down(KeyEvent.KEYCODE_BUTTON_R1))
+            input.onInputResumed()
+            val l2 = down(KeyEvent.KEYCODE_BUTTON_L2)
+            send(input, l2)
+            // The unrelated DOWN and both held repeats can share a kernel
+            // report/millisecond; downTime==eventTime alone is not enough.
+            val left = keyAt(KeyEvent.KEYCODE_BUTTON_L1, l2.eventTime)
+            val right = keyAt(KeyEvent.KEYCODE_BUTTON_R1, l2.eventTime)
+            repeat(3) { send(input, left); send(input, right) }
+            send(input, up(l2))
+            assertEquals(1, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
+
+            // The collision guard belongs to one controller, not every
+            // device producing an event within the same millisecond.
+            val otherDevice = down(KeyEvent.KEYCODE_BUTTON_L2, device = 8)
+            input.observeKeyEvent(otherDevice)
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_L1, otherDevice.eventTime))
+            assertEquals(CtrKeys.L, InputHub.sentKeys)
+            send(input, down(KeyEvent.KEYCODE_BUTTON_R1))
+            assertEquals(2, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
+        }
+    }
+
+    @Test fun blockedShouldersAtResumeBoundaryRequireRelease() {
+        inst.runOnMainSync {
+            val owner = Owner()
+            val input = owner.input
+            send(input, down(KeyEvent.KEYCODE_BUTTON_L1)); send(input, down(KeyEvent.KEYCODE_BUTTON_R1))
+            SystemClock.sleep(2)
+            val boundary = resumeBoundary(input)
+            // A dialog-owned key may rebase a held shoulder exactly when
+            // Resume enables input. Unknown freshness must stay blocked.
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_L1, boundary))
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_R1, boundary))
+            assertEquals(1, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
+
+            val releasedLeft = keyAt(KeyEvent.KEYCODE_BUTTON_L1, boundary)
+            val releasedRight = keyAt(KeyEvent.KEYCODE_BUTTON_R1, boundary)
+            input.observeKeyEvent(up(releasedLeft)); input.observeKeyEvent(up(releasedRight))
+            assertEquals(0, InputHub.sentKeys)
+            val freshTime = down(KeyEvent.KEYCODE_BUTTON_L1).eventTime
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_L1, freshTime))
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_R1, freshTime))
+            assertEquals("observed releases should permit simultaneous new shoulders", 2, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
+        }
+    }
+
+    @Test fun shouldersFirstPressedInDialogStayBlockedAcrossRebasedRepeats() {
+        inst.runOnMainSync {
+            val owner = Owner()
+            val input = owner.input
+            send(input, down(KeyEvent.KEYCODE_ESCAPE))
+            assertEquals(1, owner.pauses)
+            val left = down(KeyEvent.KEYCODE_BUTTON_L1)
+            val right = down(KeyEvent.KEYCODE_BUTTON_R1)
+            input.observeKeyEvent(left, suspended = true)
+            input.observeKeyEvent(right, suspended = true)
+            assertEquals(0, InputHub.sentKeys)
+            input.onInputResumed()
+            val l2 = down(KeyEvent.KEYCODE_BUTTON_L2)
+            send(input, l2)
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_L1, l2.eventTime))
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_R1, l2.eventTime))
+            send(input, up(l2))
+            assertEquals("dialog-owned shoulder presses were not quarantined", 1, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
+            input.observeKeyEvent(up(left)); input.observeKeyEvent(up(right))
+            val freshTime = down(KeyEvent.KEYCODE_BUTTON_L1).eventTime
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_L1, freshTime))
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_R1, freshTime))
+            assertEquals(2, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
+        }
+    }
+
+    @Test fun canceledShoulderUpsDoNotCountAsPhysicalReleases() {
+        inst.runOnMainSync {
+            val owner = Owner()
+            val input = owner.input
+            val left = down(KeyEvent.KEYCODE_BUTTON_L1)
+            send(input, left)
+            // Focus cancellation can precede clear(), before any pause guard
+            // existed. It releases game input without proving physical UP.
+            send(input, KeyEvent.changeFlags(up(left), KeyEvent.FLAG_CANCELED))
+            assertEquals(0, InputHub.sentKeys)
+            send(input, down(KeyEvent.KEYCODE_ESCAPE))
+            val right = down(KeyEvent.KEYCODE_BUTTON_R1)
+            input.observeKeyEvent(right, suspended = true)
+            input.observeKeyEvent(KeyEvent.changeFlags(up(right), KeyEvent.FLAG_CANCELED), suspended = true)
+            input.onInputResumed()
+            val l2 = down(KeyEvent.KEYCODE_BUTTON_L2)
+            send(input, l2)
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_L1, l2.eventTime))
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_R1, l2.eventTime))
+            send(input, up(l2))
+            assertEquals("focus cancellation rearmed physical shoulders", 1, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
+            send(input, up(left)); send(input, up(right))
+            val freshTime = down(KeyEvent.KEYCODE_BUTTON_L1).eventTime
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_L1, freshTime))
+            send(input, keyAt(KeyEvent.KEYCODE_BUTTON_R1, freshTime))
+            assertEquals(2, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
+        }
+    }
+
     @Test fun resumeRejectsShouldersFirstPressedWhileTheGameWasSuspended() {
         inst.runOnMainSync {
             val owner = Owner()
@@ -189,15 +346,7 @@ class PauseShortcutTest {
         inst.runOnMainSync {
             val owner = Owner()
             val input = owner.input
-            var boundary: Long? = null
-            var attempts = 0
-            while (boundary == null && attempts++ < 100) {
-                val before = SystemClock.uptimeMillis()
-                input.onInputResumed()
-                if (SystemClock.uptimeMillis() == before) boundary = before
-            }
-            assertNotNull("could not observe a single-millisecond input boundary", boundary)
-            val time = boundary!!
+            val time = resumeBoundary(input)
             val left = KeyEvent(time, time, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_L1,
                 0, 0, 7, 0, 0, InputDevice.SOURCE_GAMEPAD)
             val right = KeyEvent(time, time, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_R1,
@@ -271,6 +420,58 @@ class PauseShortcutTest {
             }
         }
         ready(scenario)
+    }
+
+    @Test fun dialogWindowObservesShoulderReleasesAndHiddenPresses() {
+        val field = GameActivity::class.java.getDeclaredField("menuDialog").apply { isAccessible = true }
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            ready(scenario)
+            val left = down(KeyEvent.KEYCODE_BUTTON_L1, 904)
+            val right = down(KeyEvent.KEYCODE_BUTTON_R1, 904)
+            scenario.onActivity { it.dispatchKeyEvent(left); it.dispatchKeyEvent(right) }
+            assertEquals(NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
+            scenario.onActivity { activity ->
+                // WindowManager delivers focused-dialog keys directly to
+                // Dialog.dispatchKeyEvent, bypassing Activity.dispatchKeyEvent.
+                val dialog = field.get(activity) as AlertDialog
+                dialog.dispatchKeyEvent(up(left)); dialog.dispatchKeyEvent(up(right))
+            }
+            closeMenu(scenario)
+            val now = down(KeyEvent.KEYCODE_BUTTON_L1, 904).eventTime
+            scenario.onActivity {
+                it.dispatchKeyEvent(keyAt(KeyEvent.KEYCODE_BUTTON_L1, now, device = 904))
+                it.dispatchKeyEvent(keyAt(KeyEvent.KEYCODE_BUTTON_R1, now, device = 904))
+            }
+            assertEquals("dialog consumed releases without rearming the chord", NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
+            assertEquals(0, HostProbe.snapshot()[1])
+            closeMenu(scenario)
+
+            scenario.onActivity { it.dispatchKeyEvent(down(KeyEvent.KEYCODE_ESCAPE)) }
+            val hiddenLeft = down(KeyEvent.KEYCODE_BUTTON_L1, 905)
+            val hiddenRight = down(KeyEvent.KEYCODE_BUTTON_R1, 905)
+            scenario.onActivity { activity ->
+                val dialog = field.get(activity) as AlertDialog
+                dialog.dispatchKeyEvent(hiddenLeft); dialog.dispatchKeyEvent(hiddenRight)
+            }
+            closeMenu(scenario)
+            val l2 = down(KeyEvent.KEYCODE_BUTTON_L2, 905)
+            scenario.onActivity {
+                it.dispatchKeyEvent(l2)
+                it.dispatchKeyEvent(keyAt(KeyEvent.KEYCODE_BUTTON_L1, l2.eventTime, device = 905))
+                it.dispatchKeyEvent(keyAt(KeyEvent.KEYCODE_BUTTON_R1, l2.eventTime, device = 905))
+                it.dispatchKeyEvent(up(l2))
+            }
+            assertEquals("held shoulders first pressed in a dialog reopened it", NativeBridge.STATE_RUNNING, HostProbe.snapshot()[0])
+            assertEquals(0, HostProbe.snapshot()[1])
+            scenario.onActivity { it.dispatchKeyEvent(up(hiddenLeft)); it.dispatchKeyEvent(up(hiddenRight)) }
+            val freshTime = down(KeyEvent.KEYCODE_BUTTON_L1, 905).eventTime
+            scenario.onActivity {
+                it.dispatchKeyEvent(keyAt(KeyEvent.KEYCODE_BUTTON_L1, freshTime, device = 905))
+                it.dispatchKeyEvent(keyAt(KeyEvent.KEYCODE_BUTTON_R1, freshTime, device = 905))
+            }
+            assertEquals(NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
+            closeMenu(scenario)
+        }
     }
 
     @Test fun mainWindowRoutesChordAndClearsReplaysAcrossMenuAndActivityResume() {

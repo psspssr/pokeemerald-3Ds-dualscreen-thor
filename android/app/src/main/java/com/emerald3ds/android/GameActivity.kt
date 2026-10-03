@@ -357,6 +357,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             .setNegativeButton(R.string.shiny_flee_stay) { _, _ -> answer(false) }
             .setPositiveButton(R.string.shiny_flee_run) { _, _ -> answer(true) }
             .setOnCancelListener { answer(false) }
+            .setOnKeyListener { _, _, event -> physical.observeKeyEvent(event, suspended = true); false }
             .setOnDismissListener {
                 answer(false)
                 shinyDialog = null
@@ -496,6 +497,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     // ── Input ────────────────────────────────────────────────────────────
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        physical.observeKeyEvent(event, suspended = !acceptsGameInput())
         if (shinyDialog?.dispatchKeyEvent(event) == true) return true
         if (menuShown && menuDialog?.dispatchKeyEvent(event) == true) return true
         if (acceptsGameInput() && physical.onKey(event)) return true
@@ -544,6 +546,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         } else -1
         menuDialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.menu_title)
+            .setOnKeyListener { _, _, event -> physical.observeKeyEvent(event, suspended = true); false }
             .setItems(items.toTypedArray()) { _, which ->
                 when (which) {
                     1 -> openSettings()

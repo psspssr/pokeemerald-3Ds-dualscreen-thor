@@ -244,13 +244,162 @@ class GameplayOptionsTest {
             assertTrue(input.onKey(KeyEvent(previousPress)))
             assertEquals(1, toggles)
             // Its physical release may have reached the dialog instead of
-            // the game. A fresh key downTime is still a reliable new edge.
+            // the game. A distinct later DOWN can recover that missed UP.
             SystemClock.sleep(2)
             key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
             axes(input, 0f, 1f)
             assertEquals(2, toggles)
             key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
             axes(input, 0f, 0f)
+            input.clear()
+        }
+    }
+
+    @Test fun heldR2RebasedByL2DoesNotToggleAgainAfterShoulderPause() {
+        instrumentation.runOnMainSync {
+            val state = FastForwardState { }.apply { configure(GameplayOptions(fastForwardEnabled = true)) }
+            var toggles = 0
+            var pauses = 0
+            lateinit var input: PhysicalInput
+            input = PhysicalInput(object : PhysicalInput.Callbacks {
+                override fun onPhysicalInput() {}
+                override fun onMenuKey() { pauses++; input.clear() }
+                override fun onToggleBottomScreen() {}
+                override fun onFastForwardToggle() { toggles++; state.toggle() }
+                override fun onFastForwardHold(held: Boolean) = state.hold(held)
+            }).apply { fastForwardEnabled = true }
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            key(input, KeyEvent.KEYCODE_BUTTON_L1, true)
+            key(input, KeyEvent.KEYCODE_BUTTON_R1, true)
+            assertEquals(1, pauses)
+            assertEquals(1, toggles)
+            assertEquals(4, state.speed)
+            input.onInputResumed()
+            SystemClock.sleep(2)
+            val l2 = key(input, KeyEvent.KEYCODE_BUTTON_L2, true)
+            key(input, KeyEvent.KEYCODE_BUTTON_L2, false)
+            SystemClock.sleep(2)
+            // Exact uinput repro: R2 remained physically held, but another
+            // key rebased its downTime and the hardware repeat count is zero.
+            val repeat = KeyEvent(l2.downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_BUTTON_R2, 0, 0, 7, 0, 0, InputDevice.SOURCE_GAMEPAD)
+            assertTrue(input.onKey(repeat))
+            assertEquals("rebased held R2 toggled fast-forward", 1, toggles)
+            assertEquals(4, state.speed)
+            SystemClock.sleep(2)
+            val sameReport = key(input, KeyEvent.KEYCODE_BUTTON_L2, true)
+            assertTrue(input.onKey(KeyEvent(sameReport.eventTime, sameReport.eventTime, KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_BUTTON_R2, 0, 0, 7, 0, 0, InputDevice.SOURCE_GAMEPAD)))
+            key(input, KeyEvent.KEYCODE_BUTTON_L2, false)
+            assertEquals("same-report timestamp collision rearmed R2", 1, toggles)
+            assertEquals(4, state.speed)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
+            SystemClock.sleep(2)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            assertEquals(2, toggles)
+            assertEquals(1, state.speed)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
+            input.clear()
+        }
+    }
+
+    @Test fun r2FirstPressedInDialogIsGuardedButFreshDigitalPressStillRecovers() {
+        instrumentation.runOnMainSync {
+            var toggles = 0
+            val input = PhysicalInput(object : PhysicalInput.Callbacks {
+                override fun onPhysicalInput() {}
+                override fun onMenuKey() {}
+                override fun onToggleBottomScreen() {}
+                override fun onFastForwardToggle() { toggles++ }
+            }).apply { fastForwardEnabled = true }
+            input.clear()
+            SystemClock.sleep(2)
+            val held = SystemClock.uptimeMillis()
+            input.observeKeyEvent(KeyEvent(held, held, KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_BUTTON_R2, 0, 0, 7, 0, 0, InputDevice.SOURCE_GAMEPAD), suspended = true)
+            input.onInputResumed()
+            SystemClock.sleep(2)
+            val l2 = key(input, KeyEvent.KEYCODE_BUTTON_L2, true)
+            assertTrue(input.onKey(KeyEvent(l2.eventTime, l2.eventTime, KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_BUTTON_R2, 0, 0, 7, 0, 0, InputDevice.SOURCE_GAMEPAD)))
+            key(input, KeyEvent.KEYCODE_BUTTON_L2, false)
+            assertEquals(0, toggles)
+            // No R2 UP reached game input, but a genuinely new later DOWN
+            // remains usable and its duplicate analog report adds no toggle.
+            SystemClock.sleep(2)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            axes(input, 0f, 1f)
+            assertEquals(1, toggles)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
+            axes(input, 0f, 0.48f); axes(input, 0f, 0.6f)
+            assertEquals(1, toggles)
+            axes(input, 0f, 0.39f); axes(input, 0f, 0.6f)
+            assertEquals(2, toggles)
+            input.clear()
+        }
+    }
+
+    @Test fun digitalR2ReleaseDuringOrJustAfterDialogDoesNotForgetHeldAnalogTrigger() {
+        instrumentation.runOnMainSync {
+            for (dialogOwnsUp in listOf(false, true)) for (flags in listOf(0, KeyEvent.FLAG_CANCELED)) {
+                var toggles = 0
+                val input = PhysicalInput(object : PhysicalInput.Callbacks {
+                    override fun onPhysicalInput() {}
+                    override fun onMenuKey() {}
+                    override fun onToggleBottomScreen() {}
+                    override fun onFastForwardToggle() { toggles++ }
+                }).apply { fastForwardEnabled = true }
+                axes(input, 0f, 0.6f)
+                assertEquals(1, toggles)
+                input.clear()
+                // A digital UP at the controller's threshold (or focus
+                // cancellation) cannot prove the analog trigger fell below
+                // the app's 0.4 release threshold while its axes were cleared.
+                val now = SystemClock.uptimeMillis()
+                val release = KeyEvent(now, now, KeyEvent.ACTION_UP,
+                    KeyEvent.KEYCODE_BUTTON_R2, 0, 0, 7, 0, flags, InputDevice.SOURCE_GAMEPAD)
+                if (dialogOwnsUp) input.observeKeyEvent(release, suspended = true)
+                input.onInputResumed()
+                if (!dialogOwnsUp) assertTrue(input.onKey(release))
+                axes(input, 0f, 0.48f); axes(input, 0f, 0.6f)
+                assertEquals("dialog UP discarded analog release quarantine", 1, toggles)
+                axes(input, 0f, 0.39f); axes(input, 0f, 0.6f)
+                assertEquals(2, toggles)
+                input.clear()
+            }
+        }
+    }
+
+    @Test fun canceledDigitalR2UpBeforeClearKeepsHeldRepeatsBlocked() {
+        instrumentation.runOnMainSync {
+            var toggles = 0
+            val input = PhysicalInput(object : PhysicalInput.Callbacks {
+                override fun onPhysicalInput() {}
+                override fun onMenuKey() {}
+                override fun onToggleBottomScreen() {}
+                override fun onFastForwardToggle() { toggles++ }
+            }).apply { fastForwardEnabled = true }
+            val held = key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            assertEquals(1, toggles)
+            // Focus cancellation may precede the Activity's clear(). It must
+            // retain evidence of the hold before removing its digital key.
+            assertTrue(input.onKey(KeyEvent.changeFlags(KeyEvent.changeAction(held, KeyEvent.ACTION_UP), KeyEvent.FLAG_CANCELED)))
+            input.clear()
+            input.onInputResumed()
+            SystemClock.sleep(2)
+            val l2 = key(input, KeyEvent.KEYCODE_BUTTON_L2, true)
+            assertTrue(input.onKey(KeyEvent(l2.eventTime, l2.eventTime, KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_BUTTON_R2, 0, 0, 7, 0, 0, InputDevice.SOURCE_GAMEPAD)))
+            key(input, KeyEvent.KEYCODE_BUTTON_L2, false)
+            SystemClock.sleep(2)
+            assertTrue(input.onKey(KeyEvent(l2.downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_BUTTON_R2, 0, 0, 7, 0, 0, InputDevice.SOURCE_GAMEPAD)))
+            assertEquals("canceled UP before clear lost the held R2 guard", 1, toggles)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
+            SystemClock.sleep(2)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            assertEquals(2, toggles)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
             input.clear()
         }
     }
