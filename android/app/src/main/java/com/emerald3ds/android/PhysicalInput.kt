@@ -12,7 +12,15 @@ import kotlin.math.max
  * Nintendo console: Android's BUTTON_A is the bottom face button, which is
  * the 3DS's B.
  */
-class PhysicalInput(private val callbacks: Callbacks) {
+class PhysicalInput(
+    private val callbacks: Callbacks,
+    private val rightTriggerAxis: (Int) -> Boolean? = { id ->
+        InputDevice.getDevice(id)?.let { device ->
+            device.getMotionRange(MotionEvent.AXIS_RTRIGGER) != null ||
+                device.getMotionRange(MotionEvent.AXIS_GAS) != null
+        }
+    },
+) {
     interface Callbacks {
         fun onPhysicalInput()
         fun onMenuKey()
@@ -31,19 +39,32 @@ class PhysicalInput(private val callbacks: Callbacks) {
     private val fastAxes = mutableMapOf<Int, Pair<Boolean, Boolean>>()
     private var fastToggleDown = false
     private var fastHoldDown = false
-    private val fastToggleNeedsRelease = mutableSetOf<Int>()
-    private var fastSuspendedAt = Long.MIN_VALUE
+    private data class TriggerRelease(var digital: Boolean = false, var analog: Boolean = false)
+    private val fastToggleNeedsRelease = mutableMapOf<Int, TriggerRelease>()
+    private val rightTriggerAxes = mutableMapOf<Int, Boolean>()
 
     // Track physical keys individually: left/right Shift and multiple
     // controllers may hold the same logical 3DS button at the same time.
     private val gamepadKeys = mutableMapOf<Pair<Int, Int>, Int>()
     private val keyboardKeys = mutableMapOf<Pair<Int, Int>, Int>()
     private var motionDevice: Int? = null
-    private val shoulderPresses = mutableMapOf<Pair<Int, Int>, Long>()
-    private val blockedShoulders = mutableMapOf<Pair<Int, Int>, Long>()
+    private val shoulderPresses = mutableSetOf<Pair<Int, Int>>()
+    private val blockedShoulders = mutableSetOf<Pair<Int, Int>>()
     private var shoulderInputAfter = Long.MIN_VALUE
-    private data class KeyDownStamp(val time: Long, var code: Int)
-    private val latestKeyDowns = mutableMapOf<Int, KeyDownStamp>()
+
+    private fun hasRightTriggerAxis(deviceId: Int): Boolean? = rightTriggerAxes[deviceId] ?:
+        rightTriggerAxis(deviceId)?.also { rightTriggerAxes[deviceId] = it }
+
+    private fun blockFastToggle(deviceId: Int, digital: Boolean, analog: Boolean) {
+        val release = fastToggleNeedsRelease.getOrPut(deviceId) { TriggerRelease() }
+        release.digital = release.digital || digital
+        release.analog = release.analog || analog
+    }
+
+    private fun finishFastRelease(deviceId: Int) {
+        val release = fastToggleNeedsRelease[deviceId] ?: return
+        if (!release.digital && !release.analog) fastToggleNeedsRelease.remove(deviceId)
+    }
 
     private fun gamepadKey(keyCode: Int): Int = when (keyCode) {
         KeyEvent.KEYCODE_BUTTON_A -> if (labelMapping) CtrKeys.A else CtrKeys.B
@@ -83,34 +104,60 @@ class PhysicalInput(private val callbacks: Callbacks) {
     /** Observe releases even when a dialog owns the event. This is deliberately
      * non-consuming and does not send any buttons to the game. */
     fun observeKeyEvent(event: KeyEvent, suspended: Boolean = false) {
-        if (fastForwardEnabled && event.keyCode == KeyEvent.KEYCODE_BUTTON_R2 &&
-            ((suspended && event.action == KeyEvent.ACTION_DOWN) ||
-                (event.action == KeyEvent.ACTION_UP && event.isCanceled))) fastToggleNeedsRelease.add(event.deviceId)
-        // A dialog-owned R2 UP must not clear this guard: the controller's
-        // analog trigger may still be held inside its hysteresis band.
+        if (event.keyCode == KeyEvent.KEYCODE_BUTTON_R2 &&
+            (fastForwardEnabled || event.deviceId in fastToggleNeedsRelease)) {
+            val deviceId = event.deviceId
+            if ((suspended && event.action == KeyEvent.ACTION_DOWN) ||
+                (event.action == KeyEvent.ACTION_UP && event.isCanceled)) {
+                blockFastToggle(deviceId, digital = true, analog = hasRightTriggerAxis(deviceId) != false)
+            } else if (event.action == KeyEvent.ACTION_DOWN) {
+                fastToggleNeedsRelease[deviceId]?.digital = true
+            } else if (event.action == KeyEvent.ACTION_UP) {
+                fastKeys.remove(deviceId to event.keyCode)
+                fastToggleNeedsRelease[deviceId]?.let { release ->
+                    release.digital = false
+                    // Only a known digital-only controller needs no analog
+                    // release. A cleared/unknown axis cache is not neutral.
+                    if (hasRightTriggerAxis(deviceId) == false) release.analog = false
+                }
+                finishFastRelease(deviceId)
+            }
+        }
         if (suspended && event.action == KeyEvent.ACTION_DOWN &&
             (event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 || event.keyCode == KeyEvent.KEYCODE_BUTTON_R1)) {
             // Shoulders first pressed in a dialog are held at the next
             // resume too, even though no game button was ever sent.
             val identity = event.deviceId to event.keyCode
-            blockedShoulders[identity] = max(blockedShoulders[identity] ?: Long.MIN_VALUE, event.eventTime)
+            blockedShoulders.add(identity)
         }
-        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && event.downTime == event.eventTime) {
-            val previous = latestKeyDowns[event.deviceId]
-            if (previous == null || event.eventTime > previous.time)
-                latestKeyDowns[event.deviceId] = KeyDownStamp(event.eventTime, event.keyCode)
-            else if (event.eventTime == previous.time && event.keyCode != previous.code)
-                previous.code = KeyEvent.KEYCODE_UNKNOWN // More than one key used this timestamp.
-        } else if (event.action == KeyEvent.ACTION_UP &&
+        if (event.action == KeyEvent.ACTION_UP &&
             (event.keyCode == KeyEvent.KEYCODE_BUTTON_L1 || event.keyCode == KeyEvent.KEYCODE_BUTTON_R1)) {
             val identity = event.deviceId to event.keyCode
             shoulderPresses.remove(identity)
             if (event.isCanceled) {
                 // Focus loss can synthesize a canceled UP while the physical
                 // shoulder remains held. It cannot prove a release.
-                blockedShoulders[identity] = max(blockedShoulders[identity] ?: Long.MIN_VALUE, event.eventTime)
+                blockedShoulders.add(identity)
             } else blockedShoulders.remove(identity)
         }
+    }
+
+    /** Observe trigger releases in our paused windows without changing game
+     * input or activating fast-forward. Digital and analog holds are separate. */
+    fun observeMotionEvent(event: MotionEvent, suspended: Boolean = true) {
+        if ((!fastForwardEnabled && event.deviceId !in fastToggleNeedsRelease) || event.action != MotionEvent.ACTION_MOVE ||
+            !(event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_GAMEPAD))) return
+        val deviceId = event.deviceId
+        val value = max(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS))
+        if (value > 0f) rightTriggerAxes[deviceId] = true
+        val previous = fastAxes[deviceId]?.second == true || fastToggleNeedsRelease[deviceId]?.analog == true
+        val held = value >= 0.55f || (previous && value > 0.4f)
+        if (suspended && held) blockFastToggle(deviceId, digital = false, analog = true)
+        fastToggleNeedsRelease[deviceId]?.let { release ->
+            if (held) release.analog = true
+            else if (hasRightTriggerAxis(deviceId) != null) release.analog = false
+        }
+        finishFastRelease(deviceId)
     }
 
     /** Returns true if the event was consumed. */
@@ -121,20 +168,11 @@ class PhysicalInput(private val callbacks: Callbacks) {
         val down = event.action == KeyEvent.ACTION_DOWN
         if (fastForwardEnabled && code in setOf(KeyEvent.KEYCODE_BUTTON_L2, KeyEvent.KEYCODE_BUTTON_R2, KeyEvent.KEYCODE_TAB)) {
             if (down && event.repeatCount > 0) return true
-            // Held hardware repeats can have count zero and a downTime
-            // rebased by another key. Recover a missed release only from a
-            // distinct new DOWN after resume, without a timestamp collision.
-            val stamp = latestKeyDowns[event.deviceId]
-            if (down && code == KeyEvent.KEYCODE_BUTTON_R2 && event.downTime == event.eventTime &&
-                event.eventTime > fastSuspendedAt &&
-                (stamp?.time != event.eventTime || stamp.code == code))
-                fastToggleNeedsRelease.remove(event.deviceId)
+            // Android can turn a held hardware repeat into a count-zero DOWN
+            // with entirely new timestamps. Only release evidence rearms it.
+            if (down && code == KeyEvent.KEYCODE_BUTTON_R2 && event.deviceId in fastToggleNeedsRelease) return true
             val identity = event.deviceId to code
             if (down) fastKeys.add(identity) else fastKeys.remove(identity)
-            // A cleared axis map after pause means unknown, not neutral.
-            // Digital-only pads can recover via the checked fresh DOWN above.
-            if (!down && code == KeyEvent.KEYCODE_BUTTON_R2 && !event.isCanceled && fastAxes[event.deviceId]?.second == false)
-                fastToggleNeedsRelease.remove(event.deviceId)
             updateFastTriggers()
             if (down) callbacks.onPhysicalInput()
             return true
@@ -160,26 +198,16 @@ class PhysicalInput(private val callbacks: Callbacks) {
         if (pad != 0) {
             if (code == KeyEvent.KEYCODE_BUTTON_L1 || code == KeyEvent.KEYCODE_BUTTON_R1) {
                 if (down) {
-                    // Android may rebase a held key's downTime when another
-                    // button is pressed, even with repeatCount == 0. Only a
-                    // DOWN at its own event time can recover a missed release.
-                    val blockedAt = blockedShoulders[identity]
-                    val stamp = latestKeyDowns[event.deviceId]
+                    // Timestamps can reject queued old events, but cannot
+                    // prove that a held shoulder was physically released.
                     if (event.downTime != event.eventTime || event.eventTime < shoulderInputAfter) return true
-                    // Identical millisecond timestamps are ambiguous for a
-                    // blocked key: keep it blocked if another key used that
-                    // timestamp, or it coincides with resuming input. Observed
-                    // UPs remove the guard; normal simultaneous L+R still works.
-                    if (blockedAt != null && (event.eventTime <= blockedAt ||
-                        event.eventTime <= shoulderInputAfter ||
-                        (stamp?.time == event.eventTime && stamp.code != code))) return true
-                    blockedShoulders.remove(identity)
-                    shoulderPresses[identity] = event.eventTime
+                    if (identity in blockedShoulders) return true
+                    shoulderPresses.add(identity)
                     val other = event.deviceId to if (code == KeyEvent.KEYCODE_BUTTON_L1)
                         KeyEvent.KEYCODE_BUTTON_R1 else KeyEvent.KEYCODE_BUTTON_L1
                     if (other in shoulderPresses && other !in blockedShoulders) {
-                        blockedShoulders[identity] = event.eventTime
-                        blockedShoulders[other] = shoulderPresses.getValue(other)
+                        blockedShoulders.add(identity)
+                        blockedShoulders.add(other)
                         gamepadKeys.remove(identity)
                         gamepadKeys.remove(other)
                         InputHub.setKeys(InputHub.SRC_GAMEPAD, gamepadKeys.values.fold(0) { a, b -> a or b })
@@ -203,6 +231,7 @@ class PhysicalInput(private val callbacks: Callbacks) {
     fun onMotion(event: MotionEvent): Boolean {
         val joystick = event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_GAMEPAD)
         if (!joystick || event.action != MotionEvent.ACTION_MOVE) return false
+        observeMotionEvent(event, suspended = false)
         motionDevice = event.deviceId
         val device = event.device
 
@@ -230,11 +259,9 @@ class PhysicalInput(private val callbacks: Callbacks) {
         fun trigger(value: Float, wasDown: Boolean): Boolean =
             if (fastForwardEnabled) value >= 0.55f || (wasDown && value > 0.4f) else value > 0.5f
         val l2 = trigger(leftTrigger, previousTriggers.first)
-        val r2 = trigger(rightTrigger, previousTriggers.second || event.deviceId in fastToggleNeedsRelease)
+        val r2 = trigger(rightTrigger, previousTriggers.second || fastToggleNeedsRelease[event.deviceId]?.analog == true)
         if (fastForwardEnabled) {
             fastAxes[event.deviceId] = l2 to r2
-            if (!r2 && (event.deviceId to KeyEvent.KEYCODE_BUTTON_R2) !in fastKeys)
-                fastToggleNeedsRelease.remove(event.deviceId)
             updateFastTriggers()
         } else {
             if (l2) axes = axes or CtrKeys.ZL
@@ -264,20 +291,17 @@ class PhysicalInput(private val callbacks: Callbacks) {
         clearMotion()
     }
 
-    /** A resume blocks shoulders still held at the pause boundary. A release,
-     * or an unambiguous new DOWN after a missed release, rearms each shoulder. */
+    /** A resume blocks shoulders still held at the pause boundary. Only an
+     * observed, uncanceled UP rearms a known-held shoulder. */
     fun onInputResumed() {
-        shoulderPresses.forEach { (identity, time) ->
-            blockedShoulders[identity] = max(blockedShoulders[identity] ?: Long.MIN_VALUE, time)
-        }
+        blockedShoulders.addAll(shoulderPresses)
         shoulderInputAfter = SystemClock.uptimeMillis()
-        fastSuspendedAt = max(fastSuspendedAt, shoulderInputAfter)
     }
 
     fun removeDevice(deviceId: Int) {
-        shoulderPresses.keys.removeAll { it.first == deviceId }
-        blockedShoulders.keys.removeAll { it.first == deviceId }
-        latestKeyDowns.remove(deviceId)
+        shoulderPresses.removeAll { it.first == deviceId }
+        blockedShoulders.removeAll { it.first == deviceId }
+        rightTriggerAxes.remove(deviceId)
         fastKeys.removeAll { it.first == deviceId }
         fastAxes.remove(deviceId)
         fastToggleNeedsRelease.remove(deviceId)
@@ -316,9 +340,10 @@ class PhysicalInput(private val callbacks: Callbacks) {
         // Keep the identity of each held trigger through a pause. A neutral
         // sample from another controller cannot release it, and its first
         // resumed axis sample must still use the pressed hysteresis threshold.
-        fastKeys.filter { it.second == KeyEvent.KEYCODE_BUTTON_R2 }.forEach { fastToggleNeedsRelease.add(it.first) }
-        fastAxes.filterValues { it.second }.keys.forEach(fastToggleNeedsRelease::add)
-        fastSuspendedAt = SystemClock.uptimeMillis()
+        fastKeys.filter { it.second == KeyEvent.KEYCODE_BUTTON_R2 }.forEach {
+            blockFastToggle(it.first, digital = true, analog = hasRightTriggerAxis(it.first) != false)
+        }
+        fastAxes.filterValues { it.second }.keys.forEach { blockFastToggle(it, digital = false, analog = true) }
         fastKeys.clear()
         fastAxes.clear()
         fastToggleDown = false

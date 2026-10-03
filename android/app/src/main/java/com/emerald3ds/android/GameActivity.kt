@@ -366,7 +366,15 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             }
             .create()
         shinyDialog?.show()
+        observeDialogMotion(shinyDialog)
         shinyDialog?.getButton(AlertDialog.BUTTON_NEGATIVE)?.requestFocus()
+    }
+
+    private fun observeDialogMotion(dialog: AlertDialog?) {
+        dialog?.window?.decorView?.setOnGenericMotionListener { _, event ->
+            physical.observeMotionEvent(event)
+            false
+        }
     }
 
     // ── Surfaces and layout ──────────────────────────────────────────────
@@ -505,6 +513,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        if (!acceptsGameInput()) physical.observeMotionEvent(ev)
         if (acceptsGameInput() && physical.onMotion(ev)) return true
         return super.dispatchGenericMotionEvent(ev)
     }
@@ -564,6 +573,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             }
             .create()
         menuDialog?.show()
+        observeDialogMotion(menuDialog)
     }
 
     private fun openSettings() {
@@ -605,6 +615,20 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         private const val KILL_DELAY_MS = 300L
 
         private var current: WeakReference<GameActivity>? = null
+
+        /** Settings may receive releases after it takes focus from the game.
+         * Observe them without sending game buttons or consuming UI input. */
+        fun observePausedKeyEvent(event: KeyEvent) {
+            val activity = current?.get() ?: return
+            if (activity.phase == Phase.RUNNING && !activity.acceptsGameInput())
+                activity.physical.observeKeyEvent(event, suspended = true)
+        }
+
+        fun observePausedMotionEvent(event: MotionEvent) {
+            val activity = current?.get() ?: return
+            if (activity.phase == Phase.RUNNING && !activity.acceptsGameInput())
+                activity.physical.observeMotionEvent(event)
+        }
 
         fun onShinyFleePrompt(request: Int) {
             val activity = current?.get()

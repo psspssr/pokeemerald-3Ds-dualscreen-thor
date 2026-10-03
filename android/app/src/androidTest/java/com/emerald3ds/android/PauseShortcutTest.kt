@@ -9,6 +9,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.widget.FrameLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
@@ -21,6 +22,8 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class PauseShortcutTest {
@@ -37,7 +40,7 @@ class PauseShortcutTest {
     @After fun clearInput() = inst.runOnMainSync { InputHub.clear() }
 
     private class Owner(private val clearOnPause: Boolean = true) : PhysicalInput.Callbacks {
-        val input = PhysicalInput(this)
+        val input = PhysicalInput(this) { false }
         var pauses = 0
         var keysAtPause = 0
         var fastToggles = 0
@@ -68,6 +71,15 @@ class PauseShortcutTest {
 
     private fun keyAt(code: Int, time: Long, device: Int = 7, eventTime: Long = time) =
         KeyEvent(time, eventTime, KeyEvent.ACTION_DOWN, code, 0, 0, device, 0, 0, InputDevice.SOURCE_GAMEPAD)
+
+    private fun rightTrigger(value: Float, device: Int, use: (MotionEvent) -> Unit) {
+        val now = SystemClock.uptimeMillis()
+        val event = MotionEvent.obtain(now, now, MotionEvent.ACTION_MOVE, 1,
+            arrayOf(MotionEvent.PointerProperties().apply { id = 0 }),
+            arrayOf(MotionEvent.PointerCoords().apply { setAxisValue(MotionEvent.AXIS_RTRIGGER, value) }),
+            0, 0, 1f, 1f, device, 0, InputDevice.SOURCE_JOYSTICK, 0)
+        try { use(event) } finally { event.recycle() }
+    }
 
     private fun resumeBoundary(input: PhysicalInput): Long {
         repeat(100) {
@@ -157,7 +169,7 @@ class PauseShortcutTest {
         }
     }
 
-    @Test fun freshPressesRecoverWhenDialogConsumedReleasesWithoutAcceptingOldHolds() {
+    @Test fun missingReleasesRequireObservedUpsBeforeShouldersCanRearm() {
         inst.runOnMainSync {
             val owner = Owner()
             val input = owner.input
@@ -165,18 +177,24 @@ class PauseShortcutTest {
             val right = down(KeyEvent.KEYCODE_BUTTON_R1)
             send(input, left); send(input, right)
             input.onInputResumed()
-            // No UP reached the game while its dialog was open.
+            // No UP reached our windows. Even apparently fresh DOWNs can
+            // be normalized hardware repeats and cannot prove a release.
             val freshLeft = down(KeyEvent.KEYCODE_BUTTON_L1)
             send(input, freshLeft); send(input, KeyEvent(right))
             assertEquals(1, owner.pauses)
-            assertEquals(CtrKeys.L, InputHub.sentKeys)
-            send(input, down(KeyEvent.KEYCODE_BUTTON_R1))
+            assertEquals(0, InputHub.sentKeys)
+            val freshRight = down(KeyEvent.KEYCODE_BUTTON_R1)
+            send(input, freshRight)
+            assertEquals(1, owner.pauses)
+            send(input, up(freshLeft)); send(input, up(freshRight))
+            send(input, down(KeyEvent.KEYCODE_BUTTON_L1)); send(input, down(KeyEvent.KEYCODE_BUTTON_R1))
             assertEquals(2, owner.pauses)
             assertEquals(0, InputHub.sentKeys)
             input.onInputResumed()
             send(input, down(KeyEvent.KEYCODE_BUTTON_R1))
             send(input, down(KeyEvent.KEYCODE_BUTTON_L1))
-            assertEquals(3, owner.pauses)
+            assertEquals(2, owner.pauses)
+            assertEquals(0, InputHub.sentKeys)
         }
     }
 
@@ -201,8 +219,14 @@ class PauseShortcutTest {
                 }
                 assertEquals("rebased hardware repeat reopened pause", 1, owner.pauses)
                 assertEquals(0, InputHub.sentKeys)
-                // A release may still be missed while another Activity owns
-                // input. Separate fresh presses must remain usable afterward.
+                // The real uinput trace also normalizes held repeats into
+                // separate count-zero DOWNs with new, equal timestamps.
+                val normalizedFirst = KeyEvent.changeFlags(down(first), KeyEvent.FLAG_FROM_SYSTEM)
+                val normalizedSecond = KeyEvent.changeFlags(down(second), KeyEvent.FLAG_FROM_SYSTEM)
+                send(input, normalizedFirst); send(input, normalizedSecond)
+                assertEquals("normalized held shoulders reopened pause", 1, owner.pauses)
+                assertEquals(0, InputHub.sentKeys)
+                send(input, up(normalizedFirst)); send(input, up(normalizedSecond))
                 send(input, down(first)); send(input, down(second))
                 assertEquals(2, owner.pauses)
                 assertEquals(0, InputHub.sentKeys)
@@ -210,7 +234,7 @@ class PauseShortcutTest {
         }
     }
 
-    @Test fun sameTimestampOtherKeyCannotRearmBlockedShoulders() {
+    @Test fun otherKeyEventsCannotRearmBlockedShouldersRegardlessOfTimestamp() {
         inst.runOnMainSync {
             val owner = Owner()
             val input = owner.input
@@ -227,12 +251,13 @@ class PauseShortcutTest {
             assertEquals(1, owner.pauses)
             assertEquals(0, InputHub.sentKeys)
 
-            // The collision guard belongs to one controller, not every
-            // device producing an event within the same millisecond.
+            // Another controller cannot release this controller's shoulders.
             val otherDevice = down(KeyEvent.KEYCODE_BUTTON_L2, device = 8)
             input.observeKeyEvent(otherDevice)
             send(input, keyAt(KeyEvent.KEYCODE_BUTTON_L1, otherDevice.eventTime))
-            assertEquals(CtrKeys.L, InputHub.sentKeys)
+            assertEquals(0, InputHub.sentKeys)
+            send(input, up(left)); send(input, up(right))
+            send(input, down(KeyEvent.KEYCODE_BUTTON_L1))
             send(input, down(KeyEvent.KEYCODE_BUTTON_R1))
             assertEquals(2, owner.pauses)
             assertEquals(0, InputHub.sentKeys)
@@ -512,6 +537,109 @@ class PauseShortcutTest {
             assertEquals(CtrKeys.R, HostProbe.snapshot()[1])
             scenario.onActivity { it.dispatchKeyEvent(up(ordinary)) }
             assertEquals(0, HostProbe.snapshot()[1])
+        }
+    }
+
+    @Test fun pauseAndShinyDialogsObserveBothTriggerReleaseChannelsWithoutGameInput() {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putBoolean("qol_fast_forward", true).commit()
+        val stateField = GameActivity::class.java.getDeclaredField("fastForward").apply { isAccessible = true }
+        val worker = Executors.newSingleThreadExecutor()
+        try {
+            ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+                ready(scenario)
+                for (shiny in listOf(false, true)) {
+                    val r2 = down(KeyEvent.KEYCODE_BUTTON_R2, 906)
+                    var before = false
+                    scenario.onActivity { activity ->
+                        activity.dispatchKeyEvent(r2)
+                        rightTrigger(1f, 906) { activity.dispatchGenericMotionEvent(it) }
+                        before = (stateField.get(activity) as FastForwardState).toggled
+                    }
+                    val prompt = if (shiny) worker.submit<Boolean> { NativeBridge.testShinyFleeRoundTrip() } else null
+                    if (!shiny) scenario.onActivity { it.dispatchKeyEvent(down(KeyEvent.KEYCODE_ESCAPE)) }
+                    val dialogField = GameActivity::class.java.getDeclaredField(if (shiny) "shinyDialog" else "menuDialog")
+                        .apply { isAccessible = true }
+                    var dialog: AlertDialog? = null
+                    val deadline = SystemClock.uptimeMillis() + 10_000
+                    while (dialog == null && SystemClock.uptimeMillis() < deadline) {
+                        scenario.onActivity { dialog = dialogField.get(it) as? AlertDialog }
+                        if (dialog == null) SystemClock.sleep(30)
+                    }
+                    assertNotNull("missing confirmation/pause dialog", dialog)
+                    scenario.onActivity { activity ->
+                        dialog!!.dispatchKeyEvent(up(r2))
+                        rightTrigger(0.48f, 906) { dialog!!.dispatchGenericMotionEvent(it) }
+                        assertEquals(before, (stateField.get(activity) as FastForwardState).toggled)
+                        assertEquals(0, HostProbe.snapshot()[1])
+                        rightTrigger(0.39f, 906) { dialog!!.dispatchGenericMotionEvent(it) }
+                        assertEquals(before, (stateField.get(activity) as FastForwardState).toggled)
+                        assertEquals(0, HostProbe.snapshot()[1])
+                        if (shiny) dialog!!.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
+                        else dialog!!.listView.performItemClick(null, 0, dialog!!.listView.adapter.getItemId(0))
+                    }
+                    if (prompt != null) assertFalse(prompt.get(5, TimeUnit.SECONDS))
+                    ready(scenario)
+                    val next = down(KeyEvent.KEYCODE_BUTTON_R2, 906)
+                    scenario.onActivity { activity ->
+                        activity.dispatchKeyEvent(next)
+                        rightTrigger(1f, 906) { activity.dispatchGenericMotionEvent(it) }
+                        assertEquals("dialog releases did not rearm the first deliberate press", !before,
+                            (stateField.get(activity) as FastForwardState).toggled)
+                        activity.dispatchKeyEvent(up(next))
+                        rightTrigger(0f, 906) { activity.dispatchGenericMotionEvent(it) }
+                    }
+                }
+            }
+        } finally {
+            worker.shutdownNow()
+        }
+    }
+
+    @Test fun settingsObservesShoulderAndTriggerReleasesBeforeReturningToGame() {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putBoolean("qol_fast_forward", true).commit()
+        val menuField = GameActivity::class.java.getDeclaredField("menuDialog").apply { isAccessible = true }
+        val stateField = GameActivity::class.java.getDeclaredField("fastForward").apply { isAccessible = true }
+        val monitor = inst.addMonitor(SettingsActivity::class.java.name, null, false)
+        try {
+            ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+                ready(scenario)
+                val left = down(KeyEvent.KEYCODE_BUTTON_L1, 907)
+                val right = down(KeyEvent.KEYCODE_BUTTON_R1, 907)
+                val r2 = down(KeyEvent.KEYCODE_BUTTON_R2, 907)
+                scenario.onActivity { activity ->
+                    activity.dispatchKeyEvent(r2)
+                    rightTrigger(1f, 907) { activity.dispatchGenericMotionEvent(it) }
+                    activity.dispatchKeyEvent(left); activity.dispatchKeyEvent(right)
+                    val menu = menuField.get(activity) as AlertDialog
+                    assertTrue(menu.listView.performItemClick(null, 1, menu.listView.adapter.getItemId(1)))
+                }
+                val settings = inst.waitForMonitorWithTimeout(monitor, 10_000) as? SettingsActivity
+                assertNotNull("Settings did not open from the pause menu", settings)
+                inst.waitForIdleSync()
+                inst.runOnMainSync {
+                    settings!!.dispatchKeyEvent(up(left)); settings.dispatchKeyEvent(up(right))
+                    settings.dispatchKeyEvent(up(r2))
+                    rightTrigger(0f, 907) { settings.dispatchGenericMotionEvent(it) }
+                    assertEquals(0, HostProbe.snapshot()[1])
+                    assertEquals(NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
+                    settings.finish()
+                }
+                ready(scenario)
+                val nextR2 = down(KeyEvent.KEYCODE_BUTTON_R2, 907)
+                scenario.onActivity { activity ->
+                    activity.dispatchKeyEvent(nextR2)
+                    rightTrigger(1f, 907) { activity.dispatchGenericMotionEvent(it) }
+                    assertFalse("Settings releases did not rearm R2", (stateField.get(activity) as FastForwardState).toggled)
+                    activity.dispatchKeyEvent(up(nextR2))
+                    rightTrigger(0f, 907) { activity.dispatchGenericMotionEvent(it) }
+                    activity.dispatchKeyEvent(down(KeyEvent.KEYCODE_BUTTON_L1, 907))
+                    activity.dispatchKeyEvent(down(KeyEvent.KEYCODE_BUTTON_R1, 907))
+                }
+                assertEquals("Settings releases did not rearm L+R", NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
+                closeMenu(scenario)
+            }
+        } finally {
+            inst.removeMonitor(monitor)
         }
     }
 

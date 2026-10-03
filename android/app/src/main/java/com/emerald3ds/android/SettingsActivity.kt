@@ -3,6 +3,8 @@ package com.emerald3ds.android
 import android.os.Bundle
 import android.text.Html
 import android.view.View
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -19,6 +21,16 @@ import java.text.DateFormat
 import java.util.Date
 
 class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPreferenceStartScreenCallback {
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        GameActivity.observePausedKeyEvent(event)
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        GameActivity.observePausedMotionEvent(event)
+        return super.dispatchGenericMotionEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
