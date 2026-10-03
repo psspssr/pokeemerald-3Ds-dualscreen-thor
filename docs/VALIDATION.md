@@ -10,6 +10,11 @@ the matching debug probe is
 `ee318d65b6ddbcbaef24f3d63338f01e7668a72515c64ad6144568ebaee95ee0`.
 These probes are separate from the eventual published APK.
 
+Normal CI for the final game-code commit `bd3a95e101a426c0a4861d2976a0646fda943092`
+passed all three jobs in [run 37111512498](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37111512498),
+including the new native evolution and Summary checks. Later candidate
+commits contain documentation and presentation images only.
+
 ### Fullscreen display and input
 
 Dual-display **Fill** now stretches each complete source image to its panel,
@@ -64,6 +69,10 @@ save fixture**, prepared through the engine's Pokémon setters. A benched
 Torchic gained EXP, reached level 16, learned Peck, evolved into Combusken and
 replaced Scratch with Double Kick. The resulting ordinary raw save validates.
 It is test evidence, not natural progression or a marketing screenshot.
+After replay, the original save, Android preferences and port settings were
+restored byte-for-byte; all five original backups remained, with no fixture
+backup inserted. Normal evolution was observed live; no live link trade was
+performed.
 Evidence: `build/evidence/qol-fixture/` and `build/evidence/summary-selector/`.
 
 Independent app, renderer and gameplay reviews found no remaining blocker in

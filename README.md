@@ -73,7 +73,7 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 
 | Feature | In the game |
 |---|---|
-| **Two displays** | A separate window for the bottom touch screen. Reverse display ordering in Settings, or fall back to a combined layout when the second display disconnects. |
+| **Two displays** | Fill both Thor panels with the complete image by default; choose Fit in Settings to preserve proportions. Reverse display ordering, or fall back to a combined layout when the second display disconnects. |
 | **Phones and tablets** | Portrait and landscape layouts, with on-screen controls for play on one display. |
 | **Voxel overworld** | Switch between the original 2D presentation and upstream's voxel scenery through **OPTION → VOXEL 3D**. |
 | **Touch menus** | Use the bottom screen for the map, party, bag, battle commands, save and options. |
