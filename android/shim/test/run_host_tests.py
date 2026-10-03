@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -22,3 +23,4 @@ with tempfile.TemporaryDirectory(prefix="emerald-shim-build-") as tmp:
                *("-Wl,--wrap=" + name for name in wraps), "-lm", "-o", str(executable)]
     subprocess.run(command, check=True)
     subprocess.run([str(executable)], check=True, timeout=15)
+subprocess.run([sys.executable, str(SHIM / "test/run_aaudio_tests.py")], check=True)
