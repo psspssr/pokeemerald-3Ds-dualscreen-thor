@@ -10,6 +10,11 @@ save first. Finish conversations, close in-game menus and stop moving before
 opening the Android settings. After activating an event, **save normally in
 the game** to keep the change.
 
+Leave a Battle Frontier challenge before activating an event. Some challenge
+rooms temporarily replace your party; events are blocked there so a gift cannot
+be discarded when your normal party returns. Ordinary facility lobbies remain
+available after their dialogue has finished.
+
 ## Available options
 
 | Option | Result |

@@ -8,7 +8,7 @@ Android fixes belong outside `origin/`.
 
 Tracked Android overlays in `patches/android/` are applied in filename order
 to the generated tree by `tools/bootstrap.py`. They add the optional gameplay
-hooks and a scoped field-window clipping repair. Their exact context is
+hooks and scoped asset, touch and screen-layout repairs. Their exact context is
 checked before installation; a new upstream revision that changes those
 sections stops with a patch error instead of silently applying shifted code.
 Rebase or remove the affected overlay, then repeat the checks below. Repeated

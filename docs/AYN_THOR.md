@@ -25,17 +25,17 @@ does not verify the firmware's 32-bit support or certify this game's performance
 Dual-display mode is the default when a second built-in display is present:
 
 - **Top display (window 0)**: the activity's `SurfaceView`, showing the 3DS
-  top screen (400x240) scaled to fit: x4.5 fills the height at 1800x1080,
-  integer x4 is 1600x960.
+  top screen (400x240) across the full **1920x1080** panel by default.
 - **Bottom display (window 1)**: an Android `Presentation` on the second
   display, holding a `SurfaceView` for the 3DS bottom screen (320x240) and
-  receiving its touches: x3.875 fills the width at 1240x930, integer x3 is
-  960x720. Touches map to 0..319 x 0..239 and become `KEY_TOUCH`, so origin's
+  filling the full **1240x1080** panel. Touches map independently along each
+  axis to 0..319 x 0..239 and become `KEY_TOUCH`, so origin's
   touch interface (map, party, bag, Pokédex, PokéNav, options) works by finger
   on the real bottom screen, as on the console.
 - **Controls**: the built-in gamepad. On-screen controls are hidden by
-  default in dual-display mode and come back when the screen is touched
-  outside the game picture, if enabled in Settings.
+  default in dual-display mode. If enabled in Settings with automatic
+  visibility, use **Show controls / Hide controls** in the pause menu.
+  Tapping outside the game picture also reveals them when using Fit mode.
 - **Mapping**: by position like a Nintendo console (Thor's bottom face button
   is 3DS B, right is A, left is Y, top is X); left stick is the circle pad;
   L1/R1 are L/R. With optional fast-forward controls enabled, R2 toggles the
@@ -52,6 +52,24 @@ Dual-display mode is the default when a second built-in display is present:
   display disappears, both screens move to the top display (a single-display
   layout) until it returns.
 
+## Screen scaling
+
+**Settings → Dual display → Screen scaling** offers two choices:
+
+| Choice | Top panel picture | Bottom panel picture |
+|---|---|---|
+| **Fill both displays (default)** | 1920x1080 | 1240x1080 |
+| **Fit original proportions** | 1800x1080, centred | 1240x930, centred |
+| Fit with integer scaling enabled | 1600x960, centred | 960x720, centred |
+
+Fill shows the complete image without cropping. It stretches the image to
+match each panel's proportions; Fit preserves the original 3DS proportions
+with borders. Integer scaling applies to Fit and single-display phone layouts.
+Both windows hide Android's system bars, which remain available by swiping.
+Screen swapping, reconnecting a display and returning from Settings retain
+the chosen scaling mode. Single-display phone layouts keep their existing
+scaling and control placement.
+
 ## Other dual-display handhelds
 
 Some devices report the bottom screen as the primary display and the top as
@@ -60,8 +78,11 @@ the secondary one (AYANEO Pocket DS, Retroid's dual-screen add-on). Settings
 
 ## Testing
 
-The app instrumentation tests create a Thor-sized 1240×1080 presentation
-display and exercise the bottom window, touch mapping and display removal.
+The app instrumentation tests use a 1920×1080 main display and a 1240×1080
+presentation display. They check full panel coverage, corner touch coordinates,
+both display assignments, Fit/Fill switching, rotation, resizing and removal.
+The production GLES presenter also has source-corner and outer-edge pixel checks
+at both panel sizes, so filling the panels cannot silently crop the image.
 They use the separate display-test renderer on an x86_64 emulator. Follow
 [BUILDING.md](BUILDING.md) for these tests and the real ARM game build.
 Physical lid behavior, panel timing, thermal performance and sustained game
