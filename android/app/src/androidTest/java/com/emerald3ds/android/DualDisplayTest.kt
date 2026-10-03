@@ -414,10 +414,20 @@ class DualDisplayTest {
             touch(display!!.display.displayId, MotionEvent.ACTION_UP, 930f, 540f, t)
             assertEquals(0, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
             val before = HostProbe.snapshot()
-            SystemClock.sleep(500)
-            val after = HostProbe.snapshot()
-            assertTrue("main display stalled", after[16] > before[16] + 5)
-            assertTrue("bottom display stalled", after[17] > before[17] + 5)
+            var after = before
+            try {
+                // Require continued presentation, without imposing a frame
+                // rate on the shared CI host's software renderer.
+                waitUntil("both displays did not advance by six frames") {
+                    after = HostProbe.snapshot()
+                    assertEquals("game paused during frame-progress check", NativeBridge.STATE_RUNNING, after[0])
+                    assertArrayEquals("display assignment changed during frame-progress check",
+                        before.sliceArray(6..7), after.sliceArray(6..7))
+                    after[16] > before[16] + 5 && after[17] > before[17] + 5
+                }
+            } catch (failure: AssertionError) {
+                throw AssertionError("${failure.message}; baseline=${before.contentToString()}, final=${after.contentToString()}", failure)
+            }
         }
     }
 
