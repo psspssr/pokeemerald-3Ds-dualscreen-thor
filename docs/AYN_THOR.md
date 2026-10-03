@@ -78,9 +78,11 @@ the secondary one (AYANEO Pocket DS, Retroid's dual-screen add-on). Settings
 
 ## Testing
 
-The app instrumentation tests use a 1920×1080 main display and a 1240×1080
-presentation display. They check full panel coverage, corner touch coordinates,
-both display assignments, Fit/Fill switching, rotation, resizing and removal.
+The local app instrumentation run uses a 1920×1080 main display and a
+1240×1080 presentation display. CI uses a smaller 720×1280 main display to
+reduce software-rendering load, with the same 1240×1080 second display.
+The tests check full panel coverage, corner touch coordinates, both display
+assignments, Fit/Fill switching, rotation, resizing and removal.
 The production GLES presenter also has source-corner and outer-edge pixel checks
 at both panel sizes, so filling the panels cannot silently crop the image.
 They use the separate display-test renderer on an x86_64 emulator. Follow

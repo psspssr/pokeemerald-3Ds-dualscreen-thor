@@ -1,5 +1,78 @@
 # Validation — Android previews
 
+## 0.1.0-alpha.4 candidate — full panels and gameplay repairs
+
+The local candidate builds the real ARM game with engine/data ABI `07329dad`.
+Native compilation, debug/release packaging and release lint pass. The
+release-signed development probe has SHA-256
+`91021990258246c0b9e5b7083bd38623733c0d3d62368dd5423599dd4c9838f1`;
+the matching debug probe is
+`ee318d65b6ddbcbaef24f3d63338f01e7668a72515c64ad6144568ebaee95ee0`.
+These probes are separate from the eventual published APK.
+
+### Fullscreen display and input
+
+Dual-display **Fill** now stretches each complete source image to its panel,
+without cropping: **1920×1080 top** and **1240×1080 bottom**. **Fit** remains
+available, including integer scaling. Phone layouts keep their existing
+scaling. Optional automatic touch controls can be shown or hidden through the
+pause menu even when Fill leaves no border to tap.
+
+The local app suite passes **50 instrumentation tests** and lint, including
+exact Thor rectangles, visible source corners, independent-axis touch mapping
+at the extreme corners and centre, both display assignments, Fill/Fit,
+rotation, resize, disconnect/reconnect and immersive window flags. CI uses a
+smaller main display to reduce software-rendering load; both environments use
+a 1240×1080 secondary display. **136 production GLES pixel assertions** check
+both full Thor sizes, both screen sources and both filters, including the
+outermost destination pixels. **79 tooling tests** also pass.
+
+Real-game emulator checks confirmed full panels, Party/Options/Map touches,
+voxel on/off, Fit borders, swapped displays with bottom touch on the primary
+panel, Home/resume, optional controls and unplug fallback. The final signed
+probe loaded the existing Oldale save after updating, with the save and both
+settings files unchanged at installation. Evidence:
+`build/evidence/fullscreen-sweep/` and `build/evidence/fullscreen-contract/`.
+
+### Bugs reproduced and repaired
+
+- Mystery gifts could be granted to a temporary Battle Pike or multi-partner
+  party, then discarded when the normal party returned. Those challenges now
+  block events; ordinary lobbies remain eligible. Native ASan/UBSan regressions
+  exercise the actual party backup/restore routines and all seven event choices.
+- The five-move selector indexed a tiny external-asset placeholder as a full
+  tilemap; sliding panels also offset the placeholder before resolution.
+  Both now resolve the real asset before indexing. External/embedded asset
+  checks pass under ASan/UBSan with unchanged tilemap footprint and palette.
+- Move replacement did not consume bottom-screen touches. Rows now preview
+  the move; explicit **OK! / BACK** use the existing confirmation, HM-refusal
+  and cancellation paths. Tests cover all rows, stale/fading/sliding input and
+  unchanged controller behaviour. Live playtesting confirmed preview, BACK,
+  touch confirmation, move replacement and return to the field. The original
+  four-row Summary has source/sanitizer coverage in this sweep, not a new live
+  PC Summary playthrough.
+- Evolution mixed the 240-pixel GBA scene with 400-pixel rendering coordinates,
+  leaving the Pokémon off-centre, an extra dialogue tile strip and particles
+  offset from the Pokémon. Scene and particle code now share the centred GBA
+  viewport. Regression tests use the actual make flags, four sparkle factories
+  and spray callbacks; ASan/UBSan passes. The final debug probe's 1× animation
+  replay captured 30 phases; reviewed frames show centred spiral/spray effects,
+  the evolved Pokémon and clean dialogue edges.
+
+The deep shared-EXP/evolution test uses a clearly labelled **isolated cloned
+save fixture**, prepared through the engine's Pokémon setters. A benched
+Torchic gained EXP, reached level 16, learned Peck, evolved into Combusken and
+replaced Scratch with Double Kick. The resulting ordinary raw save validates.
+It is test evidence, not natural progression or a marketing screenshot.
+Evidence: `build/evidence/qol-fixture/` and `build/evidence/summary-selector/`.
+
+Independent app, renderer and gameplay reviews found no remaining blocker in
+these changes. `origin/` still matches the pinned upstream tree, and native
+SDK checks report **295 identifiers with zero missing declarations or linked
+functions**. This sweep does not establish physical Thor performance, audible
+output or full-game coverage. The inherited OBJ-window and nonzero-mosaic
+limitations described below remain.
+
 ## 0.1.0-alpha.3 — bug fixes and renderer performance
 
 The [alpha.3 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.3)
@@ -425,6 +498,8 @@ python3 tools/bootstrap.py --make --apk -j4
 python3 tools/check_shim_coverage.py
 python3 android/native/test/run_qol_tests.py
 python3 android/native/test/run_mystery_tests.py
+python3 android/native/test/run_summary_tests.py
+python3 android/native/test/run_evolution_tests.py
 bash android/gpu/test/run-emulator.sh emulator-5584
 ANDROID_SERIAL=emulator-5584 android/app/gradlew -p android/app connectedHarnessAndroidTest lintHarness
 ```
