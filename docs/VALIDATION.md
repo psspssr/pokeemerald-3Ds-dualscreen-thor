@@ -1,14 +1,52 @@
 # Validation — Android previews
 
-## 0.1.0-alpha.4 candidate — full panels and gameplay repairs
+## 0.1.0-alpha.4 — full panels and gameplay repairs
 
-The local candidate builds the real ARM game with engine/data ABI `07329dad`.
+The [alpha.4 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.4)
+was built and published automatically from immutable commit
+`33986a45e9c64a5fe31f1e51ba97364cb4cdc65b`. All seven jobs passed on the first
+attempt in [run 37112567002](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37112567002):
+**50 app tests, 79 tooling tests, 18 graphics host checks, 136 GLES pixel
+assertions**, native/host/system sanitizer checks, production packaging,
+isolated signing and verified upload.
+
+| Published artifact | Verified value |
+|---|---|
+| Version | `0.1.0-alpha.4`, Android version code **4** |
+| APK | `emerald-thor-0.1.0-alpha.4-armeabi-v7a.apk` |
+| Bytes / SHA-256 | **27,534,476 bytes**; `1da875ff9a9144c84d503a723c27068c8fa0e77f0ab1a0d9e20c5e7204c7ef19` |
+| Engine/data ABI | `07329dad` |
+| Signing identity | Unchanged: `eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389` |
+
+Downloaded asset hashes, packaged native/data hashes, production package
+metadata, signature and alignment match the manifest. All published assets
+also match the immutable signed Actions artifact byte-for-byte. Evidence:
+`build/evidence/release-alpha4-ci/verification.json`.
+
+The exact downloaded APK updated over alpha.3 on API 30 with ARM translation.
+The old raw save, Android preferences and port settings were unchanged at
+installation and after the smoke test. Continue loaded the existing Oldale
+adventure. Both full Thor rectangles were confirmed, and complete bottom-screen
+gestures opened Party/Options, switched voxel rendering on/off and remained
+responsive after an **8.14-second** gap. Home/resume, Map touch, display removal
+with combined-layout controls, reattachment and subsequent Party touch passed.
+Screenshots were inspected; no fatal, ANR or graphics-backend error appeared.
+The inherited OBJ-window/BG-mosaic diagnostics remain. Evidence:
+`build/evidence/published-alpha4-qa/report.json`.
+
+This exact-artifact smoke did not repeat the isolated shared-EXP, move-learning
+or evolution scenario. Those deeper checks used matching-source local builds
+as documented below. Physical Thor and audible-output testing remain open.
+
+### Local gameplay builds
+
+The local candidates build the real ARM game with the same engine/data ABI.
 Native compilation, debug/release packaging and release lint pass. The
 release-signed development probe has SHA-256
 `91021990258246c0b9e5b7083bd38623733c0d3d62368dd5423599dd4c9838f1`;
 the matching debug probe is
 `ee318d65b6ddbcbaef24f3d63338f01e7668a72515c64ad6144568ebaee95ee0`.
-These probes are separate from the eventual published APK.
+These probes support local gameplay checks and are distinct from the published APK.
 
 Normal CI for the final game-code commit `bd3a95e101a426c0a4861d2976a0646fda943092`
 passed all three jobs in [run 37111512498](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37111512498),
