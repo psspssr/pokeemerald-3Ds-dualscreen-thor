@@ -2,7 +2,44 @@
 
 ## 0.1.0-alpha.5 — controller pause and shiny odds
 
-The release candidate adds **L1 + R1** for the app pause menu and five shiny
+The [alpha.5 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.5)
+was built from immutable commit `e8cd1a2d0b3196ddb6c76d7ef9ac57a7588715e7`.
+All seven jobs passed on the first attempt in
+[run 37123018697](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37123018697),
+including **74 app tests, 79 tooling tests and 136 GLES pixel assertions**,
+native sanitizer checks, production packaging, signing and upload.
+
+| Published artifact | Verified value |
+|---|---|
+| Version | `0.1.0-alpha.5`, Android version code **5** |
+| APK | `emerald-thor-0.1.0-alpha.5-armeabi-v7a.apk` |
+| Bytes / SHA-256 | **27,534,476 bytes**; `f1ae3ea12438227ab857ba2dd78a987397bbf384cc32565b8b4541d38814369a` |
+| Engine/data ABI | `07329dad` |
+| Signing identity | Unchanged: `eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389` |
+
+The downloaded APK's signature, alignment, package metadata and native/data
+hashes match the manifest. All three published assets match the immutable
+signed Actions artifact byte-for-byte. Evidence:
+`build/evidence/release-alpha5-ci/verification.json`.
+
+The exact published APK updated over alpha.4 on the API 30 ARM-translation
+emulator, preserving the raw save, Android preferences and port settings at
+installation. Continue loaded the existing Oldale save. Kernel-controller
+input confirmed individual L1, L1+R1 pause, no reopening from held repeats,
+Settings access, and mixed digital/analogue R2 partial/full-release behavior.
+All five shiny choices appeared; **1 in 256** remained selected after a full
+process restart.
+
+The 1920×1080 primary and 1240×1080 secondary displays retained Fill scaling.
+Party touch, L1+R1 pause after bottom-display input, Resume, Map touch,
+disconnect fallback and reattachment with further Party touch passed. Reviewed
+screenshots showed no new visual defect. No fatal exception, ANR or graphics
+backend error appeared; inherited OBJ-window/BG-mosaic diagnostics remain.
+The deliberately changed test preferences were restored, and all three
+original files matched their baseline bytes at completion. Evidence:
+`build/evidence/published-alpha5-qa/report.json`.
+
+This update adds **L1 + R1** for the app pause menu and five shiny
 choices: **Original (1 in 8,192), about 1 in 2,048, 512, 256 or 128**. Existing
 preferences retain their meaning; all boosts remain optional. The README now
 contains a compact controller/keyboard command sheet.
