@@ -6,7 +6,8 @@ import kotlin.math.min
 
 /**
  * Where the two 3DS screens go, in window pixels. The top screen is 400x240
- * (5:3), the bottom one 320x240 (4:3); both keep their aspect.
+ * (5:3), the bottom one 320x240 (4:3). Phone layouts and dual-display Fit
+ * preserve those proportions; dual-display Fill stretches the full image.
  */
 object ScreenLayout {
     class Result(
@@ -109,14 +110,17 @@ object ScreenLayout {
         val mainArea = Rect(mainSafe.left, mainSafe.top, mainWidth - mainSafe.right, mainHeight - mainSafe.bottom)
         val secondArea = Rect(0, 0, secondWidth, secondHeight)
         val integer = settings.integerScaling
+        fun screen(area: Rect, width: Float): Rect =
+            if (settings.dualScaling == DualScaling.FILL) Rect(area)
+            else fitCentered(area, width, H, integer)
         return if (settings.topOnSecondDisplay) {
             Result(
-                fitCentered(secondArea, TW, H, integer), fitCentered(mainArea, BW, H, integer),
+                screen(secondArea, TW), screen(mainArea, BW),
                 NativeBridge.WINDOW_SECOND, NativeBridge.WINDOW_MAIN,
             )
         } else {
             Result(
-                fitCentered(mainArea, TW, H, integer), fitCentered(secondArea, BW, H, integer),
+                screen(mainArea, TW), screen(secondArea, BW),
                 NativeBridge.WINDOW_MAIN, NativeBridge.WINDOW_SECOND,
             )
         }

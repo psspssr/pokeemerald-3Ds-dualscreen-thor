@@ -531,16 +531,24 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         physical.clear()
         InputHub.clear()
         val items = mutableListOf(getString(R.string.menu_resume), getString(R.string.menu_settings), getString(R.string.menu_quit))
-        if (fastForward.options.fastForwardEnabled)
+        val fastForwardIndex = if (fastForward.options.fastForwardEnabled) items.size.also {
             items.add(getString(if (fastForward.toggled) R.string.fast_forward_stop else R.string.fast_forward_start,
                 fastForward.options.fastForwardSpeed))
+        } else -1
+        // Fill has no outside-picture margin to tap. Offer the optional
+        // controls explicitly, without consuming the bottom screen's touch.
+        val controlsIndex = if (dualActive && settings.dualControls &&
+            settings.controlsVisibility == ControlsVisibility.AUTO) items.size.also {
+            items.add(getString(if (overlay.autoHidden) R.string.menu_controls_show else R.string.menu_controls_hide))
+        } else -1
         menuDialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.menu_title)
             .setItems(items.toTypedArray()) { _, which ->
                 when (which) {
                     1 -> openSettings()
                     2 -> quitGame()
-                    3 -> onFastForwardToggle()
+                    fastForwardIndex -> onFastForwardToggle()
+                    controlsIndex -> if (dualActive) overlay.setAutoHidden(!overlay.autoHidden)
                 }
             }
             .setOnDismissListener {

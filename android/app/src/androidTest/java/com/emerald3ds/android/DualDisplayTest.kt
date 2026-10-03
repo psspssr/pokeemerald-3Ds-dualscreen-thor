@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.content.pm.ActivityInfo
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
@@ -16,9 +18,14 @@ import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
+import androidx.preference.ListPreference
+import androidx.preference.SwitchPreferenceCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -42,7 +49,7 @@ class DualDisplayTest {
     @Before fun setup() {
         check(BuildConfig.HOST_HARNESS)
         PreferenceManager.getDefaultSharedPreferences(context).edit().clear()
-            .putBoolean("dual_display", true).commit()
+            .putBoolean("dual_display", true).putString("dual_scaling", "fit").commit()
         inst.runOnMainSync { InputHub.clear() }
     }
 
@@ -120,6 +127,253 @@ class DualDisplayTest {
         assertTrue(inst.uiAutomation.injectInputEvent(e, true))
         e.recycle()
         inst.waitForIdleSync()
+    }
+
+    @Test fun fullPanelChoiceUsesBothEntireThorPanelsWithoutCropping() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putString("dual_scaling", "fill").commit()
+        val fill = AppSettings.load(context)
+        for (integer in listOf(false, true)) {
+            val settings = fill.copy(integerScaling = integer)
+            val normal = ScreenLayout.dual(1920, 1080, Rect(), 1240, 1080, settings)
+            assertEquals(Rect(0, 0, 1920, 1080), normal.top)
+            assertEquals(Rect(0, 0, 1240, 1080), normal.bottom)
+            val swapped = ScreenLayout.dual(1920, 1080, Rect(), 1240, 1080,
+                settings.copy(topOnSecondDisplay = true))
+            assertEquals(Rect(0, 0, 1240, 1080), swapped.top)
+            assertEquals(Rect(0, 0, 1920, 1080), swapped.bottom)
+            assertEquals(NativeBridge.WINDOW_SECOND, swapped.topWindow)
+            assertEquals(NativeBridge.WINDOW_MAIN, swapped.bottomWindow)
+        }
+        prefs.edit().putString("dual_scaling", "fit").commit()
+        val fit = AppSettings.load(context)
+        val nativeAspect = ScreenLayout.dual(1920, 1080, Rect(), 1240, 1080, fit)
+        assertEquals(Rect(60, 0, 1860, 1080), nativeAspect.top)
+        assertEquals(Rect(0, 75, 1240, 1005), nativeAspect.bottom)
+        for ((width, height) in listOf(1080 to 1920, 1920 to 1080)) {
+            val phoneFill = ScreenLayout.single(width, height, Rect(), fill, 250, true, false)
+            val phoneFit = ScreenLayout.single(width, height, Rect(), fit, 250, true, false)
+            assertEquals(phoneFit.top, phoneFill.top)
+            assertEquals(phoneFit.bottom, phoneFill.bottom)
+        }
+    }
+
+    @Test fun fullPanelBottomCornersRenderAndMapToAllTouchCoordinates() {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putString("dual_scaling", "fill").commit()
+        addDisplay()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitDual(scenario)
+            val p = presentation(scenario)!!
+            val state = HostProbe.snapshot()
+            assertArrayEquals(intArrayOf(0, 0, 1240, 1080), state.sliceArray(12..15))
+            lateinit var main: SurfaceView
+            scenario.onActivity { main = it.findViewById(R.id.game_surface) }
+            waitUntil("system bars remained visible over a full-panel window") {
+                var hidden = false
+                scenario.onActivity {
+                    val first = ViewCompat.getRootWindowInsets(main)
+                    val second = ViewCompat.getRootWindowInsets(p.surfaceView)
+                    hidden = first != null && second != null &&
+                        !first.isVisible(WindowInsetsCompat.Type.systemBars()) &&
+                        !second.isVisible(WindowInsetsCompat.Type.systemBars())
+                }
+                hidden
+            }
+            assertArrayEquals(intArrayOf(0, 0, main.width, main.height), state.sliceArray(8..11))
+            val top = snapshot(main, "thor-fill-top")
+            assertEquals(Color.rgb(30, 74, 168), top.getPixel(1, 1))
+            assertEquals(Color.rgb(30, 74, 168), top.getPixel(top.width - 2, top.height - 2))
+            val bottom = snapshot(p.surfaceView, "thor-fill-bottom")
+            for ((x, y) in listOf(1 to 1, 1238 to 1, 1238 to 1078, 1 to 1078))
+                assertEquals("full-panel corner was letterboxed", Color.rgb(46, 139, 87), bottom.getPixel(x, y))
+            for ((point, mapped) in listOf(
+                (1f to 1f) to (0 to 0), (1239f to 1f) to (319 to 0),
+                (1239f to 1079f) to (319 to 239), (1f to 1079f) to (0 to 239),
+                (620f to 540f) to (160 to 120),
+            )) {
+                val down = SystemClock.uptimeMillis()
+                touch(display!!.display.displayId, MotionEvent.ACTION_DOWN, point.first, point.second, down)
+                assertEquals(CtrKeys.TOUCH, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
+                assertArrayEquals(intArrayOf(mapped.first, mapped.second), HostProbe.snapshot().sliceArray(4..5))
+                touch(display!!.display.displayId, MotionEvent.ACTION_UP, point.first, point.second, down)
+                assertEquals(0, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
+            }
+        }
+    }
+
+    @Test fun fillDefaultPreservesExistingPreferencesAndSingleDisplayIntegerScaling() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().remove("dual_scaling").putBoolean("integer_scaling", true)
+            .putString("layout_portrait", AppSettings.PORTRAIT_CONSOLE)
+            .putString("layout_landscape", AppSettings.LANDSCAPE_TOP_LARGE)
+            .putString("top_display", "second").putString("filter", "nearest")
+            .putBoolean("dual_controls", true).commit()
+        val settings = AppSettings.load(context)
+        assertEquals(DualScaling.FILL, settings.dualScaling)
+        assertTrue(settings.integerScaling)
+        assertTrue(prefs.getBoolean("integer_scaling", false))
+        assertTrue(settings.topOnSecondDisplay)
+        assertTrue(settings.dualControls)
+        assertFalse(settings.linearFilter)
+        assertEquals(AppSettings.PORTRAIT_CONSOLE, settings.portraitLayout)
+        assertEquals(AppSettings.LANDSCAPE_TOP_LARGE, settings.landscapeLayout)
+        val phone = ScreenLayout.single(1920, 1080, Rect(), settings, 0, false, false)
+        assertEquals(Rect(160, 60, 1760, 1020), phone.top)
+        assertEquals(Rect(1600, 0, 1920, 240), phone.bottom)
+        prefs.edit().putString("dual_scaling", "fit").commit()
+        assertEquals(DualScaling.FIT, AppSettings.load(context).dualScaling)
+        prefs.edit().putString("dual_scaling", "unknown").commit()
+        assertEquals(DualScaling.FILL, AppSettings.load(context).dualScaling)
+    }
+
+    @Test fun scalingSettingsExposeBothModesWithoutDisablingPhoneIntegerScaling() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().remove("dual_scaling").putBoolean("integer_scaling", true).commit()
+        ActivityScenario.launch(SettingsActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val fragment = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                    as SettingsActivity.SettingsFragment
+                val scaling = fragment.findPreference<ListPreference>("dual_scaling")!!
+                val integer = fragment.findPreference<SwitchPreferenceCompat>("integer_scaling")!!
+                assertEquals("fill", scaling.value)
+                assertEquals(context.resources.getStringArray(R.array.dual_scaling_entries)[0], scaling.summary)
+                assertTrue(integer.isChecked && integer.isEnabled)
+                scaling.value = "fit"
+                assertEquals(DualScaling.FIT, AppSettings.load(context).dualScaling)
+                assertEquals(context.resources.getStringArray(R.array.dual_scaling_entries)[1], scaling.summary)
+                fragment.findPreference<SwitchPreferenceCompat>("dual_display")!!.isChecked = false
+                assertFalse(scaling.isEnabled)
+                assertTrue(integer.isChecked && integer.isEnabled)
+            }
+        }
+    }
+
+    private fun menuAction(label: String) {
+        val automation = inst.uiAutomation
+        val service = automation.serviceInfo
+        val originalFlags = service.flags
+        service.flags = originalFlags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        automation.serviceInfo = service
+        try {
+            waitUntil("missing pause-menu action: $label") {
+                // After touching the second display, its Presentation may
+                // remain Android's active window. The pause menu is on main.
+                val roots = listOfNotNull(automation.rootInActiveWindow) + automation.windows.mapNotNull { it.root }
+                val row = roots.flatMap { it.findAccessibilityNodeInfosByText(label) }
+                    .firstOrNull { it.text?.toString() == label } ?: return@waitUntil false
+                var target = row
+                while (!target.isClickable && target.parent != null) target = target.parent
+                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            inst.waitForIdleSync()
+        } finally {
+            service.flags = originalFlags
+            automation.serviceInfo = service
+        }
+    }
+
+    private fun checkFullPanelControls(swapped: Boolean) {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putString("dual_scaling", "fill").putBoolean("dual_controls", true)
+            .putString("controls_visibility", "auto").putString("top_display", if (swapped) "second" else "main")
+            .putBoolean("qol_fast_forward", swapped).commit()
+        addDisplay()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitUntil("dual window was not ready") { presentation(scenario)?.surfaceWidth == 1240 }
+            lateinit var overlay: ControlsOverlayView
+            lateinit var main: SurfaceView
+            scenario.onActivity {
+                overlay = it.findViewById<FrameLayout>(R.id.overlay_container).getChildAt(0) as ControlsOverlayView
+                main = it.findViewById(R.id.game_surface)
+            }
+            waitUntil("dual input was not ready") { var ready = false; scenario.onActivity { ready = overlay.inputEnabled }; ready }
+            assertFalse(overlay.controlsVisible)
+            val displayId = if (swapped) 0 else display!!.display.displayId
+            val x = if (swapped) main.width / 2f else 620f
+            val y = if (swapped) main.height / 2f else 540f
+            val down = SystemClock.uptimeMillis()
+            touch(displayId, MotionEvent.ACTION_DOWN, x, y, down)
+            assertArrayEquals(intArrayOf(160, 120), HostProbe.snapshot().sliceArray(4..5))
+            assertEquals(CtrKeys.TOUCH, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
+            assertFalse("ordinary bottom touch must not reveal or consume controls", overlay.controlsVisible)
+            touch(displayId, MotionEvent.ACTION_UP, x, y, down)
+            scenario.onActivity { it.onMenuKey() }
+            menuAction(context.getString(R.string.menu_controls_show))
+            waitUntil("pause menu did not reveal controls") { var visible = false; scenario.onActivity { visible = overlay.controlsVisible && overlay.inputEnabled }; visible }
+            assertEquals("auto", prefs.getString("controls_visibility", null))
+            scenario.onActivity { it.onMenuKey() }
+            menuAction(context.getString(R.string.menu_controls_hide))
+            waitUntil("pause menu did not hide controls") { var hidden = false; scenario.onActivity { hidden = !overlay.controlsVisible && overlay.inputEnabled }; hidden }
+            assertEquals(0, HostProbe.snapshot()[1])
+        }
+    }
+
+    @Test fun fullPanelDualAutoControlsCanBeShownAndHiddenFromPauseMenu() = checkFullPanelControls(false)
+
+    @Test fun fullPanelSwappedAutoControlsKeepBottomTouchAndFastForwardMenuSeparate() = checkFullPanelControls(true)
+
+    @Test fun fillFitSwapRotationAndHotplugReleaseTouchesAndKeepWindowGeometry() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putString("dual_scaling", "fill").commit()
+        addDisplay()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitDual(scenario)
+            val down = SystemClock.uptimeMillis()
+            touch(display!!.display.displayId, MotionEvent.ACTION_DOWN, 930f, 540f, down)
+            assertEquals(CtrKeys.TOUCH, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
+            scenario.moveToState(Lifecycle.State.CREATED)
+            prefs.edit().putString("dual_scaling", "fit").commit()
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            waitDual(scenario)
+            assertEquals(0, HostProbe.snapshot()[1])
+            assertArrayEquals(intArrayOf(0, 75, 1240, 930), HostProbe.snapshot().sliceArray(12..15))
+
+            scenario.moveToState(Lifecycle.State.CREATED)
+            prefs.edit().putString("dual_scaling", "fill").putString("top_display", "second").commit()
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            waitUntil("full-panel assignment did not swap") {
+                presentation(scenario)?.surfaceWidth == 1240 && HostProbe.snapshot()[6] == NativeBridge.WINDOW_SECOND
+            }
+            lateinit var main: SurfaceView
+            scenario.onActivity { main = it.findViewById(R.id.game_surface) }
+            val initialWidth = main.width
+            assertArrayEquals(intArrayOf(0, 0, main.width, main.height), HostProbe.snapshot().sliceArray(12..15))
+            val rendered = HostProbe.snapshot()[16]
+            waitUntil("swapped main surface did not draw") { HostProbe.snapshot()[16] > rendered + 1 }
+            val bottom = snapshot(main, "thor-fill-bottom-on-main")
+            assertEquals(Color.rgb(46, 139, 87), bottom.getPixel(1, 1))
+            assertEquals(Color.rgb(46, 139, 87), bottom.getPixel(bottom.width - 2, bottom.height - 2))
+            val x = main.width * 0.75f
+            val y = main.height * 0.25f
+            val mainDown = SystemClock.uptimeMillis()
+            touch(0, MotionEvent.ACTION_DOWN, x, y, mainDown)
+            assertArrayEquals(intArrayOf(240, 60), HostProbe.snapshot().sliceArray(4..5))
+            assertEquals(CtrKeys.TOUCH, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
+            scenario.onActivity {
+                it.requestedOrientation = if (main.width > main.height)
+                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+            waitUntil("main display did not rotate") { main.width != initialWidth }
+            waitUntil("rotation retained a touch from old coordinates") { HostProbe.snapshot()[1] and CtrKeys.TOUCH == 0 }
+            assertArrayEquals(intArrayOf(0, 0, main.width, main.height), HostProbe.snapshot().sliceArray(12..15))
+            touch(0, MotionEvent.ACTION_UP, x, y, mainDown)
+
+            inst.runOnMainSync { display!!.resize(1000, 1000, 240) }
+            waitUntil("resized full-panel display was not recreated") {
+                presentation(scenario)?.surfaceWidth == 1000 && presentation(scenario)?.surfaceHeight == 1000
+            }
+            assertArrayEquals(intArrayOf(0, 0, 1000, 1000), HostProbe.snapshot().sliceArray(8..11))
+            removeDisplay()
+            waitUntil("full-panel display loss did not fall back") { presentation(scenario) == null && HostProbe.snapshot()[6] == 0 }
+            assertEquals(0, HostProbe.snapshot()[1])
+            assertTrue(HostProbe.snapshot()[15] < main.height)
+            addDisplay()
+            waitUntil("full-panel display did not reattach") {
+                presentation(scenario)?.surfaceWidth == 1240 && HostProbe.snapshot()[6] == NativeBridge.WINDOW_SECOND
+            }
+            assertArrayEquals(intArrayOf(0, 0, 1240, 1080), HostProbe.snapshot().sliceArray(8..11))
+            assertArrayEquals(intArrayOf(0, 0, main.width, main.height), HostProbe.snapshot().sliceArray(12..15))
+        }
     }
 
     @Test fun bothWindowsRenderAndBottomTouchReachesNative() {

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.preference.PreferenceManager
 
 enum class ControlsVisibility { AUTO, ALWAYS, NEVER }
+enum class DualScaling { FILL, FIT }
 
 data class AppSettings(
     val portraitLayout: String,
@@ -18,6 +19,7 @@ data class AppSettings(
     val haptics: Boolean,
     val labelMapping: Boolean,
     val dualDisplay: Boolean,
+    val dualScaling: DualScaling,
     val topOnSecondDisplay: Boolean,
     val dualControls: Boolean,
 ) {
@@ -49,6 +51,7 @@ data class AppSettings(
                 haptics = p.getBoolean("haptics", true),
                 labelMapping = p.getString("gamepad_mapping", "position") == "label",
                 dualDisplay = p.getBoolean("dual_display", true),
+                dualScaling = if (p.getString("dual_scaling", "fill") == "fit") DualScaling.FIT else DualScaling.FILL,
                 topOnSecondDisplay = p.getString("top_display", "main") == "second",
                 dualControls = p.getBoolean("dual_controls", false),
             )

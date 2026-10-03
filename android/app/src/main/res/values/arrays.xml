@@ -55,6 +55,14 @@
         <item>Main display</item>
         <item>Second display</item>
     </string-array>
+    <string-array name="dual_scaling_entries">
+        <item>Fill both displays (stretch)</item>
+        <item>Fit original proportions</item>
+    </string-array>
+    <string-array name="dual_scaling_values" translatable="false">
+        <item>fill</item>
+        <item>fit</item>
+    </string-array>
     <string-array name="top_display_values" translatable="false">
         <item>main</item>
         <item>second</item>

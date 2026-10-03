@@ -20,6 +20,8 @@
     <!-- Menu -->
     <string name="menu_title">Paused</string>
     <string name="menu_resume">Resume</string>
+    <string name="menu_controls_show">Show on-screen controls</string>
+    <string name="menu_controls_hide">Hide on-screen controls</string>
     <string name="menu_settings">Settings</string>
     <string name="menu_quit">Quit</string>
     <string name="quit_confirm">Quit the game? Progress since your last in-game save is lost.</string>
@@ -36,7 +38,7 @@
     <string name="pref_layout_portrait">Portrait layout</string>
     <string name="pref_layout_landscape">Landscape layout</string>
     <string name="pref_integer_scaling">Integer scaling</string>
-    <string name="pref_integer_scaling_summary">Scale the screens by whole multiples only</string>
+    <string name="pref_integer_scaling_summary">Whole multiples in single-display layouts and dual-display Fit mode</string>
     <string name="pref_filter">Filter</string>
     <string name="pref_keep_screen_on">Keep screen on</string>
     <string name="pref_controls_visibility">Show controls</string>
@@ -49,8 +51,9 @@
     <string name="pref_dual_display">Use a second display</string>
     <string name="pref_dual_display_summary">Show the bottom screen on a second built-in display (AYN Thor and similar)</string>
     <string name="pref_top_display">Top screen on</string>
+    <string name="pref_dual_scaling">Screen scaling</string>
     <string name="pref_dual_controls">On-screen controls in dual-display mode</string>
-    <string name="pref_dual_controls_summary">Touching outside the picture shows the controls</string>
+    <string name="pref_dual_controls_summary">With Auto visibility, show or hide controls from the pause menu. Tapping outside the picture also shows them in Fit mode.</string>
     <string name="pref_import_pak">Import data pack (emerald3ds.pak)…</string>
     <string name="pref_import_save">Import save…</string>
     <string name="pref_import_save_summary">Import an Emerald GBA, emulator or 3DS .sav. Raw saves and mGBA RTC trailers are supported; emulator clock overrides are not transferred. A backup is kept. Save states are not supported.</string>

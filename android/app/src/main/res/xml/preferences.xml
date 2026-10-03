@@ -97,6 +97,15 @@
             app:summary="@string/pref_dual_display_summary"
             app:title="@string/pref_dual_display" />
         <ListPreference
+            app:defaultValue="fill"
+            app:dependency="dual_display"
+            app:entries="@array/dual_scaling_entries"
+            app:entryValues="@array/dual_scaling_values"
+            app:iconSpaceReserved="false"
+            app:key="dual_scaling"
+            app:title="@string/pref_dual_scaling"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
             app:defaultValue="main"
             app:dependency="dual_display"
             app:entries="@array/top_display_entries"
