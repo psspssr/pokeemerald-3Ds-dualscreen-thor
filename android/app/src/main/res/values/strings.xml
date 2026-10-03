@@ -78,10 +78,10 @@
 
     <string name="about_title">About</string>
     <string name="about_body"><![CDATA[<b>Emerald Dual Screen for Android</b> %1$s<br><br>
-An Android port of <b>Pokémon Emerald 3Ds Dual Screen</b> by ZallaxDev (MIT licence), github.com/ZallaxDev/pokeemerald-3Ds-dualscreen, which compiles unchanged on top of a re-implementation of the 3DS libraries.<br><br>
+An Android port of <b>Pokémon Emerald 3Ds Dual Screen</b> by ZallaxDev (3DS port code: MIT licence), github.com/ZallaxDev/pokeemerald-3Ds-dualscreen. The upstream snapshot is preserved; Android builds apply small compatibility and optional gameplay patches.<br><br>
 Built on the <b>pret/pokeemerald</b> decompilation (github.com/pret/pokeemerald).<br><br>
 Contains code from devkitPro <b>libctru</b>, <b>citro3d</b> and <b>citro2d</b> (zlib licence).<br><br>
-Engine-only builds require a data pack generated for the same Android build using your own cartridge dump. Development builds may embed game data.<br><br>
+Engine-only builds require a data pack generated for the same Android build. Playable releases include matching game data.<br><br>
 This is an unofficial fan project, not affiliated with or endorsed by Nintendo, Game Freak, Creatures or The Pokémon Company. Pokémon and Pokémon Emerald are trademarks of their respective owners.]]></string>
     <string name="cat_gameplay">Gameplay</string>
     <string name="qol_title">Quality of life</string>

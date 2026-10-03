@@ -108,20 +108,28 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                 findPreference<Preference>("data_location")?.summary =
                     if (busy) getString(R.string.file_working) else files.dataDir.absolutePath
                 if (state == null || busy) return@observe
-                fileModel.consumeResult()
+                val needsRestart = state.error == null &&
+                    state.action != GameFilesModel.Action.EXPORT_SAVE && NativeBridge.isStarted()
+                // Keep an unacknowledged restart choice through recreation.
+                // Dismissing the old view's dialog must not lose this result.
+                if (!needsRestart) fileModel.consumeResult()
                 if (state.error != null) {
                     toast(getString(if (state.action == GameFilesModel.Action.EXPORT_SAVE)
                         R.string.export_failed else R.string.import_failed, state.error))
                 } else if (state.action == GameFilesModel.Action.EXPORT_SAVE) {
                     toast(getString(R.string.export_done))
-                } else if (!NativeBridge.isStarted()) {
+                } else if (!needsRestart) {
                     toast(getString(R.string.import_done))
                 } else {
                     dialog = MaterialAlertDialogBuilder(requireContext())
                         .setTitle(R.string.import_restart_title)
                         .setMessage(R.string.import_restart_body)
-                        .setPositiveButton(R.string.restart_now) { _, _ -> RestartActivity.restart(requireActivity()) }
-                        .setNegativeButton(R.string.import_later, null)
+                        .setPositiveButton(R.string.restart_now) { _, _ ->
+                            fileModel.consumeResult()
+                            RestartActivity.restart(requireActivity())
+                        }
+                        .setNegativeButton(R.string.import_later) { _, _ -> fileModel.consumeResult() }
+                        .setOnCancelListener { fileModel.consumeResult() }
                         .show()
                 }
             }

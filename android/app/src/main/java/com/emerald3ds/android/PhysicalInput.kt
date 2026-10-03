@@ -47,7 +47,9 @@ class PhysicalInput(
     // controllers may hold the same logical 3DS button at the same time.
     private val gamepadKeys = mutableMapOf<Pair<Int, Int>, Int>()
     private val keyboardKeys = mutableMapOf<Pair<Int, Int>, Int>()
-    private var motionDevice: Int? = null
+    private data class MotionState(val hat: Int, val axes: Int, val x: Int, val y: Int, val circleOrder: Long)
+    private val motionStates = mutableMapOf<Int, MotionState>()
+    private var circleOrder = 0L
     private val shoulderPresses = mutableSetOf<Pair<Int, Int>>()
     private val blockedShoulders = mutableSetOf<Pair<Int, Int>>()
     private var shoulderInputAfter = Long.MIN_VALUE
@@ -230,9 +232,20 @@ class PhysicalInput(
 
     fun onMotion(event: MotionEvent): Boolean {
         val joystick = event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_GAMEPAD)
-        if (!joystick || event.action != MotionEvent.ACTION_MOVE) return false
+        if (!joystick) return false
+        if (event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            // Cancel only this motion stream. Digital keys are a separate
+            // stream, and cancellation does not prove an R2 release.
+            if (fastAxes[event.deviceId]?.second == true) blockFastToggle(event.deviceId,
+                digital = (event.deviceId to KeyEvent.KEYCODE_BUTTON_R2) in fastKeys, analog = true)
+            fastAxes.remove(event.deviceId)
+            updateFastTriggers()
+            motionStates.remove(event.deviceId)
+            commitMotion()
+            return true
+        }
+        if (event.action != MotionEvent.ACTION_MOVE) return false
         observeMotionEvent(event, suspended = false)
-        motionDevice = event.deviceId
         val device = event.device
 
         val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
@@ -268,9 +281,15 @@ class PhysicalInput(
             if (r2) axes = axes or CtrKeys.ZR
         }
 
-        InputHub.setKeys(InputHub.SRC_HAT, hat)
-        InputHub.setKeys(InputHub.SRC_AXES, axes)
-        InputHub.setCircle(InputHub.SRC_AXES, lx, ly)
+        val previousMotion = motionStates[event.deviceId]
+        // Hats and button axes merge across devices. The single 3DS circle
+        // pad follows the most recently moved non-neutral stick; unrelated
+        // hat/trigger reports do not steal it from another controller.
+        val order = if ((lx != 0 || ly != 0) && (previousMotion == null || lx != previousMotion.x || ly != previousMotion.y))
+            ++circleOrder else previousMotion?.circleOrder ?: 0L
+        if (hat == 0 && axes == 0 && lx == 0 && ly == 0) motionStates.remove(event.deviceId)
+        else motionStates[event.deviceId] = MotionState(hat, axes, lx, ly, order)
+        commitMotion()
         if (hat != 0 || axes != 0 || l2 || r2 || abs(lx) > 0 || abs(ly) > 0) callbacks.onPhysicalInput()
         return true
     }
@@ -285,7 +304,6 @@ class PhysicalInput(
         clearFastTriggers()
         gamepadKeys.clear()
         keyboardKeys.clear()
-        motionDevice = null
         InputHub.setKeys(InputHub.SRC_GAMEPAD, 0)
         InputHub.setKeys(InputHub.SRC_KEYBOARD, 0)
         clearMotion()
@@ -310,16 +328,29 @@ class PhysicalInput(
         keyboardKeys.keys.removeAll { it.first == deviceId }
         InputHub.setKeys(InputHub.SRC_GAMEPAD, gamepadKeys.values.fold(0) { a, b -> a or b })
         InputHub.setKeys(InputHub.SRC_KEYBOARD, keyboardKeys.values.fold(0) { a, b -> a or b })
-        if (motionDevice == deviceId) {
-            motionDevice = null
-            clearMotion()
-        }
+        motionStates.remove(deviceId)
+        commitMotion()
     }
 
     private fun clearMotion() {
-        InputHub.setKeys(InputHub.SRC_HAT, 0)
-        InputHub.setKeys(InputHub.SRC_AXES, 0)
-        InputHub.setCircle(InputHub.SRC_AXES, 0, 0)
+        motionStates.clear()
+        circleOrder = 0L
+        commitMotion()
+    }
+
+    private fun commitMotion() {
+        var hat = 0
+        var axes = 0
+        var circle: MotionState? = null
+        for (state in motionStates.values) {
+            hat = hat or state.hat
+            axes = axes or state.axes
+            if ((state.x != 0 || state.y != 0) && (circle == null || state.circleOrder > circle.circleOrder))
+                circle = state
+        }
+        InputHub.setKeys(InputHub.SRC_HAT, hat)
+        InputHub.setKeys(InputHub.SRC_AXES, axes)
+        InputHub.setCircle(InputHub.SRC_AXES, circle?.x ?: 0, circle?.y ?: 0)
     }
 
     private fun updateFastTriggers() {

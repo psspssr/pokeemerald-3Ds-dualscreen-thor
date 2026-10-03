@@ -4,6 +4,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.app.Application
 import android.net.Uri
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.lifecycle.Lifecycle
 import androidx.preference.Preference
 import androidx.test.core.app.ActivityScenario
@@ -20,6 +21,66 @@ import org.junit.runner.RunWith
 /** A blocked provider-like file operation must not block or retain the old UI. */
 @RunWith(AndroidJUnit4::class)
 class FileWorkLifecycleTest {
+    @Test fun stagedImportRestartChoiceSurvivesSettingsRecreation() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val input = File(context.cacheDir, "restart-choice.sav")
+        val replacement = ByteArray(128 * 1024) { (it % 251).toByte() }
+        input.writeBytes(replacement)
+        fun waitFor(message: String, condition: () -> Boolean) {
+            val deadline = SystemClock.uptimeMillis() + 15_000
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (condition()) return
+                SystemClock.sleep(30)
+            }
+            fail(message)
+        }
+        fun nodes(resource: Int) = instrumentation.uiAutomation.rootInActiveWindow
+            ?.findAccessibilityNodeInfosByText(context.getString(resource)).orEmpty()
+        ActivityScenario.launch(GameActivity::class.java).use {
+            waitFor("game did not start") { NativeBridge.isStarted() }
+            ActivityScenario.launch(SettingsActivity::class.java).use { scenario ->
+                lateinit var model: GameFilesModel
+                scenario.onActivity { activity ->
+                    model = (activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                        as SettingsActivity.SettingsFragment).fileModel
+                }
+                val pending = File(model.files.dataDir, GameFiles.SAVE_NAME + ".import")
+                val previousPending = pending.takeIf { it.isFile }?.readBytes()
+                val previousSave = model.files.saveFile.takeIf { it.isFile }?.readBytes()
+                try {
+                    scenario.onActivity { model.importFile(Uri.fromFile(input), GameFiles.Kind.SAVE) }
+                    waitFor("restart choice did not appear") { nodes(R.string.import_restart_title).isNotEmpty() }
+                    assertArrayEquals(replacement, pending.readBytes())
+                    scenario.recreate()
+                    waitFor("activity recreation lost the pending import's restart choice") {
+                        nodes(R.string.import_restart_title).isNotEmpty()
+                    }
+                    scenario.onActivity { activity ->
+                        val restored = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                            as SettingsActivity.SettingsFragment
+                        assertSame(model, restored.fileModel)
+                    }
+                    val later = nodes(R.string.import_later).single { it.isClickable }
+                    assertTrue(later.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                    waitFor("Later did not consume the completion") {
+                        var done = false
+                        scenario.onActivity { done = model.state.value == null }
+                        done
+                    }
+                    assertArrayEquals(replacement, pending.readBytes())
+                    if (previousSave == null) assertFalse(model.files.saveFile.exists())
+                    else assertArrayEquals(previousSave, model.files.saveFile.readBytes())
+                    scenario.recreate()
+                    assertTrue("acknowledged import prompted again", nodes(R.string.import_restart_title).isEmpty())
+                } finally {
+                    if (previousPending == null) pending.delete() else pending.writeBytes(previousPending)
+                    input.delete()
+                }
+            }
+        }
+    }
+
     @Test fun failedExportRecoveryKeepsPauseAcrossRecreationUntilRetry() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as Application
