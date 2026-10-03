@@ -2,7 +2,38 @@
 
 ## 0.1.0-alpha.6 — input and lifecycle polish
 
-The candidate fixes interrupted touch gestures, interference between multiple
+The [alpha.6 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.6)
+was built from immutable commit `159e3d31af1062b66c827476e7552fc793e1fe1c`.
+All seven jobs passed on the first attempt in
+[run 37149077966](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37149077966),
+including **82 app tests, 79 tooling tests and 136 GLES pixel assertions**,
+native sanitizer checks, production packaging, signing and upload.
+
+| Published artifact | Verified value |
+|---|---|
+| Version | `0.1.0-alpha.6`, Android version code **6** |
+| APK | `emerald-thor-0.1.0-alpha.6-armeabi-v7a.apk` |
+| Bytes / SHA-256 | **27,550,860 bytes**; `1e6b76c215314060d0f7f5ff5984a24ac160f5521449efce2ed89de94f160134` |
+| Engine/data ABI | `07329dad` |
+| Signing identity | Unchanged: `eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389` |
+
+The downloaded APK's signature, alignment, package metadata and native/data
+hashes match the manifest. All three published assets match the immutable
+signed Actions artifact byte-for-byte. Evidence:
+`build/evidence/release-alpha6-ci/verification.json`.
+
+The exact published APK updated over alpha.5, preserved the save and both
+settings files, and loaded the existing Oldale adventure. L1+R1 pause/Resume,
+full Thor display sizes, Party/Map touch, Home/return, disconnect fallback,
+reattachment and normal Quit passed on the API 30 ARM-translation emulator.
+Screenshots were reviewed; the game reported native exit status zero and no
+fatal exception, ANR or graphics-backend error appeared. The original three
+files still matched their baseline bytes after completion. The deeper
+controller/import-recreation checks below used the matching-source probe;
+audio fault injection is a separate backend test, not a hardware listening
+test. Evidence: `build/evidence/published-alpha6-qa/report.json`.
+
+This update fixes interrupted touch gestures, interference between multiple
 controllers, the disappearing import/restore restart choice, display teardown
 during pause, and recovery from transient audio failures. The About panel now
 accurately describes the Android patches and bundled release data.
