@@ -146,15 +146,17 @@ void CtrHost_SetWindowAt(int index, struct ANativeWindow *window)
     /*
      * After surfaceDestroyed returns the surface must not be drawn to. Give a
      * running game thread a frame to notice the new generation (it asks for
-     * it at least once per frame) and drop its EGL surface.
+     * it at least once per frame) and drop its EGL surface. A requested pause
+     * is not enough: its lifecycle listeners must finish before the pause
+     * acknowledgement proves that the renderer has released its windows.
      */
-    if (!window && sStarted && sState == CTR_HOST_RUNNING)
+    if (!window && sStarted && sState != CTR_HOST_EXITING && !sPauseAcknowledged)
     {
         struct timespec deadline;
         uint32_t wanted = slot->generation;
 
         DeadlineAfterMs(&deadline, WINDOW_RELEASE_TIMEOUT_MS);
-        while (slot->seen != wanted && sState == CTR_HOST_RUNNING)
+        while (slot->seen != wanted && sState != CTR_HOST_EXITING && !sPauseAcknowledged)
             if (pthread_cond_timedwait(&sCond, &sLock, &deadline) == ETIMEDOUT)
                 break;
     }

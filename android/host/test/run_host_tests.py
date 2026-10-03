@@ -27,3 +27,15 @@ with tempfile.TemporaryDirectory(prefix="emerald-host-test-") as directory:
     subprocess.run(flags + [str(obj), str(HOST / "test/test_mystery_host.c"),
                             "-o", str(mystery)], check=True)
     subprocess.run([str(mystery)], check=True, timeout=15)
+    # The production APT listener ordering releases GPU windows before the
+    # host acknowledges pause. Exercise both main and secondary window slots.
+    root = HOST.parents[1]
+    lifecycle = Path(directory) / "test_window_lifecycle"
+    lifecycle_flags = [flags[0], "-I" + str(root / "android/shim/test/host"), *flags[1:]]
+    subprocess.run(lifecycle_flags + ["-I" + str(root / "android/shim/include"),
+                            str(obj), str(root / "android/shim/src/apt.c"),
+                            str(HOST / "test/test_window_lifecycle.c"),
+                            "-o", str(lifecycle)], check=True)
+    for window in ("0", "1"):
+        for phase in ("before", "during", "settled"):
+            subprocess.run([str(lifecycle), phase, window], check=True, timeout=5)
