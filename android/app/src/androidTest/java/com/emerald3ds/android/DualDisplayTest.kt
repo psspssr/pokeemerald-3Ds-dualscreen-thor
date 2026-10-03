@@ -494,9 +494,12 @@ class DualDisplayTest {
                 KeyEvent.KEYCODE_BUTTON_X to CtrKeys.Y, KeyEvent.KEYCODE_BUTTON_Y to CtrKeys.X,
                 KeyEvent.KEYCODE_BUTTON_L1 to CtrKeys.L, KeyEvent.KEYCODE_BUTTON_R1 to CtrKeys.R)
             for ((code, key) in pairs) {
-                scenario.onActivity { it.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code)) }
+                SystemClock.sleep(2)
+                val now = SystemClock.uptimeMillis()
+                val press = KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0)
+                scenario.onActivity { it.dispatchKeyEvent(press) }
                 assertEquals(key, HostProbe.snapshot()[1])
-                scenario.onActivity { it.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code)) }
+                scenario.onActivity { it.dispatchKeyEvent(KeyEvent.changeAction(press, KeyEvent.ACTION_UP)) }
                 assertEquals(0, HostProbe.snapshot()[1])
             }
             scenario.onActivity { it.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Z)) }

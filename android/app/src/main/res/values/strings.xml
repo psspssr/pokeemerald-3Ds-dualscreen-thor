@@ -114,6 +114,6 @@ This is an unofficial fan project, not affiliated with or endorsed by Nintendo, 
     <string name="restore_backup_action">Restore</string>
     <string-array name="qol_speed_entries"><item>2×</item><item>4×</item></string-array>
     <string-array name="qol_speed_values"><item>2</item><item>4</item></string-array>
-    <string-array name="qol_shiny_entries"><item>Off — normal odds (1 in 8,192)</item><item>Up to 4× (about 1 in 2,048)</item><item>Up to 16× (about 1 in 512)</item><item>Up to 64× (about 1 in 128)</item></string-array>
-    <string-array name="qol_shiny_values"><item>1</item><item>4</item><item>16</item><item>64</item></string-array>
+    <string-array name="qol_shiny_entries"><item>Original — 1 in 8,192</item><item>About 1 in 2,048</item><item>About 1 in 512</item><item>About 1 in 256</item><item>About 1 in 128</item></string-array>
+    <string-array name="qol_shiny_values"><item>1</item><item>4</item><item>16</item><item>32</item><item>64</item></string-array>
 </resources>

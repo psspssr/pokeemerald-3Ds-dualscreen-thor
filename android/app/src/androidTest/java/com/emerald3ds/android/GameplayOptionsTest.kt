@@ -4,6 +4,9 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import androidx.appcompat.app.AlertDialog
+import androidx.preference.ListPreference
+import androidx.preference.ListPreferenceDialogFragmentCompat
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import androidx.test.core.app.ActivityScenario
@@ -37,6 +40,46 @@ class GameplayOptionsTest {
             .putString("qol_shiny", "999").commit()
         assertEquals(4, GameplayOptions.load(context).fastForwardSpeed)
         assertEquals(1, GameplayOptions.load(context).shinyMultiplier)
+    }
+
+    @Test fun shinyOddsPickerPersistsEachDisplayedRateAcrossRecreation() {
+        val labels = arrayOf("Original — 1 in 8,192", "About 1 in 2,048",
+            "About 1 in 512", "About 1 in 256", "About 1 in 128")
+        val denominators = intArrayOf(8192, 2048, 512, 256, 128)
+        ActivityScenario.launch(SettingsActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val root = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                    as SettingsActivity.SettingsFragment
+                assertTrue(activity.onPreferenceStartScreen(root, root.findPreference<PreferenceScreen>("qol")!!))
+                activity.supportFragmentManager.executePendingTransactions()
+                assertEquals(1, GameplayOptions.load(context).shinyMultiplier)
+            }
+            // Exercise the real list-dialog callback and persisted preference,
+            // including the new 1/256 choice and returning to original odds.
+            for (index in listOf(3, 1, 2, 4, 0)) {
+                scenario.onActivity { activity ->
+                    val fragment = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                        as SettingsActivity.SettingsFragment
+                    fragment.onDisplayPreferenceDialog(fragment.findPreference<ListPreference>("qol_shiny")!!)
+                    activity.supportFragmentManager.executePendingTransactions()
+                    val chooser = activity.supportFragmentManager.fragments
+                        .filterIsInstance<ListPreferenceDialogFragmentCompat>().single()
+                    val list = (chooser.requireDialog() as AlertDialog).listView
+                    assertEquals(5, list.adapter.count)
+                    for (row in labels.indices) assertEquals(labels[row], list.adapter.getItem(row).toString())
+                    assertTrue(list.performItemClick(null, index, list.adapter.getItemId(index)))
+                }
+                instrumentation.waitForIdleSync()
+                scenario.recreate()
+                scenario.onActivity { activity ->
+                    val fragment = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                        as SettingsActivity.SettingsFragment
+                    val preference = fragment.findPreference<ListPreference>("qol_shiny")!!
+                    assertEquals(labels[index], preference.summary.toString())
+                    assertEquals(denominators[index], 8192 / GameplayOptions.load(context).shinyMultiplier)
+                }
+            }
+        }
     }
 
     private fun key(input: PhysicalInput, code: Int, down: Boolean, repeat: Int = 0, device: Int = 7): KeyEvent {

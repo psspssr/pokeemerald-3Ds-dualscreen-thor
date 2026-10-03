@@ -39,6 +39,9 @@ class PhysicalInput(private val callbacks: Callbacks) {
     private val gamepadKeys = mutableMapOf<Pair<Int, Int>, Int>()
     private val keyboardKeys = mutableMapOf<Pair<Int, Int>, Int>()
     private var motionDevice: Int? = null
+    private val shoulderPresses = mutableMapOf<Pair<Int, Int>, Long>()
+    private val blockedShoulders = mutableMapOf<Pair<Int, Int>, Long>()
+    private var shoulderInputAfter = Long.MIN_VALUE
 
     private fun gamepadKey(keyCode: Int): Int = when (keyCode) {
         KeyEvent.KEYCODE_BUTTON_A -> if (labelMapping) CtrKeys.A else CtrKeys.B
@@ -114,6 +117,32 @@ class PhysicalInput(private val callbacks: Callbacks) {
         if (down && event.repeatCount > 0) return true
         val identity = event.deviceId to code
         if (pad != 0) {
+            if (code == KeyEvent.KEYCODE_BUTTON_L1 || code == KeyEvent.KEYCODE_BUTTON_R1) {
+                if (down) {
+                    // downTime belongs to the whole physical press. Ignore
+                    // held/replayed DOWNs across a menu or background pause.
+                    if (event.downTime < shoulderInputAfter ||
+                        event.downTime <= (blockedShoulders[identity] ?: Long.MIN_VALUE)) return true
+                    blockedShoulders.remove(identity)
+                    shoulderPresses[identity] = event.downTime
+                    val other = event.deviceId to if (code == KeyEvent.KEYCODE_BUTTON_L1)
+                        KeyEvent.KEYCODE_BUTTON_R1 else KeyEvent.KEYCODE_BUTTON_L1
+                    if (other in shoulderPresses && other !in blockedShoulders) {
+                        blockedShoulders[identity] = event.downTime
+                        blockedShoulders[other] = shoulderPresses.getValue(other)
+                        gamepadKeys.remove(identity)
+                        gamepadKeys.remove(other)
+                        InputHub.setKeys(InputHub.SRC_GAMEPAD, gamepadKeys.values.fold(0) { a, b -> a or b })
+                        // The callback synchronously calls clear(). Latch
+                        // first and return without restoring either button.
+                        callbacks.onMenuKey()
+                        return true
+                    }
+                } else {
+                    shoulderPresses.remove(identity)
+                    blockedShoulders.remove(identity)
+                }
+            }
             if (down) gamepadKeys[identity] = pad else gamepadKeys.remove(identity)
             InputHub.setKeys(InputHub.SRC_GAMEPAD, gamepadKeys.values.fold(0) { a, b -> a or b })
         } else {
@@ -178,6 +207,7 @@ class PhysicalInput(private val callbacks: Callbacks) {
     }
 
     fun clear() {
+        onInputResumed()
         clearFastTriggers()
         gamepadKeys.clear()
         keyboardKeys.clear()
@@ -187,7 +217,16 @@ class PhysicalInput(private val callbacks: Callbacks) {
         clearMotion()
     }
 
+    /** Releases can go to a dialog or another Activity. A genuinely fresh
+     * DOWN rearms that shoulder; its earlier press can never reopen pause. */
+    fun onInputResumed() {
+        blockedShoulders.putAll(shoulderPresses)
+        shoulderInputAfter = SystemClock.uptimeMillis()
+    }
+
     fun removeDevice(deviceId: Int) {
+        shoulderPresses.keys.removeAll { it.first == deviceId }
+        blockedShoulders.keys.removeAll { it.first == deviceId }
         fastKeys.removeAll { it.first == deviceId }
         fastAxes.remove(deviceId)
         fastToggleNeedsRelease.remove(deviceId)

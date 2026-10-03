@@ -304,6 +304,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
 
     private fun updateInputEnabled() {
         val enabled = acceptsGameInput()
+        if (enabled && !overlay.inputEnabled) physical.onInputResumed()
         overlay.inputEnabled = enabled
         presentation?.touchView?.inputEnabled = enabled
     }
