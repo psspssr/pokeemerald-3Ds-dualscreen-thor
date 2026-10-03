@@ -1,0 +1,111 @@
+{
+  "asset": "thor-presentation.png",
+  "caption": "Presentation mockup using emulator captures",
+  "classification": "AI-edited product presentation composite, not a physical-device photograph or test result",
+  "created_at_utc": "2026-10-03T09:13:08.690114+00:00",
+  "tool": "built-in image_gen.imagegen",
+  "workflow": "imagegen skill, built-in edit mode",
+  "transparent_background": true,
+  "inputs": [
+    {
+      "role": "original edit target / hardware reference",
+      "source_url": "https://droix.net/wp-content/uploads/2025/08/AYN-THOR-BLACK-LISTING-DONE-01.png",
+      "credit": "DROIX-hosted AYN Thor product image, supplied by the user",
+      "sha256": "4b4587514618a2b1f94c72550fc62a943049c0e1b25c76cb4fec70f04fdb8ad2",
+      "bytes": 162764,
+      "dimensions": [
+        1500,
+        1500
+      ],
+      "mode": "RGBA"
+    },
+    {
+      "role": "screen-content reference",
+      "file": "classic-town.png",
+      "capture_provenance": "classic-captures.json",
+      "capture_kind": "Unmodified real ARMv7 Android emulator capture from signed alpha.3; normal gameplay inputs, no save/progression/memory edits",
+      "sha256": "2e25147c26cb482412254dd77547f50ac5868997b19f35e17a91f5e6585a0868",
+      "bytes": 1123591,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "mode": "RGBA",
+      "source_regions": {
+        "format": "x, y, width, height in screenshot pixels",
+        "top_gameplay": [
+          0,
+          220,
+          1067,
+          640
+        ],
+        "bottom_map_and_menu": [
+          1067,
+          220,
+          853,
+          640
+        ]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "tool_output_filename": "exec-6c67bb08-879c-4f97-8191-8dc2fc4b5e35.png",
+      "status": "rejected: front chassis edge clipped by the landscape framing",
+      "prompt": "Use case: compositing\nAsset type: professional GitHub README hero / product presentation mockup.\n\nInput image 1 is the EDIT TARGET: the supplied DROIX product photograph of a black AYN Thor. Preserve the exact handheld, its open angle, camera perspective, chassis shape, hinge, bezels, every button and label, sticks, pale cyan stick rings, ports, surface materials, highlights and lighting.\nInput image 2 is a SUPPORTING INSERT: a genuine unmodified Android emulator capture of Pokémon Emerald in Oldale Town. Use its existing pixel art and UI as screen content, not as inspiration for new artwork.\n\nReplace only the two active display interiors on the handheld:\n• Upper Thor display: insert the COMPLETE left gameplay rectangle from image 2, source pixels x=0 through 1066 and y=220 through 859. It includes the Pokémon Center, adjacent house, player, NPCs, trees, paths and small FPS counter. Exclude the screenshot's black letterbox outside that rectangle.\n• Lower Thor display: insert the COMPLETE right touch-screen rectangle from image 2, source pixels x=1067 through 1919 and y=220 through 859. Include the entire Hoenn map, Oldale Town label and all eight right-side menu buttons, through SAVE and OPTION. Keep this content confined to the lower display between the physical controls.\n\nPerspective-warp each whole rectangle to the corresponding glass display quadrilateral. Fill each active panel completely with the entire source content; use independent horizontal/vertical scaling as needed. Do not crop, zoom in, omit edges, repeat the gameplay on both displays, or remove any menu rows. Keep the source scene, text, pixel-art details, map and arrangement as faithful as possible. Screen content should remain crisp and bright, with only a subtle natural glass response; no glare that hides gameplay.\n\nPresent the complete unchanged handheld centered on a clean TRANSPARENT landscape canvas, approximately 3:2. Keep balanced clear margins around it and show the whole chassis. No props, invented logos, titles, captions, decorative graphics, colored background or watermark. This is a product mockup, not a photograph documenting hardware testing.",
+      "sha256": "9aafffa444fa8844cd4ad900d56405ff338dab5308efea542fa7428fad77d524",
+      "bytes": 2064408,
+      "dimensions": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA"
+    },
+    {
+      "tool_output_filename": "exec-fa906ba4-b8ca-416f-bc9d-2c1d5d4eb515.png",
+      "status": "rejected: framing correction still clipped the front chassis edge",
+      "prompt": "Use case: compositing\nAsset type: GitHub README presentation mockup.\nEdit target: image 1, the generated AYN Thor mockup with Oldale Town above and the complete map/menu below.\nSupporting references: image 2 is the original complete Thor product photo; image 3 is the genuine emulator screenshot used for the displays.\n\nMake one focused correction: the handheld's front bottom edge is clipped by the image-1 canvas. Reframe the SAME composition by uniformly reducing the whole device enough to show its complete original chassis with at least 70 pixels of clear margin at the top and bottom of a 1536×1024 landscape canvas. Use image 2 to faithfully restore any clipped front edge/corner. Keep the original camera angle, body proportions, hinge, bezels, buttons, controls, ports, cyan stick rings, materials and lighting.\n\nPreserve the two inserted screens and their correct perspective. Keep the entire gameplay scene from image 3's rectangle x0..1066/y220..859 on the top panel, and the entire map/menu rectangle x1067..1919/y220..859 on the bottom panel. No cropping, zooming, omitted menu rows, duplicated displays or newly invented game content. Preserve the labels and arrangement, including all eight buttons and OLDALE TOWN.\n\nKeep the background genuinely transparent. No decorative glow, text, captions, watermark, props or backdrop. Do not change the scene or redesign the hardware. Only correct the framing/restore the clipped chassis.",
+      "sha256": "7eebf60084dd7160baf683c5e7dab16dbda8e4e88496960a197ac1c0cb9d6d8b",
+      "bytes": 1957416,
+      "dimensions": [
+        1536,
+        1024
+      ],
+      "mode": "RGBA"
+    },
+    {
+      "tool_output_filename": "exec-a2b381a1-3433-4590-9c6f-d6d44bb6c462.png",
+      "status": "selected: original square composition keeps the entire chassis visible",
+      "prompt": "Use case: compositing.\nCreate a square 1536×1536 presentation mockup by editing image 1, the original complete transparent AYN Thor product photograph. KEEP IMAGE 1'S ORIGINAL SQUARE FRAMING, CAMERA ANGLE, DEVICE SCALE AND GENEROUS EMPTY MARGINS. The entire device including the complete front lower chassis edge and every corner must remain inside the frame, as in image 1. Do not enlarge the device or change to a landscape crop.\n\nImage 1 is the edit target. Preserve the exact black Thor chassis, hinges, bezels, every physical control and label, ports, pale cyan stick rings, surface texture, and lighting. Keep the surrounding area genuinely transparent, without a backdrop, haze, glow or new shadow.\n\nImage 2 is a genuine Android emulator screenshot, providing the two display inserts. Replace ONLY the active glass areas of the two panels:\nUpper panel: the COMPLETE gameplay rectangle from image 2 at x=0..1066, y=220..859. Preserve the existing Oldale Town Pokémon Center, house, player, NPCs, trees, paths, pixel art and FPS label.\nLower panel: the COMPLETE map and touch-menu rectangle from image 2 at x=1067..1919, y=220..859. Preserve the full Hoenn map, OLDALE TOWN label, and all eight menu rows: MAP, POKÉMON, BAG, A, POKÉDEX, POKÉNAV, SAVE, OPTION.\n\nFit and perspective-warp each complete source rectangle into its corresponding display, to fill the panel without cropping any source content. Keep every screen edge/menu row visible. Keep both screen contents as faithful to the original capture as possible; do not redesign or invent game content. Subtle glass response is fine, but no glare obscuring the displays. No added title, caption, logo or watermark.\n\nOnly replace the two displays. Use the original square photograph's full-device composition unchanged.",
+      "sha256": "73da27eb048770ff5eadeb1ac5889b6ed4296fb97e1df822c2cb53fe34d20003",
+      "bytes": 1606074,
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA"
+    }
+  ],
+  "selected_output": {
+    "file": "thor-presentation.png",
+    "tool_output_filename": "exec-a2b381a1-3433-4590-9c6f-d6d44bb6c462.png",
+    "sha256": "73da27eb048770ff5eadeb1ac5889b6ed4296fb97e1df822c2cb53fe34d20003",
+    "bytes": 1606074,
+    "dimensions": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA"
+  },
+  "final_prompt": "Use case: compositing.\nCreate a square 1536×1536 presentation mockup by editing image 1, the original complete transparent AYN Thor product photograph. KEEP IMAGE 1'S ORIGINAL SQUARE FRAMING, CAMERA ANGLE, DEVICE SCALE AND GENEROUS EMPTY MARGINS. The entire device including the complete front lower chassis edge and every corner must remain inside the frame, as in image 1. Do not enlarge the device or change to a landscape crop.\n\nImage 1 is the edit target. Preserve the exact black Thor chassis, hinges, bezels, every physical control and label, ports, pale cyan stick rings, surface texture, and lighting. Keep the surrounding area genuinely transparent, without a backdrop, haze, glow or new shadow.\n\nImage 2 is a genuine Android emulator screenshot, providing the two display inserts. Replace ONLY the active glass areas of the two panels:\nUpper panel: the COMPLETE gameplay rectangle from image 2 at x=0..1066, y=220..859. Preserve the existing Oldale Town Pokémon Center, house, player, NPCs, trees, paths, pixel art and FPS label.\nLower panel: the COMPLETE map and touch-menu rectangle from image 2 at x=1067..1919, y=220..859. Preserve the full Hoenn map, OLDALE TOWN label, and all eight menu rows: MAP, POKÉMON, BAG, A, POKÉDEX, POKÉNAV, SAVE, OPTION.\n\nFit and perspective-warp each complete source rectangle into its corresponding display, to fill the panel without cropping any source content. Keep every screen edge/menu row visible. Keep both screen contents as faithful to the original capture as possible; do not redesign or invent game content. Subtle glass response is fine, but no glare obscuring the displays. No added title, caption, logo or watermark.\n\nOnly replace the two displays. Use the original square photograph's full-device composition unchanged.",
+  "postprocessing": "None. The selected built-in output was copied byte-for-byte into the repository. No manual bitmap compositing, image cropping, resizing, or upscaling was used.",
+  "review": {
+    "complete_chassis_visible": true,
+    "top_scene": "Oldale Town gameplay, including Pokémon Center, house, player, NPCs, paths and trees",
+    "bottom_scene": "Hoenn map, Oldale Town label, and all eight menu rows",
+    "physical_controls": "Both sticks, D-pad, four face buttons, hinge and front ports retained in the same arrangement",
+    "transparency_preserved": true,
+    "limitations": "Screen inserts and hardware were edited generatively. Fine pixels, type shapes and small physical details are illustrative rather than a pixel-exact reproduction. This image does not establish hardware compatibility, performance, display scale accuracy, or physical Thor testing."
+  },
+  "rights": "The reference product image and Pokémon artwork remain the property of their respective rights holders. This provenance does not assert a new licence for those works. The Android port code licence does not cover them."
+}

@@ -1,4 +1,22 @@
-# Gameplay screenshots
+# README images
+
+## Presentation mockup
+
+[thor-presentation.png](thor-presentation.png) is a presentation mockup using
+emulator captures, created with the built-in `image_gen` editor. It combines the
+[DROIX-hosted AYN Thor product image](https://droix.net/wp-content/uploads/2025/08/AYN-THOR-BLACK-LISTING-DONE-01.png)
+with the gameplay and touch-screen regions of [classic-town.png](classic-town.png).
+It illustrates the two-panel presentation and is not evidence of a physical
+hardware test. Generative editing can alter fine artwork or text details; the
+unmodified emulator captures below remain the source for actual game appearance.
+
+The complete device, both screen contents and all eight touch-menu rows are
+visible. The PNG retains transparency. [Generation provenance](thor-presentation.json)
+records the prompts, input and output hashes, source credit, and selected edit.
+The device reference and Pokémon artwork remain subject to their owners' rights;
+the port's MIT code licence does not relicense them.
+
+## Gameplay screenshots
 
 These are unmodified screenshots of the actual Android ARM game and app,
 captured on 2026-10-02 and 2026-10-03. Each capture record identifies its build;

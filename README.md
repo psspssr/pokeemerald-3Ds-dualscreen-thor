@@ -25,6 +25,12 @@
   <a href="docs/UPDATING_FROM_ORIGIN.md">Upstream updates</a>
 </p>
 
+<p align="center">
+  <a href="docs/images/thor-presentation.png"><img src="docs/images/thor-presentation.png" width="760" alt="Presentation mockup of a black AYN Thor with Oldale Town on the upper display and the Hoenn map and touch menu on the lower display"></a>
+  <br><em>Presentation mockup using emulator captures</em>
+  <br><sub>Device reference: <a href="https://droix.net/wp-content/uploads/2025/08/AYN-THOR-BLACK-LISTING-DONE-01.png">DROIX</a> · <a href="docs/images/thor-presentation.json">Image provenance</a></sub>
+</p>
+
 An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen), built on [pret/pokeemerald](https://github.com/pret/pokeemerald). The upstream game, bottom-screen interface and voxel renderer are preserved; Android supplies the graphics, audio, storage and input support.
 
 ## See it in action
