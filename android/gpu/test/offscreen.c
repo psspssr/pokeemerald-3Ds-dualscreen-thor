@@ -27,6 +27,7 @@ void __wrap_glVertexAttribPointer(GLuint index,GLint size,GLenum type,GLboolean 
 extern GLuint gpuTestScreenFramebuffer(gfxScreen_t screen);
 extern double gpuTestPacingDeadline(void);
 extern unsigned gpuTestPresentCount(void);
+extern void gpuTestDrawScreen(gfxScreen_t screen,CtrHostRect rect,int width,int height,int filter);
 static CtrAptListener gpuListener;
 bool CtrApt_AddListener(CtrAptListener listener,void *user) { (void)user;gpuListener=listener;return true; }
 void CtrApt_RemoveListener(CtrAptListener listener,void *user) { (void)listener;(void)user;gpuListener=NULL; }
@@ -59,6 +60,70 @@ static unsigned morton(unsigned x,unsigned y)
 { return (x&1)|((y&1)<<1)|((x&2)<<1)|((y&2)<<2)|((x&4)<<2)|((y&4)<<3); }
 static double callerCpuTime(void)
 { struct timespec now; assert(clock_gettime(CLOCK_THREAD_CPUTIME_ID,&now)==0); return now.tv_sec+now.tv_nsec*1e-9; }
+
+static void presentationRectangles(C3D_RenderTarget *restore)
+{
+    const u16 colors[2][4]={{0xF800,0x07E0,0x001F,0xFFFF},{0x07FF,0xF81F,0xFFE0,0x8410}};
+    const unsigned expected[2][4][3]={
+        {{255,0,0},{0,255,0},{0,0,255},{255,255,255}},
+        {{0,255,255},{255,0,255},{255,255,0},{132,130,132}},
+    };
+    const u16 middle[2]={0x2104,0x4208};
+    const unsigned middleRgb[2][3]={{33,32,33},{66,65,66}};
+    for(unsigned screen=0;screen<2;screen++) {
+        unsigned columns=screen?320:400;
+        gfxSetScreenFormat((gfxScreen_t)screen,GSP_RGB565_OES);
+        u16 *lcd=(u16 *)gfxGetFramebuffer((gfxScreen_t)screen,GFX_LEFT,NULL,NULL);
+        for(unsigned x=0;x<columns;x++) for(unsigned y=0;y<240;y++) {
+            bool corner=(x<4 || x>=columns-4) && (y<4 || y>=236);
+            unsigned index=(x>=columns-4?1:0)|(y>=236?2:0);
+            /* 4x4 corner markers must remain visible: an aspect-fill crop
+             * or a lost outer edge cannot pass with only centre pixels. */
+            lcd[x*240+239-y]=corner?colors[screen][index]:middle[screen];
+        }
+    }
+    gfxFlushBuffers(); gpuFlushScreens();
+    C3D_RenderTarget *canvases[]={
+        C3D_RenderTargetCreate(1920,1080,GPU_RB_RGBA8,-1),
+        C3D_RenderTargetCreate(1240,1080,GPU_RB_RGBA8,-1),
+    };
+    assert(canvases[0] && canvases[1]);
+    const struct { unsigned canvas,screen; CtrHostRect rect; int filter; } cases[]={
+        {0,GFX_TOP,   {0,0,1920,1080},0},
+        {1,GFX_BOTTOM,{0,0,1240,1080},1},
+        {0,GFX_BOTTOM,{0,0,1920,1080},1},
+        {1,GFX_TOP,   {0,0,1240,1080},0},
+        {0,GFX_TOP,   {0,0,1920,1080},1},
+        {1,GFX_BOTTOM,{0,0,1240,1080},0},
+        {0,GFX_BOTTOM,{0,0,1920,1080},0},
+        {1,GFX_TOP,   {0,0,1240,1080},1},
+        {0,GFX_TOP,   {37,29,1491,879},1},
+        {1,GFX_BOTTOM,{13,41,1001,919},0},
+        {0,GFX_TOP,   {0,0,1920,1080},0},
+    };
+    for(unsigned i=0;i<sizeof(cases)/sizeof(*cases);i++) {
+        unsigned screen=cases[i].screen;
+        C3D_RenderTarget *canvas=canvases[cases[i].canvas];
+        int width=canvas->frameBuf.width,height=canvas->frameBuf.height;
+        CtrHostRect r=cases[i].rect;
+        C3D_FrameDrawOn(canvas); C2D_TargetClear(canvas,C2D_Color32(24,48,72,255));
+        gpuTestDrawScreen((gfxScreen_t)screen,r,width,height,cases[i].filter);
+        for(unsigned corner=0;corner<4;corner++) {
+            int x=corner&1?r.x+r.w-1:r.x;
+            int y=corner&2?r.y+r.h-1:r.y;
+            const unsigned *rgb=expected[screen][corner];
+            pixel(x,height-1-y,rgb[0],rgb[1],rgb[2],255);
+        }
+        const unsigned *rgb=middleRgb[screen];
+        pixel(r.x+r.w/2,height-1-(r.y+r.h/2),rgb[0],rgb[1],rgb[2],255);
+        if(r.x>0) pixel(r.x-1,height-1-(r.y+r.h/2),24,48,72,255);
+        if(r.y>0) pixel(r.x+r.w/2,height-r.y,24,48,72,255);
+        if(r.x+r.w<width) pixel(r.x+r.w,height-1-(r.y+r.h/2),24,48,72,255);
+        if(r.y+r.h<height) pixel(r.x+r.w/2,height-1-(r.y+r.h),24,48,72,255);
+    }
+    C3D_RenderTargetDelete(canvases[0]); C3D_RenderTargetDelete(canvases[1]);
+    C3D_FrameDrawOn(restore);
+}
 
 int main(int argc,char **argv)
 {
@@ -337,8 +402,9 @@ int main(int argc,char **argv)
     assert(gpuTestPresentCount()==before+5);
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_BOTTOM));
     pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255);
+    presentationRectangles(target);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
-    printf("PASS %d GLES pixel assertions and fast-forward presentation scheduling: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display\n",checks);
+    printf("PASS %d GLES pixel assertions and fast-forward presentation scheduling: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display, full-panel/offset presentation and source-screen switches\n",checks);
     if(argc==3) {
         /* Upstream's atlas is 1024x1024, but a typed glyph can change one
          * 8x8 tile. Measure that real update pattern separately from VBlank. */

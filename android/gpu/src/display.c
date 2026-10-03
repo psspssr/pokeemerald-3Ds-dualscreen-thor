@@ -302,4 +302,20 @@ Result GSPGPU_InvalidateDataCache(const void *address,u32 size) { (void)address;
 GLuint gpuTestScreenFramebuffer(gfxScreen_t screen) { return screens[screen].fbo; }
 double gpuTestPacingDeadline(void) { return nextVblank; }
 unsigned gpuTestPresentCount(void) { return presentCount; }
+/* Exercise the production LCD quad/shader against an offscreen target.
+ * Native-window attachment and display assignment are tested by the app. */
+void gpuTestDrawScreen(gfxScreen_t screen,CtrHostRect rect,int width,int height,int filter)
+{
+    gpuC2DFlush(); gpuFlushScreens();
+    glViewport(0,0,width,height);
+    glDisable(GL_SCISSOR_TEST); glDisable(GL_DEPTH_TEST); glDisable(GL_BLEND); glDisable(GL_CULL_FACE);
+    glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+    glUseProgram(presentProgram); glUniform1i(glGetUniformLocation(presentProgram,"image"),0);
+    glBindVertexArray(presentVao); glBindBuffer(GL_ARRAY_BUFFER,presentVbo);
+    glEnableVertexAttribArray(0); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(float),(void *)0);
+    glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(float),(void *)(2*sizeof(float)));
+    drawScreen(screen,rect,width,height,filter);
+    gpuApplyState();
+}
 #endif
