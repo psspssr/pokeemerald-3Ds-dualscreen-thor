@@ -80,6 +80,10 @@ turn. A randomly called escape move, such as one selected by Metronome, is
 checked before escape; declining that already-started move makes it fail
 normally, so its turn and PP remain spent. Opponent-driven fleeing is unchanged.
 
+It also covers answering **No** to “Use next Pokémon?” after your active
+Pokémon faints. Choosing **Stay** then opens the required replacement choice.
+A normal loss when the whole party has fainted is unchanged.
+
 ## Upstream and compatibility
 
 `origin/` remains an exact upstream import. Small, tracked overlays in

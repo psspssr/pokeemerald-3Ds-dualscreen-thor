@@ -1,5 +1,86 @@
 # Validation — Android previews
 
+## October 3 bug sweep
+
+Independent app, gameplay/save and graphics reviews found and fixed four
+reproducible defects:
+
+- A held R2 could toggle fast-forward again after pausing without a full
+  release, or rearm when a different controller reported neutral input.
+  Release tracking now belongs to the controller that held the trigger.
+- Holding the virtual circle pad at its center could let a physical stick
+  steer the game. Touch ownership now remains active at zero displacement.
+- Exporting to a path/provider alias of the live save could truncate it.
+  A synced private recovery copy now protects open, partial-write and close
+  failures; interrupted exports recover before imports. Failed restoration
+  retains the copy and pauses gameplay until retry succeeds.
+- Answering **No** to “Use next Pokémon?” could flee a living wild shiny
+  without confirmation. **Stay** now opens required replacement selection
+  before escape RNG, counters or outcome change.
+
+The app passed **43 instrumentation tests** and lint. The storage regressions
+use actual test document providers that fail after truncation, partial writes
+and close; normal pipe exports still pass. Recovery was independently reviewed
+against activity recreation, serialized file operations and native save writes.
+Native ASan/UBSan tests compare the real fainted-escape command with upstream
+across 128 disabled/confirmed escape cases and exercise cancellation, missing
+UI, pause, required replacement and normal whole-party loss.
+
+The renderer skips unchanged program uniforms, unused texture samplers and
+unchanged vertex attribute setup. It still uploads changed vertex data and
+checks CPU edits to active textures. **73 GLES pixel assertions** pass, including
+direct uniform writes, program changes, all three texture units, reordered
+and strided vertices, changed buffer addresses and 2D/3D transitions. The
+18 graphics host checks and system-shim sanitizer tests also pass.
+
+The full ARM build and regenerated QoL/Mystery Events tests passed. `origin/`
+still matches its pinned upstream tree, and native SDK coverage reports no
+undeclared or unresolved functions. Logs and before/after reproductions are
+retained under `build/evidence/sweep/`.
+
+### Controlled renderer comparison
+
+The same stationary voxel Route 101 scene was measured before and after on
+API 30 with ARM translation and SwiftShader. Other local emulators were paused.
+The release-signed comparison APK updated over alpha.2 without changing save
+bytes; its SHA-256 is
+`9b675408c877a6ddea7a3be95b42d45792643b3cb1e886bf1a9ce36177106569`.
+
+| Measurement | Alpha.2 | Optimized build |
+|---|---:|---:|
+| One display, presented FPS | 59.88 | 59.88 |
+| One display, game-thread CPU per frame | 11.884 ms | 11.411 ms |
+| Two displays, presented FPS | 43.39 | 45.84 |
+| Two displays, game-thread CPU per frame | 16.446 ms | 15.530 ms |
+
+These are one controlled emulator comparison, approximately **4–6% less
+game-thread CPU per presented frame**. They do not establish sustained Thor
+performance. The standalone draw benchmark confirms fewer GL calls and uniform
+uploads, but its wall-time samples vary and do not show a universal speedup.
+Full timing logs and capture conditions are in `build/evidence/sweep/gpu/`.
+
+### Integrated gameplay and save checks
+
+Development APK `c5cf0c7073697af9fe9ea230f7a2cd77b3e69fae2fa1be33d6bcb08aca4f0095`
+(engine ABI `0076aa29`) continued the existing save after updating. Playtesting
+covered Route 102, Bug Catcher Rick's two-Pokémon battle, a wild battle, benched
+Wurmple/Celebi level-ups, and Torchic reaching level 10 and learning Ember.
+The 4× toggle, reward panels and battle/field transitions were visually checked.
+
+A normal save produced counter 15 and SHA-256
+`b0e714ef009584797d088e7ab16767366f5e35c024fb2d3968e408ee09b867f4`.
+Five valid raw backups remained. Export through the Android Downloads picker
+matched the live save exactly and returned to gameplay; restarting and Continue
+loaded Route 102 with fast-forward initially off. Original GBA Emerald in mGBA
+loaded the exported 128 KiB data with all 400 party bytes identical. No test
+memory edits staged this progression. Evidence: `build/evidence/sweep/playtest-report.json`.
+
+Normal CI for source checkpoint `4ef4f36` passed
+[run 37079925529](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37079925529).
+Physical Thor, audible output and full-game coverage remain open. The rare
+shiny-faint escape fix was exercised through real-command/host tests, not an
+observed wild shiny encounter.
+
 ## 0.1.0-alpha.2 — Mystery Events and automatic releases
 
 Seven individual choices now live under **Settings → Gameplay → Mystery events**:

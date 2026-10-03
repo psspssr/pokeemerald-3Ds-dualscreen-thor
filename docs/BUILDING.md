@@ -108,6 +108,10 @@ battery/flash save from the emulator first.
 **Export save** writes the raw file; choose the filename your emulator expects
 (commonly the ROM basename plus `.sav`). Export pauses the native game through
 completion so an in-progress save write cannot be copied halfway through.
+Export also keeps a private recovery copy until completion. If the chosen
+destination points back to the live save and the provider fails while writing,
+the original is restored. If storage prevents restoration, the app keeps the
+copy and pauses gameplay; retry the export or restart after storage is available.
 
 The port keeps its voxel/camera options separately at
 `sdmc/3ds/emerald3ds/settings.txt`; Android screen and control preferences are
