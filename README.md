@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.2">Download Android preview</a> ·
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.3">Download Android preview</a> ·
   <a href="#build-and-play">Build and play</a> ·
   <a href="docs/AYN_THOR.md">Thor setup</a> ·
   <a href="docs/VALIDATION.md">Test results</a> ·
@@ -84,7 +84,7 @@ The real ARM game has been tested on an Android emulator through the opening seq
 
 ## Build and play
 
-Download the signed **[0.1.0-alpha.2 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.2)** and install `emerald-thor-0.1.0-alpha.2-armeabi-v7a.apk` on a compatible device. This private preview includes matching game data and can start immediately. Downloads currently require access to this repository. If replacing a development APK, export your save first: release and debug signing keys differ.
+Download the signed **[0.1.0-alpha.3 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.3)** and install `emerald-thor-0.1.0-alpha.3-armeabi-v7a.apk` on a compatible device. This private preview includes matching game data and can start immediately. Downloads currently require access to this repository. If replacing a development APK, export your save first: release and debug signing keys differ.
 
 To build from source:
 
@@ -162,7 +162,7 @@ The updater checks source integrity and reports newly required 3DS APIs. New ups
 
 ## Automated APK releases
 
-Publishing a new GitHub release with a tag such as `v0.1.0-alpha.2` starts the release workflow. It runs validation, builds and signs the playable ARMv7 APK, and attaches it with checksums and a build manifest. The app version follows the tag; its Android build number increases automatically. Ordinary pushes, pull requests, draft releases and tag pushes do not publish APKs. [Release setup and retry guide →](docs/RELEASING.md)
+Publishing a new GitHub release with a tag such as `v0.1.0-alpha.3` starts the release workflow. It runs validation, builds and signs the playable ARMv7 APK, and attaches it with checksums and a build manifest. The app version follows the tag; its Android build number increases automatically. Ordinary pushes, pull requests, draft releases and tag pushes do not publish APKs. [Release setup and retry guide →](docs/RELEASING.md)
 
 ## Project guides
 

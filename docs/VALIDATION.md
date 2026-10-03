@@ -1,6 +1,37 @@
 # Validation — Android previews
 
-## October 3 bug sweep
+## 0.1.0-alpha.3 — bug fixes and renderer performance
+
+The [alpha.3 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.3)
+was built and published automatically from immutable commit
+`814a1a3eaa4ec3dad4de0065c483bf19406f2f59`. All seven jobs passed on the first
+attempt in [run 37081479663](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37081479663),
+including **43 app tests, 77 tooling tests, 18 graphics host checks, 73 GLES
+pixel assertions**, and the native/host/system sanitizer checks.
+
+| Published artifact | Verified value |
+|---|---|
+| Version | `0.1.0-alpha.3`, Android version code **3** |
+| APK | `emerald-thor-0.1.0-alpha.3-armeabi-v7a.apk` |
+| Bytes / SHA-256 | **27,534,476 bytes**; `f584eb7cb60009c20076f588b81e19873ecb42127a5b6f9e4f0907738564bc00` |
+| Engine/data ABI | `0076aa29` |
+| Signing identity | Unchanged: `eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389` |
+
+Downloaded asset hashes, packaged native/data hashes, production package
+metadata and signing identity all match the release manifest. The published
+assets also match the immutable signed Actions artifact byte-for-byte.
+
+The exact downloaded APK updated over alpha.2 on API 30 with ARM translation,
+preserving the old save, Android preferences and voxel settings byte-for-byte.
+Continue loaded that adventure. A 1240×1080 second display accepted complete
+DOWN/MOVE/UP gestures and remained responsive after a **7.93-second** gap.
+Party, Options, voxel on/off, Home/resume, subsequent Map touch and fallback
+to both screens with controls on one display passed. Screenshots were inspected;
+no fatal, ANR or graphics-backend error appeared. The save remained unchanged
+through this smoke test. Evidence: `build/evidence/release-alpha3-ci/verification.json`
+and `build/evidence/published-alpha3-qa/report.json`.
+
+### Independent bug sweep
 
 Independent app, gameplay/save and graphics reviews found and fixed four
 reproducible defects:
@@ -80,6 +111,23 @@ Normal CI for source checkpoint `4ef4f36` passed
 Physical Thor, audible output and full-game coverage remain open. The rare
 shiny-faint escape fix was exercised through real-command/host tests, not an
 observed wild shiny encounter.
+
+A further natural playtest advanced benched Wurmple from level 4 to 5 and
+learned Poison Sting, checked both complete stat panels and the move summary,
+then completed Youngster Allen's two-opponent battle and switching prompt.
+Jirachi and Celebi also leveled through shared EXP. The final normal save is
+counter **17**, SHA-256
+`dd7e72079ec2bb45bba36907b05934c0971d75ceac0e1c41fe55f07e364fab82`;
+both slots validate and five backups remain. Evolution was not reached.
+Evidence: `build/evidence/graphics-polish/sweep-progression-report.json`.
+
+The inherited OBJ-window warning corresponds to the title-logo shine mask,
+which upstream omits. The overworld-load mosaic warning also fires with a
+1×1 mosaic, where no pixelation would be visible; actual nonzero mosaic effects
+remain unsupported. These diagnostics come from unchanged upstream rendering
+checks, not the GLES cache change. Their counter counts distinct warning
+types, not occurrences. Still-image inspection does not validate those animated
+effects, and the limitations remain documented below.
 
 ## 0.1.0-alpha.2 — Mystery Events and automatic releases
 
