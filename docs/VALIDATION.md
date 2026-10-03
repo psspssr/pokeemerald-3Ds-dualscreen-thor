@@ -1,5 +1,57 @@
 # Validation — Android previews
 
+## 0.1.0-alpha.6 — input and lifecycle polish
+
+The candidate fixes interrupted touch gestures, interference between multiple
+controllers, the disappearing import/restore restart choice, display teardown
+during pause, and recovery from transient audio failures. The About panel now
+accurately describes the Android patches and bundled release data.
+
+Eight focused regressions were run against the preserved alpha.5 harness:
+six reproduced the old defects and two confirmed source-isolation behavior.
+After the fixes, **82 app instrumentation tests**, harness/release lint and
+**136 GLES pixel assertions** pass. All three jobs pass for code commit
+`3b3e8110f6f5baabb3707c5bd490f5d4fb76b039` in
+[run 37147598531](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37147598531).
+The full ARM game builds; SDK coverage remains **295 identifiers, zero missing
+declarations or linked functions**, with engine/data ABI `07329dad`.
+
+- A replacement primary touch DOWN releases only that window's old gesture.
+  Other windows, physical controls and additional fingers remain independent.
+- Controller hats and buttons merge per device. The circle pad follows the
+  most recently moved non-neutral stick and falls back to another held stick
+  on neutral, cancellation or disconnect. Alpha.5's trigger-release guards
+  remain covered by the full suite.
+- A successful staged import/restore keeps its restart choice through
+  Settings recreation until Restart, Later or explicit cancellation.
+  The staged file is not applied while the game is running.
+- Surface removal waits for the renderer to release its window even when
+  pause has been requested but not yet acknowledged. Actual host/APT tests
+  cover both window slots and already-acknowledged pauses under ASan/UBSan.
+- AAudio retries transient reopen failures while active, with an interruptible
+  100 ms delay. Pausing suppresses retries; shutdown wakes the recovery thread.
+  Per-open identities prevent stale errors from closing a healthy replacement
+  or replacing recovery for a newer failing stream. Seven injected-backend
+  scenarios pass under ASan/UBSan, including reused stream addresses. These
+  establish recovery logic, not audible output on hardware.
+
+The release-signed local probe has SHA-256
+`975d1cd194523a33964211a7a7ea50d4fe854cf38ada023cb9e8409595e3743e`.
+It updated over the published alpha.5 APK with the raw save and both settings
+files unchanged, then loaded the existing Oldale adventure. A duplicate save
+was imported through Android's system picker: the restart prompt survived a
+font-scale recreation, Later acknowledged it, and another recreation did not
+repeat it. The staged test copy was then removed. Two kernel virtual
+controllers exercised neutral input and disconnect fallback in the real game.
+Four Home/display-removal/reattachment/resume cycles retained the same game
+process, working Party/Map touch and the single-display fallback. Screenshots
+were inspected; no fatal exception, ANR or graphics-backend error appeared.
+The original save and both settings files still matched their baseline bytes.
+Evidence: `build/evidence/polish-pass/` and `build/evidence/native-boundary/`.
+
+Physical Thor, audible output and sustained hardware performance remain
+unverified. The inherited OBJ-window and BG-mosaic limitations still apply.
+
 ## 0.1.0-alpha.5 — controller pause and shiny odds
 
 The [alpha.5 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.5)
