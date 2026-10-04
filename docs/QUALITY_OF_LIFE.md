@@ -106,5 +106,10 @@ context and source checks. Optional hooks preserve the original path when
 features are off. The graphics overlay also removes the location-name banner's
 unintended wrap onto the bottom of the taller field viewport.
 
-The current upstream implements a voxel **overworld**, not voxel battles.
-Its normal **BATTLE SCENE** setting controls the original battle animations.
+Released **0.1.0-alpha.7** supports the optional voxel overworld only.
+Current `dev`, importing upstream `cdc77a3d2b01`, also supports voxel battle
+scenery: enable **OPTION → VOXEL 3D**, then scroll to **3D BATTLE** and turn it
+on. Both choices default off. Pokémon, health bars, text and move animations
+remain 2D over the voxel scenery where the world is available. The separate
+**BATTLE SCENE** setting still controls the original battle animations.
+These upstream game options are separate from Android's Quality of life menu.

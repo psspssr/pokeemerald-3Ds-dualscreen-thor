@@ -15,6 +15,20 @@ Rebase or remove the affected overlay, then repeat the checks below. Repeated
 builds at the same patch series preserve source timestamps and cached objects;
 changing the series refreshes affected sources and invalidates configuration.
 
+## Current development pin
+
+The `dev` branch imports upstream `cdc77a3d2b01`. It adds optional voxel battle
+scenery and upstream's native Party/Summary touch menus. Released
+**0.1.0-alpha.7** uses the earlier pin and has voxel overworld rendering only;
+an upstream import does not alter an existing release.
+
+During this update, upstream supplied the Summary asset fix and touch handlers,
+so the older Android selector implementation was removed. The remaining
+`050-summary-touch-guards.patch` discards stale/transition taps and makes the
+visible fifth-row Cancel work while reordering moves. The fifth row remains
+the new move in the learning selector. Review overlapping upstream fixes this
+way on future updates: retain only Android changes that are still needed.
+
 ## Preview and import
 
 From the repository root:
@@ -46,8 +60,8 @@ be configured because the import creates local commits. The script:
 3. Merges the squashed subtree in a disposable Git worktree, verifies the
    resulting tree byte-for-byte including file modes, and commits `origin.lock`.
 4. Runs the SDK header coverage check against the new sources.
-5. Fast-forwards the development branch only if it is still clean and at the
-   same commit as when the import started.
+5. Fast-forwards the development branch only if the checkout is still clean
+   and on the same branch and commit as when the import started.
 
 It never pushes or runs `reset`/`clean` on your checkout. A failed fetch,
 subtree merge, tree check, or checker execution leaves the checkout unchanged.
@@ -79,6 +93,7 @@ change. Export saves before installing a changed build.
 |---|---|
 | Game code, patches, source lists, generators, or pinned pret commit | Bootstrap and rebuild; origin's own source lists and rules remain authoritative. Review changes to generators and build recipes. |
 | New libctru, Citro3D or Citro2D APIs | Header check reports likely gaps; native compile and strict link verify declarations and definitions. Implement semantics and add relevant tests. |
+| Upstream linker `--wrap` hooks | Preserve them in both Android links and `build/upstream/3ds_port/build/android.wrap`. The current `GX_BindQueue` hook observes queue capacity for voxel uploads; exercise its callback and frame/transfer accounting in the GLES tests. A resolved symbol alone does not prove the hook ran. |
 | New PICA shader instructions | The translator must support the opcode; verify compiled GLSL and rendered output. A successful translation alone does not prove visual parity. |
 | Changes to link layout, script relocation or `.gamedata` | Review the Android link and fixed-address loader; both ELF images must agree on addresses. |
 | Removed or renamed source/assets | Ensure the regenerated tree and package contain the new source set without stale outputs. |
@@ -86,7 +101,9 @@ change. Export saves before installing a changed build.
 If Clang rejects an upstream pattern accepted by devkitARM GCC, prefer a
 compiler flag or forced-include adapter in `android/toolchain/` or
 `android/native/compat/`. Keep any unavoidable patch in `patches/android/`
-with its reason. Do not fix it by editing the imported tree.
+with its reason. Do not fix it by editing the imported tree. The level-up
+compositor overlay must preserve both classic and voxel battle paths; test
+both stat pages and ordinary battle drawing after rebasing it.
 
 ## Integrity and tooling regression checks
 

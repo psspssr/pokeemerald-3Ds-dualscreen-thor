@@ -5,6 +5,11 @@ only**; check the device's actual ABI list before installing. The separate
 display-test APK also contains x86_64 so the Android UI can be tested on a
 standard hardware-accelerated emulator.
 
+This guide builds the checked-out source. Current `dev` imports upstream
+`cdc77a3d2b01`, including opt-in voxel battle scenery and native Party/Summary
+menus. The published **0.1.0-alpha.7** APK predates those changes; its optional
+voxel rendering covers the overworld.
+
 ## Install the tools
 
 Use Python 3.11+, JDK 17, Git (including `git subtree`), GNU Make, a host C/C++
@@ -41,10 +46,10 @@ python3 tools/bootstrap.py --make --apk -j4
 ```
 
 The bootstrap fetches the pret commit in `origin/upstream.lock`, applies
-upstream's patches, generates assets, compiles the complete game and Android
-platform layer, validates the native ELF, and packages the debug APK. The
-first build downloads sources and Gradle dependencies and needs several GB
-of scratch space. Repeating the command reuses build outputs.
+upstream's patches and the strict `patches/android/` overlays, generates
+assets, compiles the complete game and Android platform layer, validates the
+native ELF, and packages the debug APK. The first build downloads sources and
+Gradle dependencies and needs several GB of scratch space. Repeating the command reuses build outputs.
 
 | Output | Location |
 |---|---|
@@ -58,9 +63,9 @@ Keep source changes under this repository's `android/`, `tools/` and
 `build/upstream/` is generated. Use a separate `--dir` if you need an independent
 build. `--clean` rebuilds that generated tree and discards its local edits.
 
-Development APKs embed generated game data for local testing. The authorized
-first **private prerelease** packages that full native/data output in a signed,
-non-debuggable Gradle release APK; follow [RELEASING.md](RELEASING.md).
+Development APKs embed generated game data for local testing. The
+authorized private prereleases package that full native/data output in signed,
+non-debuggable Gradle release APKs; follow [RELEASING.md](RELEASING.md).
 The repository remains private. Normal push/PR validation uploads diagnostics.
 The separate release workflow uploads a signed APK only after a GitHub release
 is published; see [automatic releases](RELEASING.md).
@@ -113,7 +118,8 @@ destination points back to the live save and the provider fails while writing,
 the original is restored. If storage prevents restoration, the app keeps the
 copy and pauses gameplay; retry the export or restart after storage is available.
 
-The port keeps its voxel/camera options separately at
+The port keeps its voxel/camera options, including the dev build's `3D BATTLE`
+choice, separately at
 `sdmc/3ds/emerald3ds/settings.txt`; Android screen and control preferences are
 app settings. Neither is inserted into the GBA `.sav`. Transfer the raw save
 alone to a GBA emulator, and keep the settings file separately if retaining
@@ -170,12 +176,30 @@ early warning for upstream SDK changes. After the game build, also run:
 
 ```sh
 python3 tools/check_shim_coverage.py
+python3 android/native/test/run_summary_tests.py
+python3 android/gpu/test/test_gpu.py
 ```
 
-That check needs an ARM-capable `nm` and the NDK (`--nm` and `--ndk` may select
-them explicitly). Native linking separately checks final symbol resolution,
-relocations and the fixed-address game-data layout. None of these checks
-establishes graphics correctness or real-device frame rate.
+Summary tests compile the generated, patched handlers under ASan/UBSan. They
+cover asset decoding, learning/HM refusal, tap preview and confirmation,
+reordering, and the visible Cancel row. GPU host tests cover shader, texture,
+pacing and queue logic; real GLES checks require a connected emulator/device:
+
+```sh
+bash android/gpu/test/run-emulator.sh emulator-5554
+```
+
+Replace `emulator-5554` with the intended serial from `adb devices`. These
+pixel checks also exercise upstream's wrapped `GX_BindQueue` callback
+and per-frame upload accounting. Keep the link wrappers recorded in
+`build/upstream/3ds_port/build/android.wrap`; bypassing the callback can stop
+voxel uploads even when the native link succeeds.
+
+The native coverage check needs an ARM-capable `nm` and the NDK (`--nm` and
+`--ndk` may select them explicitly). Native linking separately checks final
+symbol resolution, relocations and the fixed-address game-data layout.
+Host/symbol checks alone do not establish graphics correctness; emulator
+pixel checks do not establish real-device frame rate.
 
 ## Emulator app and Thor-window tests
 
@@ -249,10 +273,16 @@ system picker and `content://` providers, in addition to file-copy tests.
 
 Record the Android commit, upstream pin, APK hash, device/emulator ABI list,
 Android version, and renderer. With the real game APK, exercise the intro,
-title screen, entering the overworld, a battle, audio, save/reload, bottom-screen
-menus, and the voxel option. On two displays, check bottom touch coordinates,
-gamepad mapping, background/resume, display removal and reconnection, and lid
-close/open on actual Thor hardware.
+title screen, entering the overworld, audio, save/reload and bottom-screen
+menus. On current dev, compare classic battles with **VOXEL 3D + 3D BATTLE**
+enabled: check move animations, both level-up stat pages and returning to the
+field. The Pokémon and battle interface remain 2D over the voxel scenery.
+
+In Party/Summary, test row preview, second-tap confirmation, move reordering
+and the visible Cancel row; also test learning a fifth move, refusal to forget
+an HM, and canceling. On two displays, check bottom touch coordinates, gamepad
+mapping, background/resume, display removal/reconnection, and lid close/open
+on actual Thor hardware.
 
 Compare visible rendering with the pinned 3DS version. Measure sustained frame
 times and audio behavior during gameplay; a host harness frame count or an

@@ -29,9 +29,8 @@ Dual-display mode is the default when a second built-in display is present:
 - **Bottom display (window 1)**: an Android `Presentation` on the second
   display, holding a `SurfaceView` for the 3DS bottom screen (320x240) and
   filling the full **1240x1080** panel. Touches map independently along each
-  axis to 0..319 x 0..239 and become `KEY_TOUCH`, so origin's
-  touch interface (map, party, bag, Pokédex, PokéNav, options) works by finger
-  on the real bottom screen, as on the console.
+  axis to 0..319 x 0..239 and become `KEY_TOUCH`, delivering touch input to
+  origin's map, party, bag, Pokédex, PokéNav and options in that window.
 - **Controls**: the built-in gamepad. On-screen controls are hidden by
   default in dual-display mode. If enabled in Settings with automatic
   visibility, use **Show controls / Hide controls** in the pause menu.
@@ -107,6 +106,23 @@ For a single-display device using landscape **Top screen only**, clicking
 either stick switches between the top and bottom game screens. It does not
 change the assignment of two physical displays.
 
+## Game graphics and Summary menus
+
+The released **0.1.0-alpha.7** has an optional voxel overworld; enable
+**OPTION → VOXEL 3D** in the game. Current `dev` at upstream `cdc77a3d2b01`
+also has **3D BATTLE**: enable VOXEL 3D, scroll the same options list and turn
+on 3D BATTLE. Both start off. This draws voxel battle scenery behind the
+original 2D Pokémon, health bars, text and move animations, where the voxel
+world is available. **BATTLE SCENE** remains the original animation setting.
+These game options are separate from Android's Settings menu.
+
+The dev build also uses upstream's native Party/Summary menus on the bottom
+screen. In Summary, tap a move to preview it and tap the selected row again
+to confirm. While choosing where to move it, tap another row to preview the
+position and again to swap, or tap the fifth-row **Cancel** to abandon the
+reorder. When learning a new move, that fifth row is the proposed move;
+use the header Cancel or B to leave without replacing a move.
+
 ## Screen scaling
 
 **Settings → Dual display → Screen scaling** offers two choices:
@@ -140,7 +156,8 @@ The tests check full panel coverage, corner touch coordinates, both display
 assignments, Fit/Fill switching, rotation, resizing and removal.
 The production GLES presenter also has source-corner and outer-edge pixel checks
 at both panel sizes, so filling the panels cannot silently crop the image.
-They use the separate display-test renderer on an x86_64 emulator. Follow
-[BUILDING.md](BUILDING.md) for these tests and the real ARM game build.
+App instrumentation uses the separate display-test renderer on an x86_64
+emulator; the standalone GLES checks exercise the production presenter.
+Follow [BUILDING.md](BUILDING.md) for these tests and the real ARM game build.
 Physical lid behavior, panel timing, thermal performance and sustained game
 frame rate require testing on Thor hardware.
