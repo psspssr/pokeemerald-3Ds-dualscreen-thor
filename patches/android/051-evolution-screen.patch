@@ -1,16 +1,11 @@
 --- a/3ds_port/full.mk
 +++ b/3ds_port/full.mk
-@@ -121,9 +121,11 @@
- $(CTR_GBA_STAGE_OBJS): FULLCFLAGS += -DCTR_GBA_STAGE -include $(abspath compat/ctr_gba_stage.h)
- $(CTR_GBA_STAGE_OBJS): compat/ctr_gba_stage.h $(ROOT)/include/gba/defines.h
+@@ -123,7 +123,7 @@
  # GBA screens shown centred, margins only from layers that wrap on the GBA
--# (compat/ctr_gba_centred.h).
-+# (compat/ctr_gba_centred.h). Evolution uses the 240x160 battle windows and
-+# fixed (120,64) sprites; its own VBlank callbacks must select this viewport
-+# too, including after returning from the move replacement screen.
+ # (compat/ctr_gba_centred.h).
  CTR_GBA_CENTRED_SRCS := region_map field_region_map main_menu naming_screen wallclock \
--	pokemon_summary_screen
-+	pokemon_summary_screen evolution_scene evolution_graphics
+-	pokemon_summary_screen starter_choose
++	pokemon_summary_screen starter_choose evolution_scene evolution_graphics
  CTR_GBA_CENTRED_OBJS := $(patsubst %,build/root/src/%.o,$(CTR_GBA_CENTRED_SRCS))
  $(CTR_GBA_CENTRED_OBJS): FULLCFLAGS += -DCTR_GBA_STAGE -include $(abspath compat/ctr_gba_centred.h)
  $(CTR_GBA_CENTRED_OBJS): compat/ctr_gba_centred.h $(ROOT)/include/gba/defines.h

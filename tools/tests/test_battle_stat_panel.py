@@ -30,8 +30,10 @@ class BattleStatPanelTests(unittest.TestCase):
         transform = function(cls.patched, "DrawBattleUiLayer(unsigned bg)")
         scene = function(cls.patched, "RenderBattleScene(uint32_t clear)")
         ui = function(cls.patched, "RenderEye(C3D_RenderTarget *target")
+        world = function(cls.patched, "RenderBattleWorld(uint32_t clear)")
         scene_mask = re.search(r"sLayerExclude = 1u[^;]+;", scene)[0]
         ui_mask = re.search(r"sLayerExclude = 63[^;]+;", ui)[0]
+        world_mask = re.search(r"sLayerExclude = sScene[^;]+;", world)[0]
         probe = tree / "battle_ui.c"
         probe.write_text(r'''
 #include <assert.h>
@@ -39,6 +41,7 @@ class BattleStatPanelTests(unittest.TestCase):
 #include "3ds_video.h"
 static bool sBattle;
 static unsigned display, priority0, priority1;
+static unsigned sWorldLayers;
 static int sViewX, sViewY, sClipX0, sClipY0, sClipX1, sClipY1;
 static float sZoom, sOffX, sOffY, sLayerShift, sShiftZoom;
 static float *result;
@@ -67,6 +70,7 @@ static void DrawBattleText(unsigned bg)
 void probe(unsigned mode, unsigned bg, float shift, float *out)
 {
     result=out;
+    sWorldLayers=0;
     sBattle=(mode&1)!=0;
     display=(mode&4)?0:0x200;
     priority0=(mode&2)?1:0; priority1=(mode&2)?0:1;
@@ -90,6 +94,26 @@ void probe(unsigned mode, unsigned bg, float shift, float *out)
     assert(sZoom==previous[0] && sOffX==previous[1] && sOffY==previous[2] && sLayerShift==previous[3]);
     assert(sClipX0==clips[0] && sClipY0==clips[1] && sClipX1==clips[2] && sClipY1==clips[3]);
 }
+''' + r'''
+unsigned world_mask(unsigned layers, unsigned stats, unsigned cached)
+{
+    sBattle=true; display=0x200;
+    priority0=stats?1:0; priority1=stats?0:1;
+    sWorldLayers=layers;
+    bool sScene=cached;
+    unsigned sLayerExclude;
+''' + world_mask + r'''
+    return sLayerExclude;
+}
+unsigned scene_mask(unsigned layers, unsigned stats)
+{
+    sBattle=true; display=0x200;
+    priority0=stats?1:0; priority1=stats?0:1;
+    sWorldLayers=layers;
+    unsigned sLayerExclude;
+''' + scene_mask + r'''
+    return sLayerExclude;
+}
 ''')
         library = tree / "battle_ui.so"
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-shared", "-fPIC",
@@ -97,6 +121,10 @@ void probe(unsigned mode, unsigned bg, float shift, float *out)
         cls.lib = ctypes.CDLL(str(library))
         cls.lib.probe.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_float, ctypes.POINTER(ctypes.c_float)]
         cls.lib.probe.restype = None
+        cls.lib.world_mask.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
+        cls.lib.world_mask.restype = ctypes.c_uint
+        cls.lib.scene_mask.argtypes = [ctypes.c_uint, ctypes.c_uint]
+        cls.lib.scene_mask.restype = ctypes.c_uint
 
     @classmethod
     def tearDownClass(cls):
@@ -133,6 +161,14 @@ void probe(unsigned mode, unsigned bg, float shift, float *out)
         normal = self.geometry(1, 0)
         self.assertEqual(normal[:4], [0, 192, 400, 240])
         self.assertEqual(normal[8:13], [1, 0, 0, 1, 30])
+
+    def test_voxel_battle_keeps_world_exclusions_and_only_adds_stat_ui(self):
+        # BG3 is scenery; during entry BG1/BG2 may also be replaced by the world.
+        for layers in (0, 8, 14):
+            for stats in (0, 1):
+                self.assertEqual(self.lib.scene_mask(layers, stats), 1 | layers | (2 if stats else 0))
+                self.assertEqual(self.lib.world_mask(layers, stats, 1), 28 if stats else 30)
+                self.assertEqual(self.lib.world_mask(layers, stats, 0), layers & ~(2 if stats else 0))
 
     def test_detector_rejects_nonbattle_and_disabled_bg1(self):
         self.assertEqual(self.geometry(2, 0)[9], 0)

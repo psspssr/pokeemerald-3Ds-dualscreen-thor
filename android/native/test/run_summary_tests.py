@@ -49,28 +49,37 @@ def main():
             subprocess.run([str(binary), args.case], check=True, timeout=10,
                            env={**os.environ, "UBSAN_OPTIONS": "halt_on_error=1"})
         if args.case == "all":
-            if "CtrSummary_MoveTouchChoice" not in source:
-                raise RuntimeError("Summary touch overlay is missing; run tools/bootstrap.py first")
-            enum = re.search(r"enum CtrSummaryMoveTouch\s*\{.*?\};", source, re.S)[0]
-            touch = enum + "\n"
+            if "CtrSummary_ReplaceTouch" not in source:
+                raise RuntimeError("Updated upstream Summary touch handlers are missing; run bootstrap first")
+            enum = re.search(r"enum\s*\{\s*CTR_TOUCH_NONE,.*?\};", source, re.S)[0]
+            touch = "\n".join(re.findall(r"^#define CTR_MOVE_.*$", source, re.M)) + "\n" + enum + "\n"
+            touch += "#define CTR_ANY_TAP() CtrSummary_AnyTap()\n"
             signatures = [
                 "void CtrSummary_Tap(s16 x, s16 y)",
-                "static s16 CtrSummary_MoveTouchChoice(void)",
-                "static u16 CtrSummary_MoveTouchKeys(s16 choice)",
-                "static void CtrSummary_SelectTouchedMove(u8 taskId, s16 row, bool8 warning)",
+                "static bool8 CtrSummary_TakeTap(s16 *x, s16 *y)",
+                "static bool8 CtrSummary_OnCancel(s16 x, s16 y)",
+                "static s8 CtrSummary_MoveRowAt(s16 x, s16 y)",
+                "static u8 CtrSummary_MoveTouch(s16 *data, u8 *indexPtr, u8 maxIndex)",
+                "static bool8 CtrSummary_PageTouch(u8 taskId, s16 x, s16 y)",
+                "static u8 CtrSummary_ReplaceTouch(u8 taskId, s16 *data)",
+                "static bool8 CtrSummary_AnyTap(void)",
                 "static bool8 CtrSummary_TouchInput(u8 taskId)",
                 "static void ChangeSelectedMove(s16 *taskData, s8 direction, u8 *moveIndexPtr)",
+                "static void SwitchToMoveSelection(u8 taskId)",
+                "static void Task_HandleInput_MoveSelect(u8 taskId)",
+                "static bool8 HasMoreThanOneMove(void)",
+                "static void CloseMoveSelectMode(u8 taskId)",
+                "static void SwitchToMovePositionSwitchMode(u8 taskId)",
+                "static void Task_HandleInput_MovePositionSwitch(u8 taskId)",
+                "static void ExitMovePositionSwitchMode(u8 taskId, bool8 swapMoves)",
                 "static void Task_SetHandleReplaceMoveInput(u8 taskId)",
                 "static void Task_HandleReplaceMoveInput(u8 taskId)",
                 "static bool8 CanReplaceMove(void)",
                 "static void ShowCantForgetHMsWindow(u8 taskId)",
                 "static void Task_HandleInputCantForgetHMsMoves(u8 taskId)",
-                "static void CtrSummary_PrintMoveTouchButtons(void)",
-                "static void CtrSummary_PutMoveTouchButtons(u8 page)",
                 "static void PutPageWindowTilemaps(u8 page)",
             ]
             touch += "\n".join(function(source, signature) for signature in signatures)
-            assert "CtrSummary_PrintMoveTouchButtons();" in function(source, "static void PrintPageNamesAndStats(void)")
             (work / "touch.inc").write_text(touch)
             binary = work / "touch"
             subprocess.run([os.environ.get("CC", "cc"), "-std=c11", "-O1", "-g", "-DPLATFORM_3DS",
