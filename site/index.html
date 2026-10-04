@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#164d3b">
-  <meta name="description" content="Pokémon Emerald on Android, designed for two screens. Touch menus, an optional voxel overworld, portable saves and a signed Android preview.">
-  <title>Pokémon Emerald Dual Screen — Android adventure</title>
+  <meta name="description" content="Pokémon Emerald for the AYN Thor. Explore Hoenn on the top display, use touch menus below, and play with the handheld’s built-in controls.">
+  <title>Pokémon Emerald Dual Screen for AYN Thor</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="preload" href="assets/fonts/pixelify-sans.ttf" as="font" type="font/ttf" crossorigin>
   <script src="site.js" defer></script>
@@ -29,15 +29,15 @@
   <main id="main">
     <section class="hero section-wrap" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> YOUR NEXT ADVENTURE IS CALLING</p>
+        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> HOENN, MEET YOUR AYN THOR</p>
         <h1 id="hero-title">Pokémon<br><span>Emerald.</span></h1>
-        <p class="hero-subtitle">Made for two screens.</p>
-        <p class="hero-description">Return to Hoenn on Android. Keep the adventure above and your map, party and touch menus below.</p>
+        <p class="hero-subtitle">Made for AYN Thor.</p>
+        <p class="hero-description">Your Thor’s two screens, put to work. Explore Hoenn up top, keep your map and touch menus below, and play with the built-in controls.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="#play"><span class="play-arrow" aria-hidden="true">▶</span> Get the Android preview</a>
+          <a class="button button-primary" href="#play"><span class="play-arrow" aria-hidden="true">▶</span> Get the Thor preview</a>
           <a class="text-link" href="#screens">Take a look <span aria-hidden="true">↓</span></a>
         </div>
-        <p class="hero-meta"><span>{{RELEASE_TAG}}</span><span>AYN Thor + compatible Android devices</span></p>
+        <p class="hero-meta"><span>{{RELEASE_TAG}}</span><span>Two displays. One Hoenn adventure.</span></p>
       </div>
       <figure class="hero-device">
         <div class="device-scene">
@@ -49,7 +49,7 @@
         </div>
         <figcaption>Presentation mockup using emulator captures.<br><a href="credits.html">DROIX device reference · image credits</a></figcaption>
       </figure>
-      <div class="hero-bottom" aria-hidden="true"><span>HOENN REGION</span><span>ANDROID EDITION</span><span>UNOFFICIAL FAN PROJECT</span></div>
+      <div class="hero-bottom"><span>TOP · 1920 × 1080</span><span>TOUCH · 1240 × 1080</span><span>DESIGNED FOR AYN THOR</span></div>
     </section>
 
     <section id="play" class="play-section" aria-labelledby="play-title">
@@ -61,7 +61,7 @@
               <img class="app-icon" src="assets/app-icon.png" width="1254" height="1254" alt="" loading="lazy">
               <div><p class="eyebrow">{{RELEASE_KIND}}</p><h2 id="play-title">{{RELEASE_VERSION}}</h2><p class="release-date">{{RELEASE_DATE}} · {{APK_SIZE}} · ARMv7</p></div>
             </div>
-            <p>The Android APK includes matching game data. Install it on a compatible device and start playing.</p>
+            <p>Install the Android APK on your Thor and start playing. Matching game data is included.</p>
             <a class="button button-primary download-button" href="{{APK_URL}}"><span aria-hidden="true">↓</span> Download Android APK</a>
             <div class="access-notice"><strong>{{ACCESS_LABEL}}</strong><p>{{ACCESS_NOTE}}</p></div>
             <div class="release-links"><a href="{{RELEASE_URL}}">Release notes</a><a href="{{CHECKSUMS_URL}}">Checksums</a><a href="{{MANIFEST_URL}}">Build details</a></div>
@@ -69,13 +69,13 @@
         </div>
         <div class="before-play">
           <p class="section-kicker">BEFORE YOU SET OFF</p>
-          <h2>A little setup.<br>A whole adventure.</h2>
+          <h2>Your Thor.<br>Your next adventure.</h2>
           <ol class="setup-list">
-            <li><span class="step-number">01</span><div><h3>Check your Android</h3><p>Android 9 or newer, OpenGL ES 3.0, and <strong>32-bit ARM app support</strong>. Firmware that only runs 64-bit apps cannot run this preview.</p></div></li>
+            <li><span class="step-number">01</span><div><h3>Check your Thor’s firmware</h3><p>Android 9 or newer, OpenGL ES 3.0, and <strong>32-bit ARM app support</strong>. Firmware that only runs 64-bit apps cannot run this preview.</p></div></li>
             <li><span class="step-number">02</span><div><h3>Bring your save</h3><p>Import an Emerald <code>.sav</code> in Settings, then restart. Export it to return to a GBA emulator. Save states are a different format.</p></div></li>
-            <li><span class="step-number">03</span><div><h3>Make both screens yours</h3><p>Thor panels fill by default without cropping. Choose <strong>Fit</strong> for original proportions, swap display order, or use the phone layout.</p></div></li>
+            <li><span class="step-number">03</span><div><h3>Make both screens yours</h3><p>Both Thor panels fill by default without cropping. Keep the adventure above and touch menus below, or choose <strong>Fit</strong> for original proportions.</p></div></li>
           </ol>
-          <p class="tested-note">Tested in Android emulators. Physical Thor testing and sustained hardware performance remain open. <a href="{{REPOSITORY_URL}}/blob/main/docs/VALIDATION.md">See the test report ↗</a></p>
+          <p class="tested-note">Also supports compatible Android phones and other handhelds. Builds are tested in emulators; Thor hardware and sustained performance validation remain ongoing. <a href="{{REPOSITORY_URL}}/blob/main/docs/VALIDATION.md">See the test report ↗</a></p>
         </div>
       </div>
     </section>
@@ -116,7 +116,7 @@
             <img src="assets/classic-route.png" width="1920" height="1080" alt="Original 2D Route 101 with tall grass, trees, ledges and the touch menu" loading="lazy" decoding="async">
             <span class="enlarge-hint" aria-hidden="true">+</span>
           </a>
-          <figcaption><h3>Room for the journey</h3><p>Separate displays on a handheld. Both screens together on a phone.</p></figcaption>
+          <figcaption><h3>Room for the journey</h3><p>The adventure on your Thor’s top display. Map and touch menus within reach below.</p></figcaption>
         </figure>
       </div>
       <p class="gallery-note">Unmodified captures from actual ARM Android builds, shown in the combined landscape layout. <a href="assets/portrait-controls.png">See the portrait phone layout</a> · <a href="credits.html">Capture provenance</a></p>
@@ -125,9 +125,9 @@
     <section id="controls" class="controls-section" aria-labelledby="controls-title">
       <div class="section-wrap controls-grid">
         <div class="controls-intro">
-          <p class="section-kicker">TRAINER'S QUICK GUIDE</p>
+          <p class="section-kicker">YOUR THOR, YOUR CONTROLS</p>
           <h2 id="controls-title">Pick up.<br>Press play.</h2>
-          <p>Face buttons follow Nintendo positions by default, regardless of the printed labels. Prefer the labels? Change Face button mapping in Settings.</p>
+          <p>Use your Thor’s built-in D-pad, sticks and shoulder buttons. Face buttons follow Nintendo positions by default; choose label mapping in Settings if you prefer.</p>
           <div class="controller-diagram" aria-hidden="true"><span class="diagram-dpad">✚</span><div class="face-buttons"><span class="face x">X</span><span class="face y">Y</span><span class="face a">A</span><span class="face b">B</span></div></div>
           <div class="pause-callout"><span>OPEN THE APP MENU</span><strong><kbd>L1</kbd> + <kbd>R1</kbd></strong><p>Press together for Pause and Settings. Choose Resume to continue.</p></div>
         </div>
