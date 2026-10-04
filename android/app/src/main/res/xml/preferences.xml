@@ -39,8 +39,7 @@
             app:entryValues="@array/voxel_aa_values"
             app:iconSpaceReserved="false"
             app:key="voxel_aa"
-            app:title="@string/pref_voxel_aa"
-            app:dialogMessage="@string/pref_voxel_aa_description" />
+            app:title="@string/pref_voxel_aa" />
         <SwitchPreferenceCompat
             app:defaultValue="true"
             app:iconSpaceReserved="false"

@@ -31,12 +31,13 @@ internal object VoxelAntiAliasing {
         preference.summaryProvider = Preference.SummaryProvider<ListPreference> { current ->
             val requested = samples(current.value)
             val requestedLabel = label(current.context, requested)
-            when {
+            val quality = when {
                 capabilities < 0 -> current.context.getString(R.string.pref_voxel_aa_unknown, requestedLabel)
                 requested == 0 || supported(requested, capabilities) -> requestedLabel
                 else -> current.context.getString(R.string.pref_voxel_aa_unavailable, requestedLabel,
                     label(current.context, effective(requested, capabilities)))
             }
+            "$quality\n${current.context.getString(R.string.pref_voxel_aa_description)}"
         }
     }
 }

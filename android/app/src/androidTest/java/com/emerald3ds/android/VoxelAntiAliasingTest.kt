@@ -1,6 +1,9 @@
 package com.emerald3ds.android
 
 import android.os.SystemClock
+import android.graphics.Rect
+import android.view.InputDevice
+import android.view.MotionEvent
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.preference.ListPreference
@@ -35,13 +38,65 @@ class VoxelAntiAliasingTest {
             as SettingsActivity.SettingsFragment
     }
 
-    private fun choose(activity: SettingsActivity, index: Int) {
-        val settings = fragment(activity)
-        settings.onDisplayPreferenceDialog(settings.findPreference<ListPreference>("voxel_aa")!!)
-        activity.supportFragmentManager.executePendingTransactions()
-        val dialog = activity.supportFragmentManager.fragments.filterIsInstance<ListPreferenceDialogFragmentCompat>().single()
-        val list = (dialog.requireDialog() as AlertDialog).listView
-        assertTrue(list.performItemClick(null, index, list.adapter.getItemId(index)))
+    private fun choose(scenario: ActivityScenario<SettingsActivity>, index: Int) {
+        scenario.onActivity { activity ->
+            val settings = fragment(activity)
+            settings.onDisplayPreferenceDialog(settings.findPreference<ListPreference>("voxel_aa")!!)
+            activity.supportFragmentManager.executePendingTransactions()
+        }
+        inst.waitForIdleSync()
+        var x = 0f
+        var y = 0f
+        var expected = ""
+        scenario.onActivity { activity ->
+            val dialog = activity.supportFragmentManager.fragments.filterIsInstance<ListPreferenceDialogFragmentCompat>().single()
+            val list = (dialog.requireDialog() as AlertDialog).listView
+            val bounds = Rect()
+            // A dialog message can hide the list while its adapter and
+            // performItemClick still work. Require an actual visible row.
+            assertTrue("AA choices are hidden behind dialog content", list.isShown && list.getGlobalVisibleRect(bounds))
+            val row = checkNotNull(list.getChildAt(index - list.firstVisiblePosition))
+            assertTrue("AA choice is not visible", row.isShown && row.getGlobalVisibleRect(bounds))
+            val location = IntArray(2)
+            row.getLocationOnScreen(location)
+            x = location[0] + row.width / 2f
+            y = location[1] + row.height / 2f
+            expected = fragment(activity).findPreference<ListPreference>("voxel_aa")!!.entryValues[index].toString()
+        }
+        val downTime = SystemClock.uptimeMillis()
+        val pointer = MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER }
+        val coordinates = MotionEvent.PointerCoords().apply {
+            this.x = x
+            this.y = y
+            pressure = 1f
+            size = 1f
+        }
+        for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+            if (action == MotionEvent.ACTION_UP) SystemClock.sleep(100)
+            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, 1,
+                arrayOf(pointer), arrayOf(coordinates), 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
+            try { assertTrue(inst.uiAutomation.injectInputEvent(event, true)) } finally { event.recycle() }
+        }
+        // AbsListView may post its click after the pressed-state delay. An
+        // idle looper can still have that timed callback waiting, so do not
+        // recreate the activity until both its effects are observable.
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        var selected: String? = null
+        var dismissed = false
+        while (SystemClock.uptimeMillis() < deadline) {
+            scenario.onActivity { activity ->
+                selected = fragment(activity).findPreference<ListPreference>("voxel_aa")!!.value
+                dismissed = activity.supportFragmentManager.fragments
+                    .filterIsInstance<ListPreferenceDialogFragmentCompat>().none { it.dialog?.isShowing == true }
+            }
+            if (selected == expected && preferences.getString("voxel_aa", null) == expected && dismissed) return
+            SystemClock.sleep(25)
+        }
+        fail("Visible AA tap did not settle: expected=$expected selected=$selected dismissed=$dismissed")
+    }
+
+    private fun assertSummary(quality: String, preference: ListPreference) {
+        assertEquals("$quality\n${context.getString(R.string.pref_voxel_aa_description)}", preference.summary)
     }
 
     private fun waitForRequest(samples: Int) {
@@ -76,7 +131,7 @@ class VoxelAntiAliasingTest {
             scenario.onActivity { activity ->
                 val pref = fragment(activity).findPreference<ListPreference>("voxel_aa")!!
                 assertArrayEquals(arrayOf("0"), pref.entryValues.map { it.toString() }.toTypedArray())
-                assertEquals(context.getString(R.string.pref_voxel_aa_unknown, "4×"), pref.summary)
+                assertSummary(context.getString(R.string.pref_voxel_aa_unknown, "4×"), pref)
                 assertEquals("4", pref.value)
             }
             HostProbe.setVoxelAACapabilities(1)
@@ -84,7 +139,7 @@ class VoxelAntiAliasingTest {
             scenario.onActivity { activity ->
                 val pref = fragment(activity).findPreference<ListPreference>("voxel_aa")!!
                 assertArrayEquals(arrayOf("0", "2"), pref.entryValues.map { it.toString() }.toTypedArray())
-                assertEquals(context.getString(R.string.pref_voxel_aa_unavailable, "4×", "2×"), pref.summary)
+                assertSummary(context.getString(R.string.pref_voxel_aa_unavailable, "4×", "2×"), pref)
                 assertEquals("4", preferences.getString("voxel_aa", null))
             }
             HostProbe.setVoxelAACapabilities(2)
@@ -93,7 +148,7 @@ class VoxelAntiAliasingTest {
             scenario.onActivity { activity ->
                 val pref = fragment(activity).findPreference<ListPreference>("voxel_aa")!!
                 assertArrayEquals(arrayOf("0", "4"), pref.entryValues.map { it.toString() }.toTypedArray())
-                assertEquals(context.getString(R.string.pref_voxel_aa_unavailable, "2×", "Off"), pref.summary)
+                assertSummary(context.getString(R.string.pref_voxel_aa_unavailable, "2×", "Off"), pref)
             }
             HostProbe.setVoxelAACapabilities(0)
             scenario.recreate()
@@ -101,8 +156,8 @@ class VoxelAntiAliasingTest {
                 val pref = fragment(activity).findPreference<ListPreference>("voxel_aa")!!
                 assertArrayEquals(arrayOf("0"), pref.entryValues.map { it.toString() }.toTypedArray())
                 assertEquals("2", pref.value)
-                choose(activity, 0) // Off is always available, even on an unsupported device.
             }
+            choose(scenario, 0) // Off is always available, even on an unsupported device.
             inst.waitForIdleSync()
             assertEquals("0", preferences.getString("voxel_aa", null))
         }
@@ -111,14 +166,15 @@ class VoxelAntiAliasingTest {
     @Test fun chosenQualityPersistsAndReachesNativeAcrossPauseAndResume() {
         HostProbe.setVoxelAACapabilities(3)
         ActivityScenario.launch(SettingsActivity::class.java).use { scenario ->
-            scenario.onActivity { activity -> choose(activity, 1) }
-            inst.waitForIdleSync()
-            scenario.recreate()
-            scenario.onActivity { activity ->
-                val pref = fragment(activity).findPreference<ListPreference>("voxel_aa")!!
-                assertEquals("2", pref.value)
-                assertEquals("2×", pref.summary)
-                assertEquals(2, AppSettings.load(context).voxelAASamples)
+            for ((index, samples) in listOf(2 to 4, 1 to 2)) {
+                choose(scenario, index)
+                scenario.recreate()
+                scenario.onActivity { activity ->
+                    val pref = fragment(activity).findPreference<ListPreference>("voxel_aa")!!
+                    assertEquals(samples.toString(), pref.value)
+                    assertSummary("$samples×", pref)
+                    assertEquals(samples, AppSettings.load(context).voxelAASamples)
+                }
             }
         }
         ActivityScenario.launch(GameActivity::class.java).use { scenario ->
