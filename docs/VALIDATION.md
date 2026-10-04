@@ -2,6 +2,26 @@
 
 ## 0.1.0-alpha.7 — sleep and screen-power pause
 
+The [alpha.7 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.7)
+was built from immutable commit `6be6f36cfbe166a48e23776d23a93b3b27da3e2c`.
+All seven jobs passed on the first attempt in
+[run 37193290005](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37193290005),
+including **93 app tests, 79 tooling tests and 136 GLES pixel assertions**,
+native sanitizer checks, production packaging, signing and upload.
+
+| Published artifact | Verified value |
+|---|---|
+| Version | `0.1.0-alpha.7`, Android version code **7** |
+| APK | `emerald-thor-0.1.0-alpha.7-armeabi-v7a.apk` |
+| Bytes / SHA-256 | **27,550,860 bytes**; `17411a9c207928894ebf8d6b48c2045596355d035e184c8e21efb89b8657ec44` |
+| Engine/data ABI | `07329dad` |
+| Signing identity | Unchanged: `eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389` |
+
+The downloaded APK's signature, alignment, package metadata and native/data
+hashes match the manifest. All three published assets match the immutable
+signed Actions artifact byte-for-byte. Evidence:
+`build/evidence/release-alpha7-ci/verification.json`.
+
 The app now combines lifecycle, device interactivity, main-display power and
 keyguard state before running the game. It refreshes those signals at startup,
 resume, display/focus changes, system screen broadcasts and callbacks that
@@ -17,25 +37,31 @@ queued menu/export/shiny callbacks and real Android sleep/wake. The native
 harness confirms acknowledged pause and stopped frame counters. An independent
 review checked state composition and receiver lifetime/registration.
 
-The release-signed local ARM probe has SHA-256
-`09bc5dde9681292beed989cc5fc5ba5f8823d982c86a18f216c53fc3a7a7acee`.
-The native engine/data ABI remains `07329dad`. A read-only helper on the rooted
-API 30 emulator samples the real game's two `gMain` VBlank counters and native
-pause acknowledgement, using symbols from the matching native build. No probe
-code is injected into the APK or the game memory.
+The exact published APK updated over alpha.6 and loaded the existing Oldale
+save on the API 30 ARM-translation emulator. A read-only helper samples the
+real game's two `gMain` VBlank counters and native pause acknowledgement.
+The downloaded library's native allocation layouts and content fingerprints
+match the build used for symbol addresses. No probe code is injected into
+the APK or the game memory.
 
 With both Thor-sized displays attached, the real game's counters stayed at
-**28,729** during sleep, and at **28,901** through sleep and a subsequent awake
+**3,043** during sleep, and at **3,235** through sleep and a subsequent awake
 lock screen. They advanced after wake/unlock. A pre-existing manual pause
-stayed at **29,023** across sleep and wake until Resume. The game kept the same
+stayed at **3,381** across sleep and wake until Resume. The game kept the same
 process throughout; the temporary swipe-lock setting was restored. Screenshots
 were inspected, both displays returned, and Map/Party touch worked after
-resumption. The save and both settings files remained byte-identical. The
-emulator's system server logged an unsupported EGL context attribute during
-lock-screen transitions; the game process logged no EGL/fatal error. Existing
-native affine/OBJ-window/mosaic diagnostics remained. Evidence:
-`build/evidence/lid-suspend/power-events.json`, `power-smoke.log` and captures
-in that directory.
+resumption. Secondary disconnect restored the combined layout, and normal
+Quit reported native exit status zero. The save and both settings files
+remained byte-identical. The emulator's system server logged an unsupported
+EGL context attribute during lock-screen transitions; the game process logged
+no EGL/fatal error. Existing OBJ-window/BG-mosaic diagnostics remained.
+Evidence: `build/evidence/published-alpha7-qa/report.json`, native counters
+in `power-events.json`, and screenshots in that directory.
+
+The same sleep/wake checks also passed before publication on the release-signed
+local ARM probe, SHA-256
+`09bc5dde9681292beed989cc5fc5ba5f8823d982c86a18f216c53fc3a7a7acee`.
+Local build, focused tests and probe evidence are in `build/evidence/lid-suspend/`.
 
 These checks exercise Android power signals, not a physical Thor Hall sensor.
 Firmware that does not report sleep/lock/main-display-off on closure, or that

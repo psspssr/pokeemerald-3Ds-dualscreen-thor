@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.6">Download Android preview</a> ·
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.7">Download Android preview</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#controls">Controls</a> ·
   <a href="docs/AYN_THOR.md">Thor setup</a>
@@ -36,7 +36,7 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 
 ## Get started
 
-Download the signed **[0.1.0-alpha.6 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.6)** and install its `armeabi-v7a.apk`. Matching game data is included. Downloads currently require access to this private repository. Export your save before replacing a development APK, which uses a different signing key.
+Download the signed **[0.1.0-alpha.7 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.7)** and install its `armeabi-v7a.apk`. Matching game data is included. Downloads currently require access to this private repository. Export your save before replacing a development APK, which uses a different signing key.
 
 **Pause with L1 + R1 together** or keyboard **Escape**, then open **Settings**. On Thor, both panels fill by default without cropping; choose **Fit** to keep the original proportions. Phone layouts include on-screen controls. See [Thor setup](docs/AYN_THOR.md).
 
