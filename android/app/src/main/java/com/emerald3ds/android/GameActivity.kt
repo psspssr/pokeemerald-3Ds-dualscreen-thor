@@ -1,6 +1,10 @@
 package com.emerald3ds.android
 
+import android.app.KeyguardManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.hardware.display.DisplayManager
@@ -11,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.os.PowerManager
 import android.text.Html
 import android.util.Log
 import android.view.Display
@@ -29,6 +34,7 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -58,6 +64,8 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     private lateinit var physical: PhysicalInput
     private lateinit var displayManager: DisplayManager
     private lateinit var inputManager: InputManager
+    private lateinit var powerManager: PowerManager
+    private lateinit var keyguardManager: KeyguardManager
 
     private lateinit var root: FrameLayout
     private lateinit var statusPanel: View
@@ -76,6 +84,14 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         private set
     private var dualActive = false
     private var resumed = false
+    private var screenSuspended = true
+    private var powerReceiverRegistered = false
+    // An instance-local reader keeps all event paths on the same snapshot
+    // source, including lifecycle and focus callbacks during recreation.
+    internal var screenPowerSnapshot: () -> ScreenPowerState = { readScreenPower() }
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = refreshScreenPower()
+    }
     private var menuShown = false
     private var menuDialog: AlertDialog? = null
     private var shinyDialog: AlertDialog? = null
@@ -131,9 +147,21 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         onBackPressedDispatcher.addCallback(this) { onBackKey() }
 
         displayManager = getSystemService(DisplayManager::class.java)
+        powerManager = getSystemService(PowerManager::class.java)
+        keyguardManager = getSystemService(KeyguardManager::class.java)
         displayManager.registerDisplayListener(this, handler)
+        // These actions are system-protected. Exporting also admits privileged
+        // system senders outside the system UID; intent extras are never used.
+        ContextCompat.registerReceiver(this, powerReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }, ContextCompat.RECEIVER_EXPORTED)
+        powerReceiverRegistered = true
+        refreshScreenPower()
         fileModel.state.observe(this, ::onFileState)
         GameFilesModel.pauseHolds.observe(this) {
+            refreshScreenPower()
             updateInputEnabled()
             if (!acceptsGameInput()) physical.clear()
             if (!exiting) NativeBridge.setState(
@@ -145,6 +173,10 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     override fun onDestroy() {
+        if (powerReceiverRegistered) {
+            powerReceiverRegistered = false
+            unregisterReceiver(powerReceiver)
+        }
         displayManager.unregisterDisplayListener(this)
         inputManager.unregisterInputDeviceListener(this)
         menuDialog?.dismiss()
@@ -172,6 +204,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         physical.labelMapping = settings.labelMapping
         fastForward.configure(GameplayOptions.load(this))
         physical.fastForwardEnabled = fastForward.options.fastForwardEnabled
+        refreshScreenPower()
         if (settings.keepScreenOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enterImmersive()
@@ -185,22 +218,30 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     override fun onPause() {
         resumed = false
         updateInputEnabled()
-        NativeBridge.setState(NativeBridge.STATE_PAUSED)
+        if (!exiting) NativeBridge.setState(NativeBridge.STATE_PAUSED)
         dismissShinyPrompt()
+        releaseGameInput()
+        super.onPause()
+    }
+
+    private fun releaseGameInput() {
         overlay.releaseAll()
         presentation?.touchView?.releaseAll()
         physical.clear()
         InputHub.clear()
-        super.onPause()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        // Focus may move to our Presentation or a dialog. It is a refresh
+        // opportunity, not itself a reason to stop either game screen.
+        refreshScreenPower()
         if (hasFocus) enterImmersive()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        refreshScreenPower()
         bottomToggled = false
         relayout()
     }
@@ -285,8 +326,9 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     private fun startGame() {
+        refreshScreenPower()
         NativeBridge.init(files.romfsDir.absolutePath, files.sdmcDir.absolutePath)
-        NativeBridge.setState(if (resumed && !menuShown && !GameFilesModel.exportPending)
+        NativeBridge.setState(if (canRunGame())
             NativeBridge.STATE_RUNNING else NativeBridge.STATE_PAUSED)
         if (!NativeBridge.start()) {
             showError("The game thread could not be started.")
@@ -298,6 +340,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     private fun showGame() {
         phase = Phase.RUNNING
         statusPanel.visibility = View.GONE
+        refreshScreenPower()
         relayout()
         NativeBridge.setState(if (acceptsGameInput()) NativeBridge.STATE_RUNNING else NativeBridge.STATE_PAUSED)
     }
@@ -309,7 +352,39 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         presentation?.touchView?.inputEnabled = enabled
     }
 
-    private fun acceptsGameInput() = resumed && phase == Phase.RUNNING && !menuShown && shinyRequest == 0 && !exiting && !GameFilesModel.exportPending
+    private fun canRunGame() = resumed && !screenSuspended && !menuShown && shinyRequest == 0 && !exiting && !GameFilesModel.exportPending
+
+    private fun acceptsGameInput() = phase == Phase.RUNNING && canRunGame()
+
+    private fun readScreenPower() = ScreenPowerState(
+        powerManager.isInteractive,
+        keyguardManager.isKeyguardLocked,
+        displayManager.getDisplay(currentDisplayId())?.state ?: Display.STATE_UNKNOWN,
+    )
+
+    /** Public Android sleep/display/lock signals also cover firmware that
+     * powers off a clamshell panel before dispatching Activity.onPause(). */
+    internal fun refreshScreenPower() {
+        if (!powerReceiverRegistered || exiting) return
+        val snapshot = screenPowerSnapshot()
+        val suspended = !snapshot.permitsPlay
+        if (suspended == screenSuspended) return
+        screenSuspended = suspended
+        if (suspended) {
+            updateInputEnabled()
+            NativeBridge.setState(NativeBridge.STATE_PAUSED)
+            dismissShinyPrompt() // Closing the lid always means Stay.
+            releaseGameInput()
+        }
+        updatePresentation()
+        updateInputEnabled()
+        // An existing shiny prompt waits on its own native answer. Unrelated
+        // power/focus refreshes must not turn that wait into a pause/cancel.
+        if (!suspended && shinyRequest == 0) NativeBridge.setState(
+            if (acceptsGameInput()) NativeBridge.STATE_RUNNING else NativeBridge.STATE_PAUSED
+        )
+        Log.i(TAG, "screen power $snapshot; suspended=$suspended")
+    }
 
     private fun applyGameplayOptions() {
         NativeBridge.setGameplayOptions(fastForward.speed, fastForward.options)
@@ -334,7 +409,8 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     private fun showShinyPrompt(request: Int) {
-        if (!resumed || phase != Phase.RUNNING || exiting || menuShown ||
+        refreshScreenPower()
+        if (!resumed || screenSuspended || phase != Phase.RUNNING || exiting || menuShown ||
             !NativeBridge.isShinyFleePending(request)) {
             NativeBridge.answerShinyFlee(request, false)
             return
@@ -347,6 +423,10 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         // The native thread is waiting for this answer, so do not pause it
         // through aptMainLoop here. A real Activity pause cancels the request.
         fun answer(allow: Boolean) {
+            if (shinyRequest != request) return
+            // A queued click must not approve fleeing after the panel went
+            // dark but before its power notification reached the UI thread.
+            refreshScreenPower()
             if (shinyRequest != request) return
             shinyRequest = 0
             NativeBridge.answerShinyFlee(request, allow)
@@ -361,6 +441,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             .setOnDismissListener {
                 answer(false)
                 shinyDialog = null
+                refreshScreenPower()
                 updateInputEnabled()
                 enterImmersive()
             }
@@ -456,11 +537,11 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     private fun pickSecondDisplay(): Display? {
         val own = currentDisplayId()
         return displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
-            .firstOrNull { it.displayId != own && it.state != Display.STATE_OFF }
+            .firstOrNull { it.displayId != own && it.state == Display.STATE_ON }
     }
 
     private fun updatePresentation() {
-        val wanted = settings.dualDisplay && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !exiting
+        val wanted = settings.dualDisplay && !screenSuspended && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !exiting
         val display = if (wanted) pickSecondDisplay() else null
         if (presentation?.display?.displayId == display?.displayId) return
         dismissPresentation()
@@ -498,9 +579,14 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         if (::overlay.isInitialized) relayout()
     }
 
-    override fun onDisplayAdded(displayId: Int) = updatePresentation()
-    override fun onDisplayRemoved(displayId: Int) = updatePresentation()
-    override fun onDisplayChanged(displayId: Int) = updatePresentation()
+    private fun displaysChanged() {
+        refreshScreenPower()
+        updatePresentation()
+    }
+
+    override fun onDisplayAdded(displayId: Int) = displaysChanged()
+    override fun onDisplayRemoved(displayId: Int) = displaysChanged()
+    override fun onDisplayChanged(displayId: Int) = displaysChanged()
 
     // ── Input ────────────────────────────────────────────────────────────
 
@@ -531,6 +617,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     // ── Menu, settings, exit ─────────────────────────────────────────────
 
     private fun onBackKey() {
+        if (screenSuspended) return
         if (phase != Phase.RUNNING) {
             if (phase != Phase.EXTRACTING) exitProcess()
             return
@@ -567,6 +654,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             .setOnDismissListener {
                 menuDialog = null
                 menuShown = false
+                refreshScreenPower()
                 updateInputEnabled()
                 if (acceptsGameInput()) NativeBridge.setState(NativeBridge.STATE_RUNNING)
                 enterImmersive()
