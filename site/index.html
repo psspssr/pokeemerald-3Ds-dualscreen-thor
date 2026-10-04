@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#164d3b">
+  <meta name="description" content="Pokémon Emerald on Android, designed for two screens. Touch menus, an optional voxel overworld, portable saves and a signed Android preview.">
+  <title>Pokémon Emerald Dual Screen — Android adventure</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preload" href="assets/fonts/pixelify-sans.ttf" as="font" type="font/ttf" crossorigin>
+  <script src="site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="wordmark" href="./" aria-label="Emerald Dual Screen home">
+        <span class="emerald-mark" aria-hidden="true"><i></i></span>
+        <span>EMERALD<small>DUAL SCREEN</small></span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#screens">Screens</a>
+        <a href="#controls">Controls</a>
+        <a href="#extras">Extras</a>
+        <a class="nav-play" href="#play">Get the preview <span aria-hidden="true">↗</span></a>
+      </nav>
+    </div>
+  </header>
+  <main id="main">
+    <section class="hero section-wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> YOUR NEXT ADVENTURE IS CALLING</p>
+        <h1 id="hero-title">Pokémon<br><span>Emerald.</span></h1>
+        <p class="hero-subtitle">Made for two screens.</p>
+        <p class="hero-description">Return to Hoenn on Android. Keep the adventure above and your map, party and touch menus below.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#play"><span class="play-arrow" aria-hidden="true">▶</span> Get the Android preview</a>
+          <a class="text-link" href="#screens">Take a look <span aria-hidden="true">↓</span></a>
+        </div>
+        <p class="hero-meta"><span>{{RELEASE_TAG}}</span><span>AYN Thor + compatible Android devices</span></p>
+      </div>
+      <figure class="hero-device">
+        <div class="device-scene">
+          <span class="scene-spark spark-one" aria-hidden="true">✦</span>
+          <span class="scene-spark spark-two" aria-hidden="true">✧</span>
+          <span class="device-label label-top">ADVENTURE UP TOP</span>
+          <img src="assets/thor-presentation.png" width="1254" height="1254" alt="Presentation mockup of a black AYN Thor with Oldale Town above and the Hoenn touch map below" fetchpriority="high">
+          <span class="device-label label-bottom">TOUCH MENUS BELOW</span>
+        </div>
+        <figcaption>Presentation mockup using emulator captures.<br><a href="credits.html">DROIX device reference · image credits</a></figcaption>
+      </figure>
+      <div class="hero-bottom" aria-hidden="true"><span>HOENN REGION</span><span>ANDROID EDITION</span><span>UNOFFICIAL FAN PROJECT</span></div>
+    </section>
+
+    <section id="play" class="play-section" aria-labelledby="play-title">
+      <div class="section-wrap play-grid">
+        <div class="release-card menu-panel">
+          <div class="panel-heading"><span class="tiny-ball" aria-hidden="true"></span><span>CONTINUE YOUR ADVENTURE</span></div>
+          <div class="release-body">
+            <div class="release-topline">
+              <img class="app-icon" src="assets/app-icon.png" width="1254" height="1254" alt="" loading="lazy">
+              <div><p class="eyebrow">{{RELEASE_KIND}}</p><h2 id="play-title">{{RELEASE_VERSION}}</h2><p class="release-date">{{RELEASE_DATE}} · {{APK_SIZE}} · ARMv7</p></div>
+            </div>
+            <p>The Android APK includes matching game data. Install it on a compatible device and start playing.</p>
+            <a class="button button-primary download-button" href="{{APK_URL}}"><span aria-hidden="true">↓</span> Download Android APK</a>
+            <div class="access-notice"><strong>{{ACCESS_LABEL}}</strong><p>{{ACCESS_NOTE}}</p></div>
+            <div class="release-links"><a href="{{RELEASE_URL}}">Release notes</a><a href="{{CHECKSUMS_URL}}">Checksums</a><a href="{{MANIFEST_URL}}">Build details</a></div>
+          </div>
+        </div>
+        <div class="before-play">
+          <p class="section-kicker">BEFORE YOU SET OFF</p>
+          <h2>A little setup.<br>A whole adventure.</h2>
+          <ol class="setup-list">
+            <li><span class="step-number">01</span><div><h3>Check your Android</h3><p>Android 9 or newer, OpenGL ES 3.0, and <strong>32-bit ARM app support</strong>. Firmware that only runs 64-bit apps cannot run this preview.</p></div></li>
+            <li><span class="step-number">02</span><div><h3>Bring your save</h3><p>Import an Emerald <code>.sav</code> in Settings, then restart. Export it to return to a GBA emulator. Save states are a different format.</p></div></li>
+            <li><span class="step-number">03</span><div><h3>Make both screens yours</h3><p>Thor panels fill by default without cropping. Choose <strong>Fit</strong> for original proportions, swap display order, or use the phone layout.</p></div></li>
+          </ol>
+          <p class="tested-note">Tested in Android emulators. Physical Thor testing and sustained hardware performance remain open. <a href="{{REPOSITORY_URL}}/blob/main/docs/VALIDATION.md">See the test report ↗</a></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="screens" class="section-wrap screenshots-section" aria-labelledby="screens-title">
+      <div class="section-heading">
+        <div><p class="section-kicker">A VIEW OF HOENN</p><h2 id="screens-title">Familiar places.<br>A different perspective.</h2></div>
+        <p>Keep the classic 2D look or switch on the optional voxel overworld in the game's OPTION menu.</p>
+      </div>
+      <div class="gallery">
+        <figure class="screenshot-card">
+          <a class="screenshot-link" href="assets/classic-town.png" data-shot data-caption="Classic 2D Oldale Town, with the map and touch menu beside it. Actual ARM Android emulator capture." aria-label="Enlarge the classic Oldale Town screenshot">
+            <span class="screen-bar"><span>OLDALE TOWN</span><span>01 / CLASSIC</span></span>
+            <img src="assets/classic-town.png" width="1920" height="1080" alt="Classic 2D Oldale Town and Pokémon Center alongside the bottom-screen Hoenn map" loading="lazy" decoding="async">
+            <span class="enlarge-hint" aria-hidden="true">+</span>
+          </a>
+          <figcaption><h3>The original 2D look</h3><p>The world you remember, with your next stop always in view.</p></figcaption>
+        </figure>
+        <figure class="screenshot-card">
+          <a class="screenshot-link" href="assets/voxel-world.png" data-shot data-caption="The optional voxel overworld in Littleroot Town. Actual ARM Android emulator capture." aria-label="Enlarge the voxel overworld screenshot">
+            <span class="screen-bar"><span>LITTLEROOT TOWN</span><span>02 / VOXEL</span></span>
+            <img src="assets/voxel-world.png" width="1920" height="1080" alt="Optional voxel buildings and trees in Littleroot Town alongside the touch map" loading="lazy" decoding="async">
+            <span class="enlarge-hint" aria-hidden="true">+</span>
+          </a>
+          <figcaption><h3>An optional new angle</h3><p>Voxel scenery brings depth to the overworld. Switch back whenever you like.</p></figcaption>
+        </figure>
+        <figure class="screenshot-card">
+          <a class="screenshot-link" href="assets/battle.png" data-shot data-caption="A wild Pokémon battle with commands on the bottom touch screen. Actual ARM Android emulator capture." aria-label="Enlarge the battle screenshot">
+            <span class="screen-bar"><span>WILD ENCOUNTER</span><span>03 / BATTLE</span></span>
+            <img src="assets/battle.png" width="1920" height="1080" alt="Torchic battles Poochyena with battle choices on the bottom touch screen" loading="lazy" decoding="async">
+            <span class="enlarge-hint" aria-hidden="true">+</span>
+          </a>
+          <figcaption><h3>Your next move, a tap away</h3><p>Use the bottom screen for battle commands, your party, Bag and more.</p></figcaption>
+        </figure>
+        <figure class="screenshot-card">
+          <a class="screenshot-link" href="assets/classic-route.png" data-shot data-caption="Classic 2D Route 101 with the Hoenn map and touch menu. Actual ARM Android emulator capture." aria-label="Enlarge the Route 101 screenshot">
+            <span class="screen-bar"><span>ROUTE 101</span><span>04 / EXPLORE</span></span>
+            <img src="assets/classic-route.png" width="1920" height="1080" alt="Original 2D Route 101 with tall grass, trees, ledges and the touch menu" loading="lazy" decoding="async">
+            <span class="enlarge-hint" aria-hidden="true">+</span>
+          </a>
+          <figcaption><h3>Room for the journey</h3><p>Separate displays on a handheld. Both screens together on a phone.</p></figcaption>
+        </figure>
+      </div>
+      <p class="gallery-note">Unmodified captures from actual ARM Android builds, shown in the combined landscape layout. <a href="assets/portrait-controls.png">See the portrait phone layout</a> · <a href="credits.html">Capture provenance</a></p>
+    </section>
+
+    <section id="controls" class="controls-section" aria-labelledby="controls-title">
+      <div class="section-wrap controls-grid">
+        <div class="controls-intro">
+          <p class="section-kicker">TRAINER'S QUICK GUIDE</p>
+          <h2 id="controls-title">Pick up.<br>Press play.</h2>
+          <p>Face buttons follow Nintendo positions by default, regardless of the printed labels. Prefer the labels? Change Face button mapping in Settings.</p>
+          <div class="controller-diagram" aria-hidden="true"><span class="diagram-dpad">✚</span><div class="face-buttons"><span class="face x">X</span><span class="face y">Y</span><span class="face a">A</span><span class="face b">B</span></div></div>
+          <div class="pause-callout"><span>OPEN THE APP MENU</span><strong><kbd>L1</kbd> + <kbd>R1</kbd></strong><p>Press together for Pause and Settings. Choose Resume to continue.</p></div>
+        </div>
+        <div class="controls-card menu-panel">
+          <div class="panel-heading"><span class="selection-arrow" aria-hidden="true">▶</span> CONTROLS</div>
+          <table class="controls-table">
+            <caption class="sr-only">Default physical controller bindings</caption>
+            <tbody>
+              <tr><th scope="row">Move</th><td>D-pad or left stick</td></tr>
+              <tr><th scope="row">Confirm / Back</th><td>Right <kbd>A</kbd> / bottom <kbd>B</kbd></td></tr>
+              <tr><th scope="row">X / Y</th><td>Top / left face button</td></tr>
+              <tr><th scope="row">L / R</th><td><kbd>L1</kbd> / <kbd>R1</kbd> individually</td></tr>
+              <tr><th scope="row">Start / Select</th><td>Start / Select buttons</td></tr>
+              <tr><th scope="row">Fast-forward</th><td><kbd>R2</kbd> toggles · <kbd>L2</kbd> holds</td></tr>
+            </tbody>
+          </table>
+          <p class="control-tip">Enable fast-forward first and choose 2× or 4× in Settings. Audio is muted while accelerating.</p>
+          <details class="keyboard-guide">
+            <summary>Playing with a keyboard?</summary>
+            <dl><div><dt>Move</dt><dd>Arrow keys</dd></div><div><dt>A / B · X / Y</dt><dd><kbd>X</kbd> / <kbd>Z</kbd> · <kbd>S</kbd> / <kbd>A</kbd></dd></div><div><dt>L / R</dt><dd><kbd>Q</kbd> / <kbd>W</kbd></dd></div><div><dt>Start / Select</dt><dd>Enter / Backspace or Shift</dd></div><div><dt>App menu / speed hold</dt><dd>Escape / Tab</dd></div></dl>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="extras" class="section-wrap extras-section" aria-labelledby="extras-title">
+      <div class="section-heading"><div><p class="section-kicker">A FEW THINGS IN YOUR BAG</p><h2 id="extras-title">Your adventure.<br>Your options.</h2></div><p>Quality-of-life options start off. Turn on only what you want in Settings → Gameplay.</p></div>
+      <div class="extras-grid">
+        <article class="extra-card"><span class="item-symbol" aria-hidden="true">»</span><h3>Set your pace</h3><p>Optional 2× or 4× fast-forward and shared experience for eligible benched Pokémon.</p></article>
+        <article class="extra-card"><span class="item-symbol sparkle-symbol" aria-hidden="true">✦</span><h3>A little extra sparkle</h3><p>Five shiny-odds choices, from the original rate to about 1 in 128. Optional confirmation before fleeing a shiny.</p></article>
+        <article class="extra-card"><span class="item-symbol" aria-hidden="true">▤</span><h3>Keep your progress</h3><p>Portable Emerald saves and an optional rotation of five completed in-game save backups.</p></article>
+        <article class="extra-card"><span class="item-symbol ticket-symbol" aria-hidden="true">◇</span><h3>Choose an event</h3><p>Event-island tickets, offline Jirachi/Celebi gifts and missing Regi dolls. Activate individually, then save in-game.</p></article>
+      </div>
+      <p class="extras-footnote">Shiny targets can be reduced by personality constraints. Mystery events retain normal story requirements. <a href="{{REPOSITORY_URL}}/blob/main/docs/QUALITY_OF_LIFE.md">Quality of life</a> · <a href="{{REPOSITORY_URL}}/blob/main/docs/MYSTERY_EVENTS.md">Mystery events</a></p>
+      <div class="closing-menu menu-panel"><div><p class="section-kicker">YOUR SAVE FILE IS WAITING</p><h2>Ready to head out?</h2></div><a class="button button-primary" href="#play">Get the preview <span aria-hidden="true">→</span></a></div>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <div class="section-wrap footer-top"><a class="wordmark" href="./"><span class="emerald-mark" aria-hidden="true"><i></i></span><span>EMERALD<small>DUAL SCREEN</small></span></a><nav aria-label="Project links"><a href="{{REPOSITORY_URL}}">GitHub</a><a href="{{REPOSITORY_URL}}/blob/main/docs/BUILDING.md">Build guide</a><a href="credits.html">Credits & captures</a></nav></div>
+    <div class="section-wrap footer-bottom"><p>Android port of <a href="https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen">ZallaxDev's 3DS project</a>, built on <a href="https://github.com/pret/pokeemerald">pret/pokeemerald</a>.</p><p>Unofficial fan project, unaffiliated with Nintendo, Game Freak, Creatures, The Pokémon Company or AYN. Provided “as is” and “as available,” without warranties where permitted by law. No support or services are offered or promised. <a href="credits.html#disclaimer">Full notice</a>.</p></div>
+  </footer>
+  <dialog id="screenshot-dialog" class="lightbox" aria-label="Game screenshot viewer" aria-describedby="lightbox-caption">
+    <form method="dialog"><button class="lightbox-close" aria-label="Close screenshot">×</button></form>
+    <img id="lightbox-image" width="1920" height="1080" alt="">
+    <div class="lightbox-bottom"><button id="previous-shot" aria-label="Previous screenshot">←</button><p id="lightbox-caption"></p><button id="next-shot" aria-label="Next screenshot">→</button></div>
+  </dialog>
+</body>
+</html>

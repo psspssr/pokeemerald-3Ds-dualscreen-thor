@@ -19,6 +19,7 @@
 
 <p align="center">
   <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.7">Download Android preview</a> ·
+  <a href="https://psspssr.github.io/emerald-dual-screen-site/">Website</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#controls">Controls</a> ·
   <a href="docs/AYN_THOR.md">Thor setup</a>
