@@ -7,9 +7,9 @@ from the original Emerald `.sav` format.
 
 ## Fast-forward
 
-Enable **fast-forward controls**, then choose **2× or 4×**; the current `dev`
-build adds **8×**. The selected rate starts at 4×, and existing choices are
-preserved. Play remains at normal speed until activated:
+Enable **fast-forward controls**, then choose **2×, 4× or 8×**. The selected
+rate starts at 4×, and existing choices are preserved. Play remains at normal
+speed until activated:
 
 - **R2:** toggle fast-forward on or off.
 - **L2:** hold to fast-forward; release to return to normal unless R2's toggle
@@ -108,7 +108,7 @@ features are off. The graphics overlay also removes the location-name banner's
 unintended wrap onto the bottom of the taller field viewport.
 
 Released **0.1.0-alpha.7** supports the optional voxel overworld only.
-Current `dev`, importing upstream `cdc77a3d2b01`, also supports voxel battle
+Preview **0.1.0-alpha.8**, importing upstream `cdc77a3d2b01`, also supports voxel battle
 scenery: enable **OPTION → VOXEL 3D**, then scroll to **3D BATTLE** and turn it
 on. Both choices default off. Pokémon, health bars, text and move animations
 remain 2D over the voxel scenery where the world is available. The separate

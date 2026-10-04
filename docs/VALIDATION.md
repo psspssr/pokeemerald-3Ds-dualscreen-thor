@@ -1,10 +1,106 @@
 # Validation — Android previews
 
+## 0.1.0-alpha.8 — Thor display and menu fixes
+
+The [alpha.8 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.8)
+passed all seven jobs in
+[release run 37239789444](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37239789444).
+
+| Published artifact | Verified value |
+|---|---|
+| Version / Android code | `0.1.0-alpha.8` / **8** |
+| APK | `emerald-thor-0.1.0-alpha.8-armeabi-v7a.apk` |
+| Bytes / SHA-256 | **27,747,524 bytes**; `9545aff511bafe6a7ff8afea68cc2555734012d4bbe9f9b1f5cb364748afa5be` |
+| Engine/data ABI | `399ac6d4` |
+| Signing identity | Unchanged: `eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389` |
+
+The downloaded APK's signature, alignment, package requirements, checksums and
+packaged native/data hashes match the build manifest. Compared with the local
+signed candidate, the engine differs only in its GNU build-ID bytes: executable
+code, data, symbols and addresses are identical; the bootstrap library is
+byte-identical. Evidence: `release-alpha8-verification.json` and
+`release-native-comparison.json` in the evidence directory below.
+
+The exact downloaded APK was then installed over the signed preview. Its
+installed bytes matched the published checksum, and installation preserved the
+save and both settings files. Continue loaded the expected Oldale PC save;
+Sharp filtering, expanded dual-screen Bag, a single tap on Close Bag returning
+to Map, visible Off/2×/4× AA choices and return from Settings all passed. The
+bounded log window contained no fatal, ANR or GPU-failure matches. Original
+files were restored with matching hashes, ownership and permissions. Exact
+artifact evidence is in `build/evidence/published-alpha8-qa/final-report.json`.
+
+Source `3019b32476e72c77d2b41210a71312584e409a89` passed all three normal CI
+jobs in [run 37238231335](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37238231335).
+The suite contains **119 app tests, 102 tooling tests and 270 GLES assertions**,
+plus the native sanitizer/asset/SDK checks. Local SDK coverage reports 301
+identifiers with no missing declarations or linked functions.
+
+- Sharp sampling is the default. Older previews’ persisted Linear setting
+  changes once; selecting Smooth afterward remains respected. Thor-sized
+  checkerboard tests verify unblended pixels in Sharp and actual blending in
+  Smooth, without changing game-owned texture filters.
+- Known GBA menu content expands directly to the physical panel, avoiding an
+  intermediate resize. Full-screen views use the complete bottom panel; field
+  views retain their navigation column. Rendering and inverse touch mapping
+  share the same source rectangles. The inverse follows the last successfully
+  presented frame, including skipped fast-forward frames. Fit, phone layouts
+  and menus that already fill their canvas retain their original framing.
+- Voxel-only MSAA offers Off, 2× and 4× when supported, with downward fallback.
+  Tests cover real edge coverage, resolved depth, sharp later sprites,
+  resource reuse/failure and renderer reinitialization. The initial AA dialog
+  hid its list behind a message; revised tests require visible rows and real
+  finger taps, including selection persistence and unsupported-device Off.
+- Fast-forward supports 2×, 4× and 8×; controls remain disabled initially.
+  Game OPTION → SHOW FPS starts off and persists explicit choices. The old
+  always-visible counter is no longer forced on.
+
+Alpha.7’s starter build omitted the original 240×160 canvas flags. The imported
+upstream fixes that configuration. A regression using real Make rules, sprite
+motion and window bounds fails with the old flags and passes with the corrected
+ones. Actual ARM playtests inspected Treecko, Torchic and Mudkip previews, complete
+confirmation boxes and No/B returns, using naturally progressed QA saves.
+
+Independent review also found whole-screen battle Party being classified as a
+Summary/Storage screen. The repaired classifier and actual touch handler are
+tested together. A separate live save replay exposed a 229-byte overwrite
+warning being expanded into a 96-byte buffer. Save text now expands with bounds
+checks into 256-byte buffers; the long warning gets a taller box, and incomplete
+messages cannot authorize a save. ASan reproduces the original overflow. Tests
+cover all current Save strings, placeholders, malformed data and the real
+confirmation branch. In the ARM game, No preserved the QA save byte-for-byte;
+Yes produced a fully validated normal save. All eight warning lines fit above
+the buttons.
+
+The local release-signed 3019 probe has SHA-256
+`96be949e6d6a3ede04231dc08dfb0c73b661a189d3a7ff7b315f2e294c78cf82`,
+version code 8 and engine/data ABI `399ac6d4`. Its native libraries are identical
+to the e26 probe used for the final Save and battle-Party fixes. Earlier f38
+captures exercise unchanged starter/menu geometry; individual reports retain
+those exact identities. Saves and settings were backed up before each update;
+temporary QA adventures are explicitly labelled rather than represented as a
+natural full-game playthrough.
+
+Evidence is under `build/evidence/thor-display-fixes/`, including per-APK
+identities, starter and Save reports, native before/after failures, production
+menu captures and the complete test logs. Captures use the emulator’s separate
+display output, without a floating secondary-screen overlay or pixel editing.
+These are emulator results; physical Thor performance and the fixes on the
+user’s hardware still need confirmation.
+
+The final signed probe also passed actual battle Party selection and SHIFT,
+visible AA selection with matching native 2×/4× sample allocations, FPS Off/On/Off,
+and gamepad fast-forward routing: L2 held 1→8→1 and R2 toggled 1→8→1. These
+verify the requested speed and input behavior, not guaranteed 8× throughput.
+Native secondary-display removal/reconnection and Fit/Fill returned the
+expected layouts. The original saves and settings were restored byte-exact.
+Bag item use and PC deposit/withdrawal were not repeated in this bounded pass.
+
 ## Development readiness — 4 October 2026
 
-These changes are on `dev`. **The published alpha.7 APK remains the hardware-test
-reference; it does not contain the changes below.** Default `main` received only
-the website workflow and README notice/link during this pass.
+This section records the earlier development pass, when alpha.7 was the
+published reference and these changes were only on `dev`. They have since
+reached `main` and alpha.8; the current release validation is above.
 
 The upstream update was rehearsed in an isolated checkout before integration.
 `origin/` matches upstream commit `cdc77a3d2b0132d57ed29c4887e64b0a41051ded`

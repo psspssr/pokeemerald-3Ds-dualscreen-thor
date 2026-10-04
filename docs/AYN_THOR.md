@@ -93,7 +93,7 @@ Release the shortcut buttons before pressing them again. If you released a
 button while another app had focus, one extra press-and-release may be needed
 after returning.
 
-Enable fast-forward controls and select **2× or 4×** (also **8×** in `dev`) in
+Enable fast-forward controls and select **2×, 4× or 8×** in
 **Settings → Gameplay → Quality of life** first. Audio is muted while speeding
 up. [Fast-forward behavior and other options](QUALITY_OF_LIFE.md).
 
@@ -108,7 +108,7 @@ change the assignment of two physical displays.
 
 ## Game graphics and Summary menus
 
-Current development builds use **Settings → Display → Image filtering →
+Preview **0.1.0-alpha.8** uses **Settings → Display → Image filtering →
 Sharp pixels** by default. Upgrading an older preview switches its Linear
 filter to Sharp once; choosing Smooth afterward is respected. Fill still
 uses the entire panel. For equally sized pixel blocks, choose **Fit** and
@@ -122,18 +122,18 @@ back to a supported lower level. This is separate from the game's voxel blur
 effect.
 
 The released **0.1.0-alpha.7** has an optional voxel overworld; enable
-**OPTION → VOXEL 3D** in the game. Current `dev` at upstream `cdc77a3d2b01`
+**OPTION → VOXEL 3D** in the game. Preview **0.1.0-alpha.8** at upstream `cdc77a3d2b01`
 also has **3D BATTLE**: enable VOXEL 3D, scroll the same options list and turn
 on 3D BATTLE. Both start off. This draws voxel battle scenery behind the
 original 2D Pokémon, health bars, text and move animations, where the voxel
 world is available. **BATTLE SCENE** remains the original animation setting.
 These game options are separate from Android's Settings menu.
 
-The FPS counter is also optional in current development builds:
+The FPS counter is also optional in alpha.8:
 **OPTION → SHOW FPS**, off by default. Alpha.7's always-visible counter is
 removed by this upstream update.
 
-The dev build also uses upstream's native Party/Summary menus on the bottom
+Alpha.8 also uses upstream's native Party/Summary menus on the bottom
 screen. In Summary, tap a move to preview it and tap the selected row again
 to confirm. While choosing where to move it, tap another row to preview the
 position and again to swap, or tap the fifth-row **Cancel** to abandon the
@@ -142,7 +142,7 @@ use the header Cancel or B to leave without replacing a move.
 
 ## Screen scaling
 
-In development builds, dual-display **Fill** also expands the original GBA
+In alpha.8, dual-display **Fill** also expands the original GBA
 menu area. Full-screen Summary and PC views use the whole bottom panel;
 Party, Bag and Pokédex views use the full height beside their navigation
 column. Touch targets expand with the visible content. Map, battle commands

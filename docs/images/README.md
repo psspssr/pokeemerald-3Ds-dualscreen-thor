@@ -16,6 +16,16 @@ records the prompts, input and output hashes, source credit, and selected edit.
 The device reference and Pokémon artwork remain subject to their owners' rights;
 the port's MIT code licence does not relicense them.
 
+## Display and speed settings
+
+[voxel-antialiasing.png](voxel-antialiasing.png) and
+[fast-forward-speed.png](fast-forward-speed.png) are unmodified captures of
+actual Android Settings on the release-signed `3019b32` candidate used to
+validate alpha.8. They show Off/2×/4× anti-aliasing and 2×/4×/8× fast-forward.
+Fast-forward controls were enabled for that demonstration; optional features
+still start off. [Exact build and image checksums](display-options-captures.json).
+These are emulator captures, not physical Thor photographs.
+
 ## Gameplay screenshots
 
 [shiny-odds.png](shiny-odds.png) shows the actual five-choice Android picker,
@@ -27,7 +37,7 @@ captured on 2026-10-02 and 2026-10-03. Each capture record identifies its build;
 [VALIDATION.md](../VALIDATION.md) records the tested coverage.
 The main gallery uses the app's combined landscape layout at 1920×1080 with
 on-screen gamepad controls hidden. The optional portrait view is 1080×1920 with
-touch controls visible. The upstream renderer's small FPS counter is retained.
+touch controls visible. These older captures retain the then-fixed FPS counter. Current previews show it only when **OPTION → SHOW FPS** is enabled.
 
 The captures show an Android emulator, not physical Thor hardware. The separate
 bottom-display window is covered by the runtime and instrumentation checks in

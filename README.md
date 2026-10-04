@@ -7,7 +7,7 @@
 <p align="center"><strong>Emerald on Android. Built for two screens.</strong></p>
 
 <p align="center">
-  Explore Hoenn with the game above, touch controls below, and an optional voxel overworld.<br>
+  Explore Hoenn with the game above, touch controls below, and optional voxel scenery.<br>
   Designed for the AYN Thor, with layouts for phones and other Android handhelds.
 </p>
 
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.7">Download Android preview</a> ·
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.8">Download Android preview</a> ·
   <a href="https://psspssr.github.io/emerald-dual-screen-site/">Website</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#controls">Controls</a> ·
@@ -37,11 +37,13 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 
 ## Get started
 
-Download the signed **[0.1.0-alpha.7 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.7)** and install its `armeabi-v7a.apk`. Matching game data is included. Downloads currently require access to this private repository. Export your save before replacing a development APK, which uses a different signing key.
+Download the signed **[0.1.0-alpha.8 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.8)** and install its `armeabi-v7a.apk`. Matching game data is included. Downloads currently require access to this private repository. Export your save before replacing a development APK, which uses a different signing key.
 
-**Pause with L1 + R1 together** or keyboard **Escape**, then open **Settings**. On Thor, both panels fill by default without cropping; choose **Fit** to keep the original proportions. Phone layouts include on-screen controls. See [Thor setup](docs/AYN_THOR.md).
+**Pause with L1 + R1 together** or keyboard **Escape**, then open **Settings**. On Thor, both panels fill by default while keeping game content visible; choose **Fit** to keep the original proportions. Phone layouts include on-screen controls. See [Thor setup](docs/AYN_THOR.md).
 
 Use **Settings → Import save / Export save** to transfer Emerald `.sav` files, then restart after importing. Standard GBA/emulator saves and mGBA RTC trailers are supported; emulator save states are not. Save normally in the game to keep your progress. [Save details](docs/BUILDING.md#engine-only-build-and-data-packs).
+
+**Sharp pixels are now the default.** Optional **voxel anti-aliasing (Off / 2× / 4×)** is in Settings → Display. Enable voxel scenery and battles in the game’s **OPTION** menu; **SHOW FPS** is there too and starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
 
 ## Compatibility
 
@@ -61,7 +63,7 @@ Face buttons use Nintendo positions by default, regardless of their printed labe
 | App pause menu | **L1 + R1 together** | Escape |
 | Fast-forward toggle / hold | R2 / L2 | Tab: hold |
 
-Fast-forward requires enabling it and choosing **2× or 4×** in Settings; `dev` also offers **8×**. Touch the bottom screen for game menus. [Full controls sheet, display swapping and optional controls](docs/AYN_THOR.md#controls-and-shortcuts).
+Fast-forward requires enabling it and choosing **2×, 4× or 8×** in Settings. Touch the bottom screen for game menus. [Full controls sheet, display swapping and optional controls](docs/AYN_THOR.md#controls-and-shortcuts).
 
 ## Optional extras
 
@@ -74,6 +76,10 @@ Fast-forward requires enabling it and choosing **2× or 4×** in Settings; `dev`
   <p align="center">
     <a href="docs/images/shiny-odds.png"><img src="docs/images/shiny-odds.png" width="320" alt="Shiny odds picker with five choices from the original 1 in 8,192 to about 1 in 128"></a>
     <a href="docs/images/mystery-events.png"><img src="docs/images/mystery-events.png" width="320" alt="Mystery events menu with seven individual optional actions"></a>
+  </p>
+  <p align="center">
+    <a href="docs/images/voxel-antialiasing.png"><img src="docs/images/voxel-antialiasing.png" width="520" alt="Visible voxel anti-aliasing choices Off, 2× and 4×, with Sharp image filtering"></a>
+    <a href="docs/images/fast-forward-speed.png"><img src="docs/images/fast-forward-speed.png" width="520" alt="Optional fast-forward speed selector with 2×, 4× and 8×"></a>
   </p>
 </details>
 

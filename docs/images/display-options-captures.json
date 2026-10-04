@@ -1,0 +1,32 @@
+{
+  "source_commit": "3019b32476e72c77d2b41210a71312584e409a89",
+  "apk_sha256": "96be949e6d6a3ede04231dc08dfb0c73b661a189d3a7ff7b315f2e294c78cf82",
+  "build": "release-signed development candidate 0.1.0-dev.3019b32, code 8",
+  "engine_abi": "399ac6d4",
+  "environment": "API 30 Android emulator, real ARMv7 game, 1920x1080 main panel; not physical Thor captures",
+  "method": "Unmodified screencap output; normal Settings interaction; no image composition or generation",
+  "images": [
+    {
+      "file": "voxel-antialiasing.png",
+      "source_capture": "final-aa-selector.png",
+      "sha256": "365549600548e8e1c4c5fb14452bcd01f67f7ffc0f7667abc116317065fea4b4",
+      "pixels": [
+        1920,
+        1080
+      ],
+      "description": "Visible optional voxel anti-aliasing choices: Off, 2x, 4x; sharp filtering shown behind the dialog.",
+      "pixel_edits": false
+    },
+    {
+      "file": "fast-forward-speed.png",
+      "source_capture": "final-8x-selector.png",
+      "sha256": "626119857660eb7bfebb561ee1b3da2d9093a66658f0b0d9ab972b751e947268",
+      "pixels": [
+        1920,
+        1080
+      ],
+      "description": "Optional fast-forward speed choices: 2x, 4x, 8x; controls enabled for this demonstration.",
+      "pixel_edits": false
+    }
+  ]
+}

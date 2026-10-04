@@ -1,6 +1,6 @@
 # First Thor test and performance capture
 
-Keep the published alpha.7 APK as the reference build while development moves
+Use the published alpha.8 APK as the reference build while development moves
 on `dev`. CI runs on pushes to both `dev` and `main`, and on pull requests.
 Development pushes do not publish APK releases.
 
@@ -14,7 +14,7 @@ same saved location when comparing builds. Check:
 3. Close the lid during gameplay, wait, reopen, and verify that the game did
    not advance. Repeat after opening the app pause menu: it must remain paused.
 4. Home and return, lock/unlock, and the single-display fallback.
-5. Normal speed, optional 2×/4× (also 8× in `dev`), R2 toggle and L2 hold; listen for audio glitches
+5. Normal speed, optional 2×/4×/8×, R2 toggle and L2 hold; listen for audio glitches
    at normal speed after returning from fast-forward and sleep.
 6. Save normally, quit, relaunch and Continue. Export a copy before testing
    imports or restoring backups.
@@ -39,7 +39,7 @@ Turning it off clears that history. Nothing is uploaded automatically.
 The report distinguishes the current window assignment from the last recorded
 active assignment, since opening Settings pauses the game and removes its
 secondary window. Timings describe presentation calls, not GPU execution or
-physical panel scanout. This option is on `dev`; alpha.7 predates it.
+physical panel scanout. This option is included in alpha.8; alpha.7 predates it.
 
 ## Developer trace
 
