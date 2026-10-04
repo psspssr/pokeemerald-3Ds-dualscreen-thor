@@ -1,0 +1,21 @@
+--- a/3ds_port/src/3ds_bottom_ui.c
++++ b/3ds_port/src/3ds_bottom_ui.c
+@@ -1388,13 +1388,15 @@
+     /* Before the boxes: the bag can be opened from them, whole screen too. */
+     if (gMain.callback2 == CB2_BagMenuRun && gBagMenu)
+         return MODE_BAG_MENU;
+-    /* A summary opened from the boxes is on the whole screen too. */
+-    if (CtrStorage_IsOpen() || CtrVideo_BottomWhole())
+-        return MODE_STORAGE;
++    /* A battle/facility Party also uses the whole bottom canvas. Identify
++     * its live callback before the generic Storage/Summary fallback. */
+     if (FuncIsActiveTask(Task_HandleChooseMonInput))
+         sPartyMenuCallback = gMain.callback2;
+     if (sPartyMenuCallback && gMain.callback2 == sPartyMenuCallback)
+         return MODE_PARTY_MENU;
++    /* A summary opened from the boxes is on the whole screen too. */
++    if (CtrStorage_IsOpen() || CtrVideo_BottomWhole())
++        return MODE_STORAGE;
+     if (gMain.inBattle)
+     {
+         if (gMain.callback2 == BattleMainCB2 && !gPaletteFade.active)

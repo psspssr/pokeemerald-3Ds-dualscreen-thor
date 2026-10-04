@@ -34,6 +34,7 @@ def main():
         modes = re.search(r"enum\s*\{\s*MODE_OFF,.*?\};", bottom, re.S)[0]
         state = re.search(r"static struct\s*\{\s*bool8 active, dragged;.*?\} sTouch;", bottom, re.S)[0]
         (work / "bottom_state.inc").write_text(modes + "\n" + state + "\n")
+        (work / "bottom_mode.inc").write_text(function(bottom, "static u8 CurrentMode(void)"))
         (work / "bottom_touch.inc").write_text(function(bottom, "static u8 ProcessTouch(u8 mode)"))
         binary = work / "bottom-content"
         subprocess.run([os.environ.get("CC", "cc"), "-std=gnu11", "-O1", "-g",

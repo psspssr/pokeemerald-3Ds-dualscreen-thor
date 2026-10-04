@@ -21,7 +21,26 @@ static struct { u8 mode,bagView; } sShown;
 static int sScreen,sOptionScroll,sOptionScrollStart;
 static CtrInput input;
 static CtrHostBottomMenuContent presented;
-static bool storageOpen;
+static bool storageOpen, navOpen, dexOpen, partyTaskActive, bottomWhole;
+static bool sInGame;
+static void *gSaveBlock1Ptr, *gSaveBlock2Ptr, *gBagMenu;
+static void CB2_Overworld(void) {}
+static void CB2_BagMenuRun(void) {}
+static void BattleMainCB2(void) {}
+static void PartyCallback(void) {}
+static void SummaryCallback(void) {}
+static void StorageCallback(void) {}
+static void Task_HandleChooseMonInput(u8 taskId) { (void)taskId; }
+static void (*sPartyMenuCallback)(void);
+static struct { void (*callback2)(void); bool inBattle; } gMain;
+static struct { bool active; } gPaletteFade;
+static struct { int kind; } sAsked;
+enum { ASK_NONE, ASK_ACTION, ASK_MOVE, ASK_TARGET };
+static bool CtrPokenav_IsOpen(void) { return navOpen; }
+static bool CtrPokedex_IsOpen(void) { return dexOpen; }
+bool CtrVideo_BottomWhole(void) { return bottomWhole; }
+static bool FuncIsActiveTask(void (*fn)(u8))
+{ return partyTaskActive && fn==Task_HandleChooseMonInput; }
 static struct { int kind,phase,x,y; } calls[32];
 static unsigned count,reads;
 static void record(int kind,int phase,int x,int y)
@@ -42,6 +61,7 @@ static void NavSwipe(int dy) { record(7,0,0,dy); }
 static void OptionsDrag(int dy) { record(8,0,0,dy); }
 static u8 HitTest(int x,int y) { (void)y; return x>=CW?HIT_NAV:HIT_MAP; }
 static void Activate(u8 hit,u8 mode) { record(9,mode,hit,0); }
+#include "bottom_mode.inc"
 #include "bottom_touch.inc"
 
 static void reset(u8 mode,bool whole,CtrHostBottomMenuContent content)
@@ -60,8 +80,72 @@ static void event(unsigned phase,unsigned x,unsigned y)
 static void expect(unsigned n,int kind,int phase,int x,int y)
 { assert(n<count && calls[n].kind==kind && calls[n].phase==phase && calls[n].x==x && calls[n].y==y); }
 
+static void classifiedEvent(unsigned phase,unsigned x,unsigned y)
+{
+    input=(CtrInput){.touchDown=phase==BAG_TOUCH_DOWN,.touchUp=phase==BAG_TOUCH_UP,
+                     .touchActive=phase!=BAG_TOUCH_UP,.touchX=x,.touchY=y};
+    ProcessTouch(CurrentMode());
+}
+
+static void testClassifiedMenus(void)
+{
+    enum { BATTLE_PARTY, FIELD_PARTY, SUMMARY, PC_STORAGE, PC_SUMMARY, WHOLE_BAG, POKENAV, POKEDEX };
+    const int expectedModes[]={MODE_PARTY_MENU,MODE_PARTY_MENU,MODE_STORAGE,MODE_STORAGE,
+                               MODE_STORAGE,MODE_BAG_MENU,MODE_POKENAV,MODE_POKEDEX};
+    const int expectedKinds[]={3,3,5,4,5,1,6,2};
+    for(unsigned scene=0;scene<sizeof(expectedModes)/sizeof(*expectedModes);scene++) {
+        bool whole=scene!=FIELD_PARTY && scene!=POKENAV && scene!=POKEDEX;
+        CtrHostBottomMenuContent content=scene==POKENAV?CTR_HOST_BOTTOM_ORIGINAL:
+            whole?CTR_HOST_BOTTOM_WHOLE:CTR_HOST_BOTTOM_FIELD;
+        reset(MODE_OFF,whole,content);
+        sInGame=true; gSaveBlock1Ptr=gSaveBlock2Ptr=(void *)1; gBagMenu=NULL;
+        navOpen=dexOpen=partyTaskActive=bottomWhole=false;
+        gPaletteFade.active=false; sAsked.kind=ASK_NONE;
+        gMain.inBattle=scene==BATTLE_PARTY || scene==WHOLE_BAG;
+        gMain.callback2=SummaryCallback;
+        sPartyMenuCallback=scene>=SUMMARY?PartyCallback:NULL; // remembered Party must not steal another screen
+        if(scene==BATTLE_PARTY || scene==FIELD_PARTY) {
+            gMain.callback2=PartyCallback; partyTaskActive=true;
+        }
+        if(scene==PC_STORAGE) { gMain.callback2=StorageCallback; storageOpen=true; }
+        if(scene==WHOLE_BAG) { gMain.callback2=CB2_BagMenuRun; gBagMenu=(void *)1; }
+        if(scene==POKENAV) navOpen=true;
+        if(scene==POKEDEX) dexOpen=true;
+        bottomWhole=whole;
+        // Use the classifier for the shown snapshot AND both touch events;
+        // selecting a requested mode by hand would hide the battle Party bug.
+        sShown.mode=CurrentMode();
+        classifiedEvent(BAG_TOUCH_DOWN,120,90);
+        if(scene==BATTLE_PARTY || scene==FIELD_PARTY) partyTaskActive=false;
+        classifiedEvent(BAG_TOUCH_UP,120,90);
+        fprintf(stderr,"menu scene%u: classified%d expected%d, touch handler%d expected%d\n",
+                scene,sShown.mode,expectedModes[scene],count?calls[0].kind:0,expectedKinds[scene]);
+        assert(sShown.mode==expectedModes[scene] && count>0 && calls[0].kind==expectedKinds[scene]);
+        if(scene==BATTLE_PARTY || scene==FIELD_PARTY)
+            assert(CurrentMode()==MODE_PARTY_MENU); // dialog task changed, same live Party callback
+        if(scene==SUMMARY || scene==PC_SUMMARY) {
+            assert(count==1); expect(0,5,0,90,60);
+        } else if(scene==PC_STORAGE) {
+            assert(count==1); expect(0,4,0,90,60);
+        } else if(scene==BATTLE_PARTY) {
+            assert(count==1); expect(0,3,0,90,60);
+        } else if(scene==FIELD_PARTY) {
+            assert(count==1); expect(0,3,0,120,60);
+        }
+        // Leaving Party must not preserve its input mode just because its
+        // previously observed callback is still remembered.
+        gMain.callback2=CB2_Overworld; gMain.inBattle=false;
+        storageOpen=navOpen=dexOpen=bottomWhole=false; gBagMenu=NULL;
+        assert(CurrentMode()==MODE_FIELD);
+        sInGame=false; gMain.callback2=SummaryCallback;
+        assert(CurrentMode()==MODE_OFF);
+    }
+    puts("PASS actual menu classification and touch routing: battle/field Party and dialogs, Summary, PC/PCSummary, BagWhole, PokeNav and Pokedex");
+}
+
 int main(void)
 {
+    testClassifiedMenus();
     for(unsigned scene=0;scene<=CTR_CENTRED_SCREENS+2;scene++) {
         CtrHostBottomMenuContent expected=CTR_HOST_BOTTOM_ORIGINAL;
         if(scene==CTR_CENTRED_STORAGE || scene==CTR_CENTRED_SUMMARY || scene==CTR_CENTRED_BAG_WHOLE || scene==CTR_CENTRED_PARTY_WHOLE)
