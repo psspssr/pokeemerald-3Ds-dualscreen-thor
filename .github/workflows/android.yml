@@ -45,6 +45,8 @@ jobs:
         run: python3 android/shim/test/run_host_tests.py
       - name: Gameplay configuration and confirmation lifecycle
         run: python3 android/host/test/run_host_tests.py
+      - name: FPS defaults and persistent option
+        run: python3 android/native/test/run_fps_settings_tests.py
       - name: Texture and shader regressions
         run: python3 android/gpu/test/test_gpu.py
 
@@ -78,6 +80,8 @@ jobs:
         run: python3 android/native/test/run_mystery_tests.py
       - name: Summary assets and move-selection regressions
         run: python3 android/native/test/run_summary_tests.py
+      - name: Starter selection geometry and window bounds
+        run: python3 android/native/test/run_starter_tests.py
       - name: Evolution sparkle coordinates and animation callbacks
         run: python3 android/native/test/run_evolution_tests.py
       - name: Build engine-only release APK
