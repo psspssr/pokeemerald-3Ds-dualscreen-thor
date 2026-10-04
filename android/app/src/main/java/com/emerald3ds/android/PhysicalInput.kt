@@ -52,7 +52,14 @@ class PhysicalInput(
     private var circleOrder = 0L
     private val shoulderPresses = mutableSetOf<Pair<Int, Int>>()
     private val blockedShoulders = mutableSetOf<Pair<Int, Int>>()
+    private val heldAppShortcuts = mutableSetOf<Pair<Int, Int>>()
     private var shoulderInputAfter = Long.MIN_VALUE
+
+    private fun isAppShortcut(code: Int): Boolean = when (code) {
+        KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_MENU,
+        KeyEvent.KEYCODE_BUTTON_THUMBL, KeyEvent.KEYCODE_BUTTON_THUMBR -> true
+        else -> false
+    }
 
     private fun hasRightTriggerAxis(deviceId: Int): Boolean? = rightTriggerAxes[deviceId] ?:
         rightTriggerAxis(deviceId)?.also { rightTriggerAxes[deviceId] = it }
@@ -106,6 +113,13 @@ class PhysicalInput(
     /** Observe releases even when a dialog owns the event. This is deliberately
      * non-consuming and does not send any buttons to the game. */
     fun observeKeyEvent(event: KeyEvent, suspended: Boolean = false) {
+        if (isAppShortcut(event.keyCode)) {
+            val identity = event.deviceId to event.keyCode
+            if ((suspended && event.action == KeyEvent.ACTION_DOWN) ||
+                (event.action == KeyEvent.ACTION_UP && event.isCanceled)) {
+                heldAppShortcuts.add(identity)
+            } else if (event.action == KeyEvent.ACTION_UP) heldAppShortcuts.remove(identity)
+        }
         if (event.keyCode == KeyEvent.KEYCODE_BUTTON_R2 &&
             (fastForwardEnabled || event.deviceId in fastToggleNeedsRelease)) {
             val deviceId = event.deviceId
@@ -179,18 +193,18 @@ class PhysicalInput(
             if (down) callbacks.onPhysicalInput()
             return true
         }
-        when (code) {
-            KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_MENU -> {
-                if (down && event.repeatCount == 0) callbacks.onMenuKey()
-                return true
-            }
-            KeyEvent.KEYCODE_BUTTON_THUMBL, KeyEvent.KEYCODE_BUTTON_THUMBR -> {
-                if (down && event.repeatCount == 0) {
+        if (isAppShortcut(code)) {
+            // Hardware repeats can arrive with count zero and new timestamps.
+            // Latch even a first-seen repeat, before a callback can clear input;
+            // only a real UP (including in our dialogs) rearms the shortcut.
+            val firstDown = down && heldAppShortcuts.add(event.deviceId to code)
+            if (firstDown && event.repeatCount == 0) {
+                if (code == KeyEvent.KEYCODE_BUTTON_THUMBL || code == KeyEvent.KEYCODE_BUTTON_THUMBR) {
                     callbacks.onPhysicalInput()
                     callbacks.onToggleBottomScreen()
-                }
-                return true
+                } else callbacks.onMenuKey()
             }
+            return true
         }
         val pad = gamepadKey(code)
         val keyboard = if (pad == 0) keyboardKey(code) else 0
@@ -319,6 +333,7 @@ class PhysicalInput(
     fun removeDevice(deviceId: Int) {
         shoulderPresses.removeAll { it.first == deviceId }
         blockedShoulders.removeAll { it.first == deviceId }
+        heldAppShortcuts.removeAll { it.first == deviceId }
         rightTriggerAxes.remove(deviceId)
         fastKeys.removeAll { it.first == deviceId }
         fastAxes.remove(deviceId)

@@ -152,7 +152,11 @@ class ScreenPowerTest {
         .apply { isAccessible = true }.get(activity) as FastForwardState
 
     private fun openMenu(scenario: ActivityScenario<GameActivity>) {
-        scenario.onActivity { it.dispatchKeyEvent(key(KeyEvent.KEYCODE_MENU)) }
+        val press = key(KeyEvent.KEYCODE_MENU)
+        scenario.onActivity {
+            it.dispatchKeyEvent(press)
+            it.dispatchKeyEvent(KeyEvent.changeAction(press, KeyEvent.ACTION_UP))
+        }
         assertEquals(NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
     }
 
