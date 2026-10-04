@@ -1,5 +1,103 @@
 # Validation — Android previews
 
+## Development readiness — 4 October 2026
+
+These changes are on `dev`. **The published alpha.7 APK remains the hardware-test
+reference; it does not contain the changes below.** Default `main` received only
+the website workflow and README notice/link during this pass.
+
+The upstream update was rehearsed in an isolated checkout before integration.
+`origin/` matches upstream commit `cdc77a3d2b0132d57ed29c4887e64b0a41051ded`
+exactly. Android overlays still require strict application without offsets or
+fuzz. Repeating the update is a clean no-op, and a warm bootstrap preserves
+unchanged generated source files. The update adds upstream's optional voxel
+battles and native bottom-screen Party/Summary interface. Both **VOXEL 3D** and
+**3D BATTLE** remain off by default. See [upstream updates](UPDATING_FROM_ORIGIN.md).
+
+The bug sweep repaired held controller shortcuts firing again before release,
+button releases lost inside Settings dialogs, and the visible Summary **Cancel**
+row failing during move reordering. Baseline reproductions and regression tests
+cover those failures. Diagnostics now decode the engine ABI in the same byte
+order as the build manifest; existing document-picker registration order is
+preserved for imports/exports already in flight.
+
+Development builds add optional **Settings → About → Export diagnostics**.
+Recording starts off, stores bounded recent history in memory and clears it
+when disabled. Reports include app/display/renderer identity and presentation
+timings, not saves, game data or persistent device identifiers. Nothing is
+uploaded. [Hardware test and profiling guide](testing/HARDWARE_TEST.md).
+
+The final local APK is a **development build**, not a published release:
+
+| Artifact identity | Value |
+|---|---|
+| App source | `6e6ae02ee85de136396d3fd0d8f644af614d4e56` |
+| Version / engine ABI | `0.1.0-dev.6e6ae02` / `e85c3cc8` |
+| APK SHA-256 | `bf0d76ce390a9d54066667784b7838564cda72e94c0ba7667ef049416bcde357` |
+| Signing | Local debug key; does not replace the signed alpha.7 APK in place |
+
+All three jobs passed for that source in
+[CI run 37229337506](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37229337506).
+The downloaded instrumentation report records 109 tests with zero failures,
+errors or skips. The site publication workflow also
+[passed](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37227987467).
+
+| Validation | Result |
+|---|---|
+| App input, files, diagnostics and display lifecycle | 109 app tests passed in CI; 15 focused final checks and both harness/release lint passed locally |
+| Tooling, save formats, overlays and website publication | 99 tests passed |
+| GLES device checks | 136 pixel assertions plus GX queue binding/accounting/reset passed |
+| Native SDK coverage | 301 identifiers; zero missing declarations or linked functions |
+| Native checks | System/gameplay sanitizer suites, 21 GPU host cases and 15 upstream host targets passed |
+| Packaging | Full ARM game, debug APK and engine-only release packaging passed |
+
+The combined ARM game loaded an existing normal save, exercised both classic
+and voxel encounters, battle Party/Bag touch, move reordering, level-up stat
+panels, save/reload, dual-screen sleep/wake and retained manual pause. Captures
+were inspected. Diagnostics were exported through Android's actual Downloads
+picker, with recording both on and off. The recorded active display assignment
+fills **1920×1080** and **1240×1080** without cropping. The raw save and native
+settings were preserved, and temporary Android preferences were restored.
+
+The final APK also passed 2×/4× selection, R2 held-through-pause repeat/release
+handling, and L2 hold/release. Existing VBlank logs from short idle windows
+measured roughly 43–50 logic frames/s normally, 97 at 2× and 189–191 at 4×
+in this dual-display SwiftShader/ARM-translation environment. These are
+below the requested ceilings and are not a sustained hardware benchmark;
+the controls selecting those speeds and the measured throughput are separate
+results. The corrected ABI appeared in both actual on/off diagnostics exports.
+
+Broader checks on the unchanged alpha.7 reference covered PC deposit/withdraw,
+boxed summaries and a real save round trip through unmodified GBA Emerald in
+mGBA. Separately labelled disposable fixtures enabled late-game PokéNav/Match
+Call and Old Sea Map testing: ferry travel, the Mew chase, battle, capture,
+Pokédex, normal save and completed-event status. These are targeted checks,
+not a natural full-game playthrough.
+
+Longer emulator sessions exposed native heap growth. Allocation tracing and an
+independent EGL-only program reproduced it in the emulator's surface-switching
+driver: about **1,552 retained bytes per changed binding**, with no growth for
+repeated identical bindings. This reproducer contains no game or ARM translation.
+It explains the observed emulator growth; it does not establish physical Thor
+memory behavior or exclude every possible game leak. No production rendering
+workaround was added merely to hide this emulator defect.
+
+Existing upstream singular-affine, OBJ-window and BG-mosaic diagnostics remain.
+The reference Mew capture also used the renderer's unfiltered fallback after a
+battle-scene allocation failure. Physical lid sensing, audible output, thermals,
+battery life and sustained Thor performance remain unverified.
+
+The public [website](https://psspssr.github.io/emerald-dual-screen-site/) passed
+responsive checks from 320 to 1440 pixels, screenshot keyboard navigation and
+link checks. Its separate public repository contains static presentation assets
+only; the game repository and APK downloads remain private. Release links select
+the newest published release with all expected assets, including prereleases.
+
+Local evidence is retained under `build/evidence/dev-readiness/`: the upstream
+rehearsal, gameplay and combined-build reports, final APK/export metadata,
+`heap-attribution.md`, and website review results. Build artifacts and test saves
+are intentionally excluded from Git.
+
 ## 0.1.0-alpha.7 — sleep and screen-power pause
 
 The [alpha.7 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.7)
