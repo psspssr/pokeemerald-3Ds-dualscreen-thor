@@ -224,5 +224,29 @@ int main(void)
     tap(224,8); assert(swapped==1 && gTasks[0].func==Task_HandleInput_MoveSelect);
     tap(224,8); assert(gTasks[0].func==Task_HandleInput && !closed);
     puts("PASS native four-move Summary opens selection, previews reorder, confirms only chosen swaps and cancels cleanly");
+
+    for (unsigned page=PSS_PAGE_BATTLE_MOVES; page<=PSS_PAGE_CONTEST_MOVES; page++) {
+        for (unsigned row=0; row<MAX_MON_MOVES; row++) {
+            reset(); mon.mode=SUMMARY_MODE_NORMAL; mon.newMove=MOVE_NONE;
+            mon.currPageIndex=page; mon.firstMoveIndex=row;
+            gTasks[0].func=Task_HandleInput_MoveSelect;
+            tap(160,40+16*row);
+            assert(gTasks[0].func==Task_HandleInput_MovePositionSwitch);
+            tap(160,40+16*((row+1)%MAX_MON_MOVES));
+            assert(mon.secondMoveIndex==(row+1)%MAX_MON_MOVES && !swapped);
+            tap(160,104); // The visible fifth-row CANCEL must leave reorder, not swap.
+            assert(gTasks[0].func==Task_HandleInput_MoveSelect && !swapped && !closed);
+            assert(mon.firstMoveIndex==row);
+            for (unsigned slot=0; slot<MAX_MON_MOVES; slot++)
+                assert(mon.summary.moves[slot]==10+slot);
+            // The same row in ordinary move selection keeps its upstream
+            // preview/second-tap confirmation contract instead of instant B.
+            tap(160,104);
+            assert(gTasks[0].func==Task_HandleInput_MoveSelect && mon.firstMoveIndex==MAX_MON_MOVES);
+            tap(160,104);
+            assert(gTasks[0].func==Task_HandleInput && !closed && !swapped);
+        }
+    }
+    puts("PASS visible fifth-row CANCEL exits battle/contest move reorder without changing moves");
     return 0;
 }

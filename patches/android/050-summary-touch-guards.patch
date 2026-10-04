@@ -31,7 +31,17 @@
      if (gMain.vblankCounter1 - sCtrTap.frame > 30 || sCtrTap.x < 0 || sCtrTap.x >= DISPLAY_WIDTH
       || sCtrTap.y < 0 || sCtrTap.y >= DISPLAY_HEIGHT)
          return FALSE;
-@@ -2380,6 +2397,9 @@
+@@ -1588,6 +1605,9 @@
+     if (CtrSummary_OnCancel(x, y))
+         return CTR_TOUCH_B;
+     row = CtrSummary_MoveRowAt(x, y);
++    /* Reorder still draws CANCEL below the four selectable move slots. */
++    if (maxIndex == MAX_MON_MOVES - 1 && row == MAX_MON_MOVES)
++        return CTR_TOUCH_B;
+     if (row < 0 || row > maxIndex)
+         return CTR_TOUCH_NONE;
+     if (row != MAX_MON_MOVES && sMonSummaryScreen->summary.moves[row] == MOVE_NONE)
+@@ -2380,6 +2400,9 @@
  
  static void Task_SetHandleReplaceMoveInput(u8 taskId)
  {
@@ -41,7 +51,7 @@
      SetNewMoveTypeIcon();
      CreateMoveSelectorSprites(SPRITE_ARR_ID_MOVE_SELECTOR1);
      gTasks[taskId].func = Task_HandleReplaceMoveInput;
-@@ -2388,6 +2408,10 @@
+@@ -2388,6 +2411,10 @@
  static void Task_HandleReplaceMoveInput(u8 taskId)
  {
      s16 *data = gTasks[taskId].data;
