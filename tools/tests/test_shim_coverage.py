@@ -42,6 +42,13 @@ class CoverageTest(unittest.TestCase):
                           self.root / "src/three.c": "build/three.o",
                           self.root / "src/voxel/ctr_voxel.c": "build/voxel.o"}, coverage.native_units(self.root))
 
+    def test_queue_metadata_and_real_wrapped_call_require_sdk_support(self):
+        source = self.write("video.c", "static gxCmdQueue_s *queue;\n"
+                            "void hook(void) { __real_GX_BindQueue(queue); }\n")
+        used, called = coverage.sdk_identifiers([source])
+        self.assertEqual({"gxCmdQueue_s", "GX_BindQueue"}, used)
+        self.assertEqual({"GX_BindQueue"}, called)
+
     def test_unknown_make_syntax_fails_instead_of_underreporting(self):
         self.write("Makefile", "SOURCES := $(wildcard src/*.c)\n")
         self.write("full.mk", "")
@@ -122,6 +129,32 @@ class CoverageTest(unittest.TestCase):
         self.write("3ds_port/build/link.rsp", "build/android/shim/src/absent.o\n")
         with self.assertRaisesRegex(ValueError, "linked SDK object missing"):
             coverage.linked_sdk_objects(self.root)
+
+    def test_real_linker_wraps_resolve_only_with_recorded_symbols(self):
+        if not shutil.which("cc") or not shutil.which("nm"):
+            self.skipTest("host C compiler and nm required")
+        native = self.write("3ds_port/native.c", "void GX_BindQueue(void *);\n"
+                            "void __real_GX_BindQueue(void *);\n"
+                            "void __wrap_GX_BindQueue(void *q) { __real_GX_BindQueue(q); }\n"
+                            "void entry(void) { GX_BindQueue(0); }\n")
+        sdk = self.write("3ds_port/sdk.c", "void GX_BindQueue(void *q) { (void)q; }\n")
+        objects = []
+        for source in (native, sdk):
+            obj = source.with_suffix(".o")
+            subprocess.run(["cc", "-c", str(source), "-o", str(obj)], check=True)
+            objects.append(obj)
+        library = self.root / "3ds_port/library.elf"
+        subprocess.run(["cc", "-nostdlib", "-no-pie", "-Wl,-e,entry", "-Wl,--wrap=GX_BindQueue",
+                        *map(str, objects), "-o", str(library)], check=True)
+        need = coverage.nm(objects[0], "-u", tool="nm")
+        provided = coverage.nm(library, "--defined-only", tool="nm")
+        self.assertEqual({"__real_GX_BindQueue"}, coverage.wrapped_references(self.root, need) - provided)
+        self.write("3ds_port/build/android.wrap", "GX_BindQueue\n")
+        self.assertEqual({"GX_BindQueue", "__wrap_GX_BindQueue"}, coverage.wrapped_references(self.root, need))
+        self.assertEqual(set(), coverage.wrapped_references(self.root, need) - provided)
+        # A recorded wrapper cannot conceal a genuinely absent SDK function.
+        self.assertEqual({"GX_BindQueue"}, coverage.wrapped_references(self.root, need) -
+                         (provided - {"GX_BindQueue"}))
 
 
 if __name__ == "__main__":

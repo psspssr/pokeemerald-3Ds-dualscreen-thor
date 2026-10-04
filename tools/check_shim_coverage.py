@@ -45,7 +45,7 @@ SDK_UPPER = (r"(?:C3D|C3Di|C2D|C2Di|Tex3DS|GPU|GPUCMD|GX|GSP|GSPGPU|DVLB|DVLE|DV
              r"HID|KEY|GFX|MEMOP|MEMPERM|MEMSTATE|RESLIMIT|RESET|USERBREAK|SYSCLOCK|OS|FS|FSUSER|ARCHIVE|"
              r"CFG|CFGU|PTMU|MCUHWC|CUR|RL|RS|RM|RD|RC|Mtx|FVec3|FVec4|Quat|LightLock|LightEvent|"
              r"LightSemaphore|RecursiveLock|CondVar|ROMFS|Result)_\w*")
-SDK_LOWER = (r"(?:gfx|gsp|gspgpu|hid|apt|ndsp|romfs|console|linear|vram|mappable|svc|os|thread|cfgu|"
+SDK_LOWER = (r"(?:gfx|gxCmd|gsp|gspgpu|hid|apt|ndsp|romfs|console|linear|vram|mappable|svc|os|thread|cfgu|"
              r"ptmu|mcuHwc|srv|psm|irrst|shader|shaderProgram|shaderInstance)[A-Z0-9]\w*")
 SDK_NAMES = (r"(?:Handle|Result|Thread|PrintConsole|ndspWaveBuf|aptHookCookie|devoptab_t|devoptab_list|"
              r"R_FAILED|R_SUCCEEDED|MAKERESULT|BIT|u8|u16|u32|u64|s8|s16|s32|s64|vu8|vu16|vu32|vu64|vs32|"
@@ -117,9 +117,11 @@ def sdk_identifiers(files: list[Path]) -> tuple[set[str], set[str]]:
     for path in files:
         text = strip_c(path.read_text(encoding="utf-8", errors="ignore"))
         for name in IDENT.findall(text):
+            name = name.removeprefix("__real_")
             if SDK_PATTERN.match(name):
                 used.add(name)
         for name in re.findall(r"\b([A-Za-z_]\w*)\s*\(", text):
+            name = name.removeprefix("__real_")
             if SDK_PATTERN.match(name):
                 called.add(name)
     return used, called
@@ -137,6 +139,18 @@ def self_declared(files: list[Path]) -> set[str]:
                 continue
             names.update(re.findall(r"\b([A-Za-z_]\w*)\s*(?=[\[=;,(])", line))
     return names
+
+
+def wrapped_references(tree: Path, needed: set[str]) -> set[str]:
+    """Apply only the --wrap names recorded by the actual Android link rule."""
+    stamp = tree / "3ds_port/build/android.wrap"
+    if not stamp.is_file():
+        return needed
+    wrapped = set(stamp.read_text().split())
+    if any(not re.fullmatch(r"[A-Za-z_]\w*", name) for name in wrapped):
+        raise ValueError("invalid linked wrapper list: %s" % stamp)
+    return {name.removeprefix("__real_") if name.startswith("__real_") and name[7:] in wrapped
+            else "__wrap_" + name if name in wrapped else name for name in needed}
 
 
 def header_index(dirs: list[Path]) -> tuple[set[str], set[str]]:
@@ -253,6 +267,7 @@ def main() -> int:
         need = set()
         for o in objects:
             need |= nm(o, "-u", tool=args.nm)
+        need = wrapped_references(args.tree, need)
         undefined = sorted(n for n in need if n not in provided)
     elif not args.headers_only and lib.exists():
         method = "call sites in the source vs %s (%d native objects not built)" % (lib, len(missing_objects))
