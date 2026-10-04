@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diagnostics_export">Export diagnostics</string>
+    <string name="diagnostics_record">Record diagnostic history and timings</string>
+    <string name="diagnostics_record_summary">Off by default. Keeps recent app events and presentation timings in memory. Turn off to clear them. No automatic uploads.</string>
+    <string name="diagnostics_export_summary">Exports app, device, display and renderer information, plus any recorded history. Does not include saves, game data, document paths or global logs. Choose a new empty file; existing data is not overwritten.</string>
+    <string name="diagnostics_exporting">Writing diagnostics…</string>
+    <string name="diagnostics_exported">Diagnostics exported.</string>
+    <string name="diagnostics_failed">Could not write diagnostics. Choose a new empty local document and try again.</string>
+    <string name="diagnostics_picker_failed">No document picker is available.</string>
+</resources>

@@ -14,6 +14,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 import uuid
 
 PACKAGE = 'com.emerald3ds.android'
@@ -30,6 +31,15 @@ class Adb:
 
     def shell(self, *args, **kwargs):
         return self.run('shell', shlex.join(args), **kwargs)
+
+    def game_pid(self):
+        try:
+            pid = self.shell('pidof', PACKAGE)
+        except subprocess.CalledProcessError as error:
+            if error.returncode != 1:
+                raise
+            return None
+        return pid if re.fullmatch(r'[1-9][0-9]*', pid) else None
 
 
 def trace_config(seconds, sdk):
@@ -83,8 +93,8 @@ def capture(adb, out, seconds):
         sdk = int(report['device']['sdk'])
         if sdk < 29:
             raise ValueError('This capture helper requires Android 10 or newer.')
-        pid = adb.shell('pidof', PACKAGE)
-        if not re.fullmatch(r'[1-9][0-9]*', pid):
+        pid = adb.game_pid()
+        if pid is None:
             raise ValueError('Open the game before starting a profile.')
         report['pid_before'] = pid
         package = adb.shell('dumpsys', 'package', PACKAGE)
@@ -100,8 +110,10 @@ def capture(adb, out, seconds):
         (out / 'trace-config.pbtxt').write_text(config)
         print(f'Recording {seconds} seconds. Play the scene you want to measure.', flush=True)
         # The remote session has its own duration/size bounds even if adb drops.
+        trace_started = time.monotonic()
         result = adb.shell('perfetto', '--txt', '-c', '-', '-o', remote,
                            input=config, timeout=seconds + 30)
+        report['trace_command_seconds'] = round(time.monotonic() - trace_started, 3)
         (out / 'perfetto.txt').write_text(result + '\n')
         adb.run('pull', remote, str(out / 'game.perfetto-trace'), timeout=30)
         size = (out / 'game.perfetto-trace').stat().st_size
@@ -110,7 +122,7 @@ def capture(adb, out, seconds):
         report['trace_bytes'] = size
         optional('memory-after.txt', 'dumpsys', 'meminfo', PACKAGE)
         optional('thermal-after.txt', 'dumpsys', 'thermalservice')
-        report['pid_after'] = adb.shell('pidof', PACKAGE)
+        report['pid_after'] = adb.game_pid()
         if report['pid_after'] != pid:
             raise ValueError('The game process changed during capture; inspect the retained trace.')
         report['status'] = 'captured'
@@ -118,6 +130,8 @@ def capture(adb, out, seconds):
     except (subprocess.SubprocessError, OSError, ValueError, KeyboardInterrupt) as error:
         report['status'] = 'failed'
         report['error'] = str(error) or type(error).__name__
+        if isinstance(error, subprocess.CalledProcessError):
+            report['command_error'] = (error.stderr or error.stdout or '').strip()[:4096]
         raise
     finally:
         # Remove only this invocation's random trace, never other sessions.

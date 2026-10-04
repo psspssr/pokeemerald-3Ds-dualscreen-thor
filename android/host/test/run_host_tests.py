@@ -39,3 +39,7 @@ with tempfile.TemporaryDirectory(prefix="emerald-host-test-") as directory:
     for window in ("0", "1"):
         for phase in ("before", "during", "settled"):
             subprocess.run([str(lifecycle), phase, window], check=True, timeout=5)
+    diagnostics = Path(directory) / "test_diagnostics"
+    subprocess.run(flags + [str(HOST / "src/diagnostics.c"), str(HOST / "test/test_diagnostics.c"),
+                            "-o", str(diagnostics)], check=True)
+    subprocess.run([str(diagnostics)], check=True, timeout=15)

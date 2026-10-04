@@ -24,6 +24,23 @@ minutes. Record visible stutter, audio breaks, heat and power-mode changes.
 An emulator run does not establish physical panel timing, thermals or battery
 consumption. The [lid signal boundary](../AYN_THOR.md#lid-and-sleep) still applies.
 
+## Optional diagnostics in development builds
+
+Open **Settings → About → Export diagnostics** to save a JSON report through
+Android's document picker. Choose a new document in Downloads. The report
+includes app/device/display information, the renderer and a memory snapshot.
+It excludes saves, game data, document paths and persistent device identifiers.
+
+For a reproducible issue, enable **Record diagnostic history and timings** in
+About, return to the game, reproduce the issue, then export. Recording starts
+off and keeps only bounded recent events and presentation samples in memory.
+Turning it off clears that history. Nothing is uploaded automatically.
+
+The report distinguishes the current window assignment from the last recorded
+active assignment, since opening Settings pauses the game and removes its
+secondary window. Timings describe presentation calls, not GPU execution or
+physical panel scanout. This option is on `dev`; alpha.7 predates it.
+
 ## Developer trace
 
 With USB debugging enabled and the game already running, select the exact

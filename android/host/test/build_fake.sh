@@ -20,7 +20,7 @@ esac
 mkdir -p "$OUT/jniLibs/$ABI" "$OUT/assets/romfs/fake"
 "$CC" --target="$TARGET" -std=gnu11 -O2 -fPIC -shared -Wall -Wextra -Werror \
     -DCTR_HOST_HARNESS -I "$HOST/include" \
-    "$HOST/src/ctr_host.c" "$HOST/src/jni_bridge.c" "$HERE/fake_game.c" \
+    "$HOST/src/ctr_host.c" "$HOST/src/jni_bridge.c" "$HOST/src/diagnostics.c" "$HERE/fake_game.c" \
     -Wl,--no-undefined -Wl,-z,max-page-size=16384 \
     -llog -landroid -lEGL -lGLESv2 \
     -o "$OUT/jniLibs/$ABI/libemerald.so"

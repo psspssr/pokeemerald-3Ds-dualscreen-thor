@@ -6,6 +6,8 @@ import android.view.View
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.Toast
+import android.widget.TextView
+import android.content.ActivityNotFoundException
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
@@ -17,6 +19,7 @@ import androidx.preference.PreferenceScreen
 import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.checkbox.MaterialCheckBox
 import java.text.DateFormat
 import java.util.Date
 
@@ -33,6 +36,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Diagnostics.configure(applicationContext)
         setContentView(R.layout.activity_settings)
         val root = findViewById<android.view.View>(R.id.settings_root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
@@ -63,6 +67,13 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         internal lateinit var fileModel: GameFilesModel
             private set
         private var dialog: AlertDialog? = null
+        internal lateinit var diagnosticsModel: DiagnosticsExportModel
+            private set
+        private var aboutDialog: AlertDialog? = null
+
+        private val exportDiagnostics = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            diagnosticsModel.destination(uri)
+        }
 
         private val importPak = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) import(uri, GameFiles.Kind.PAK)
@@ -80,6 +91,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.preferences, rootKey)
             fileModel = ViewModelProvider(this)[GameFilesModel::class.java]
+            diagnosticsModel = ViewModelProvider(requireActivity())[DiagnosticsExportModel::class.java]
             files = fileModel.files
             click("import_pak") { importPak.launch(arrayOf("*/*")) }
             click("import_save") { importSave.launch(arrayOf("*/*")) }
@@ -101,6 +113,19 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
             super.onViewCreated(view, savedInstanceState)
+            diagnosticsModel.state.observe(viewLifecycleOwner) { state ->
+                findPreference<Preference>("about")?.summary = if (state.phase == DiagnosticsExportModel.Phase.WRITING)
+                    getString(R.string.diagnostics_exporting) else getString(R.string.pref_version, BuildConfig.VERSION_NAME)
+                aboutDialog?.getButton(AlertDialog.BUTTON_NEUTRAL)?.isEnabled = state.phase == DiagnosticsExportModel.Phase.IDLE
+                if (state.phase == DiagnosticsExportModel.Phase.COMPLETE) {
+                    diagnosticsModel.consumeResult()
+                    toast(getString(when (state.result) {
+                        DiagnosticsExportModel.Result.EXPORTED -> R.string.diagnostics_exported
+                        DiagnosticsExportModel.Result.PICKER_FAILED -> R.string.diagnostics_picker_failed
+                        else -> R.string.diagnostics_failed
+                    }))
+                }
+            }
             fileModel.state.observe(viewLifecycleOwner) { state ->
                 val busy = state?.busy == true
                 for (key in listOf("import_pak", "import_save", "export_save", "restore_backup"))
@@ -130,12 +155,14 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                         }
                         .setNegativeButton(R.string.import_later) { _, _ -> fileModel.consumeResult() }
                         .setOnCancelListener { fileModel.consumeResult() }
-                        .show()
+                        .show().also(::observeGameReleases)
                 }
             }
         }
 
         override fun onDestroyView() {
+            aboutDialog?.dismiss()
+            aboutDialog = null
             dialog?.dismiss()
             dialog = null
             super.onDestroyView()
@@ -163,8 +190,8 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                         .setMessage(getString(R.string.restore_backup_confirm, labels[which]))
                         .setNegativeButton(android.R.string.cancel, null)
                         .setPositiveButton(R.string.restore_backup_action) { _, _ -> fileModel.restoreBackup(backups[which]) }
-                        .show()
-                }.setNegativeButton(android.R.string.cancel, null).show()
+                        .show().also(::observeGameReleases)
+                }.setNegativeButton(android.R.string.cancel, null).show().also(::observeGameReleases)
         }
 
         /*
@@ -176,11 +203,37 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             fileModel.importFile(uri, kind)
         }
 
+        private fun observeGameReleases(dialog: AlertDialog) {
+            dialog.setOnKeyListener { _, _, event -> GameActivity.observePausedKeyEvent(event); false }
+            dialog.window?.decorView?.setOnGenericMotionListener { _, event ->
+                GameActivity.observePausedMotionEvent(event)
+                false
+            }
+        }
+
         private fun showAbout() {
             @Suppress("DEPRECATION")
             val body = Html.fromHtml(getString(R.string.about_body, BuildConfig.VERSION_NAME))
-            dialog = MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.about_title).setMessage(body)
-                .setPositiveButton(R.string.ok, null).show()
+            val content = layoutInflater.inflate(R.layout.dialog_about, null)
+            content.findViewById<TextView>(R.id.about_body).text = body
+            content.findViewById<MaterialCheckBox>(R.id.diagnostics_recording).apply {
+                isChecked = Diagnostics.isRecording()
+                setOnCheckedChangeListener { _, enabled -> Diagnostics.setRecording(requireContext(), enabled) }
+            }
+            aboutDialog = MaterialAlertDialogBuilder(requireContext()).setTitle(R.string.about_title).setView(content)
+                .setPositiveButton(R.string.ok, null)
+                .setNeutralButton(R.string.diagnostics_export) { _, _ ->
+                    diagnosticsModel.begin()?.let { filename ->
+                        try { exportDiagnostics.launch(filename) }
+                        catch (_: ActivityNotFoundException) { diagnosticsModel.pickerFailed() }
+                    }
+                }.create().also { about ->
+                    about.setOnDismissListener { if (aboutDialog === about) aboutDialog = null }
+                    about.show()
+                    observeGameReleases(about)
+                    about.getButton(AlertDialog.BUTTON_NEUTRAL).isEnabled =
+                        diagnosticsModel.state.value?.phase == DiagnosticsExportModel.Phase.IDLE
+                }
         }
     }
 }

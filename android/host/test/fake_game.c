@@ -15,6 +15,7 @@
 #include <jni.h>
 
 #include "ctr_host.h"
+#include "ctr_diagnostics.h"
 
 #define LOG(...) __android_log_print(ANDROID_LOG_INFO, "emerald-fake", __VA_ARGS__)
 
@@ -34,6 +35,7 @@ typedef struct
 
 static FakeWindow sWindows[CTR_HOST_MAX_WINDOWS];
 static atomic_uint sFrames[CTR_HOST_MAX_WINDOWS];
+static bool sDiagnosticIdentity;
 
 /* Only this test library exports diagnostics; no test hooks in the game. */
 JNIEXPORT jintArray JNICALL Java_com_emerald3ds_android_HostProbe_snapshot(JNIEnv *env, jclass cls)
@@ -134,14 +136,19 @@ static void Fill(int winH, int x, int y, int w, int h, unsigned rgb)
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
-static void Draw(int index, const CtrHostLayout *layout, const CtrHostInput *input)
+static int Draw(int index, const CtrHostLayout *layout, const CtrHostInput *input)
 {
     EGLint winW = 0, winH = 0;
     EGLSurface surface = sWindows[index].surface;
     const CtrHostRect *t = &layout->top, *b = &layout->bottom;
 
     if (!eglMakeCurrent(sDisplay, surface, surface, sContext))
-        return;
+        return 0;
+    if (!sDiagnosticIdentity) {
+        CtrDiagnostics_Graphics((const char *)glGetString(GL_VENDOR), (const char *)glGetString(GL_RENDERER),
+            (const char *)glGetString(GL_VERSION));
+        sDiagnosticIdentity = true;
+    }
     /* Two displays at different refresh rates: never block on one's vsync. */
     eglSwapInterval(sDisplay, 0);
     eglQuerySurface(sDisplay, surface, EGL_WIDTH, &winW);
@@ -176,7 +183,11 @@ static void Draw(int index, const CtrHostLayout *layout, const CtrHostInput *inp
             Fill(winH, px - dot / 2, py - dot / 2, dot, dot, 0xFF3030);
         }
     }
-    if (eglSwapBuffers(sDisplay, surface)) atomic_fetch_add(&sFrames[index], 1);
+    if (eglSwapBuffers(sDisplay, surface)) {
+        atomic_fetch_add(&sFrames[index], 1);
+        return 1;
+    }
+    return 0;
 }
 
 int main(void)
@@ -205,6 +216,7 @@ int main(void)
 
         if (state == CTR_HOST_PAUSED)
         {
+            CtrDiagnostics_ResetClock();
             LOG("paused");
             state = CtrHost_WaitWhilePaused();
             LOG("resumed: state %d", state);
@@ -232,14 +244,16 @@ int main(void)
         else
             chordStart = 0;
         CtrHost_GetLayout(&layout);
+        unsigned diagnosticEpoch = CtrDiagnostics_Epoch();
+        uint64_t diagnosticStart = (diagnosticEpoch & 1u) ? CtrDiagnostics_NowNs() : 0;
         int drawn = 0;
         for (int i = 0; i < CTR_HOST_MAX_WINDOWS; i++)
             if (UpdateSurface(i))
             {
-                Draw(i, &layout, &input);
-                drawn = 1;
+                drawn += Draw(i, &layout, &input);
             }
-        (void)drawn;
+        if (diagnosticStart && drawn)
+            CtrDiagnostics_Present(diagnosticEpoch, diagnosticStart, CtrDiagnostics_NowNs(), (unsigned)drawn);
         frameStart.tv_nsec += 16714023; /* 59.83 Hz, independent of either display. */
         if (frameStart.tv_nsec >= 1000000000) { frameStart.tv_sec++; frameStart.tv_nsec -= 1000000000; }
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &frameStart, NULL);

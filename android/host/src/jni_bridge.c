@@ -11,6 +11,7 @@
 #include "ctr_host.h"
 #include "ctr_host_internal.h"
 #include "ctr_mystery.h"
+#include "ctr_diagnostics.h"
 
 #define BRIDGE_CLASS "com/emerald3ds/android/NativeBridge"
 
@@ -317,4 +318,90 @@ Java_com_emerald3ds_android_NativeBridge_nativeSetState(JNIEnv *env, jclass cls,
         CtrHost_SetState(CTR_HOST_EXITING);
         break;
     }
+}
+
+JNIEXPORT void JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeSetDiagnosticsRecording(JNIEnv *env, jclass cls, jboolean enabled)
+{
+    (void)env; (void)cls;
+    CtrDiagnostics_SetRecording(enabled == JNI_TRUE);
+}
+
+JNIEXPORT jobjectArray JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeDiagnosticsIdentity(JNIEnv *env, jclass cls)
+{
+    (void)cls;
+    CtrDiagnosticSnapshot snapshot;
+    CtrDiagnostics_Snapshot(&snapshot);
+#if defined(__arm__)
+    const char *abi = "armeabi-v7a";
+#elif defined(__aarch64__)
+    const char *abi = "arm64-v8a";
+#elif defined(__x86_64__)
+    const char *abi = "x86_64";
+#else
+    const char *abi = "unknown";
+#endif
+#ifdef CTR_HOST_HARNESS
+    const char *backend = "host harness EGL renderer";
+#else
+    const char *backend = "Android Citro3D/Citro2D compatibility renderer";
+#endif
+    const char *values[] = {backend, snapshot.vendor, snapshot.renderer, snapshot.version, abi};
+    jclass stringClass = (*env)->FindClass(env, "java/lang/String");
+    if (!stringClass) return NULL;
+    jobjectArray result = (*env)->NewObjectArray(env, 5, stringClass, NULL);
+    (*env)->DeleteLocalRef(env, stringClass);
+    if (!result) return NULL;
+    for (int i = 0; i < 5; i++) {
+        jstring value = (*env)->NewStringUTF(env, values[i]);
+        if (!value) return result;
+        (*env)->SetObjectArrayElement(env, result, i, value);
+        (*env)->DeleteLocalRef(env, value);
+    }
+    return result;
+}
+
+JNIEXPORT jlongArray JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeDiagnosticsSamples(JNIEnv *env, jclass cls)
+{
+    (void)cls;
+    CtrDiagnosticSnapshot snapshot;
+    CtrDiagnostics_Snapshot(&snapshot);
+    jlong values[5 + CTR_DIAGNOSTIC_FRAME_CAPACITY * 4 + CTR_DIAGNOSTIC_ERROR_CAPACITY * 3];
+    unsigned n = 0;
+    values[n++] = 1; /* Protocol version; frames are chronological. */
+    values[n++] = snapshot.recording;
+    values[n++] = (jlong)snapshot.totalFrames;
+    values[n++] = snapshot.frameCount;
+    values[n++] = snapshot.errorCount;
+    for (unsigned i = 0; i < snapshot.frameCount; i++) {
+        values[n++] = (jlong)snapshot.frames[i].atNs;
+        values[n++] = (jlong)snapshot.frames[i].workNs;
+        values[n++] = (jlong)snapshot.frames[i].intervalNs;
+        values[n++] = snapshot.frames[i].surfaces;
+    }
+    for (unsigned i = 0; i < snapshot.errorCount; i++) {
+        values[n++] = snapshot.errors[i].site;
+        values[n++] = snapshot.errors[i].code;
+        values[n++] = (jlong)snapshot.errors[i].atNs;
+    }
+    jlongArray result = (*env)->NewLongArray(env, (jsize)n);
+    if (result) (*env)->SetLongArrayRegion(env, result, 0, (jsize)n, values);
+    return result;
+}
+
+JNIEXPORT jintArray JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeDiagnosticsState(JNIEnv *env, jclass cls)
+{
+    (void)cls;
+    CtrHostLayout layout;
+    CtrHost_GetLayout(&layout);
+    jint values[] = {1, CtrHost_GameStarted(), CtrHost_GetState(), (jint)CtrHost_GameSpeed(),
+        layout.topWindow, layout.bottomWindow, layout.top.x, layout.top.y, layout.top.w, layout.top.h,
+        layout.bottom.x, layout.bottom.y, layout.bottom.w, layout.bottom.h,
+        (jint)CtrHost_WindowGenerationAt(0), (jint)CtrHost_WindowGenerationAt(1)};
+    jintArray result = (*env)->NewIntArray(env, sizeof(values) / sizeof(values[0]));
+    if (result) (*env)->SetIntArrayRegion(env, result, 0, sizeof(values) / sizeof(values[0]), values);
+    return result;
 }

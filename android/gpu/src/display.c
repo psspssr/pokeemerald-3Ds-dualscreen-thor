@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdatomic.h>
 #include <ctrshim_apt.h>
+#include <ctr_diagnostics.h>
 
 static EGLDisplay display=EGL_NO_DISPLAY;
 static EGLContext context=EGL_NO_CONTEXT;
@@ -42,6 +43,7 @@ static void lifecycle(CtrAptEvent event,void *user)
      * Its FBOs remain intact; a long pause cannot leave stale deadlines. */
     nextVblank=event==CTR_APT_RESUME?gpuNow():0;
     frameSchedule=(GpuFrameSchedule){0};
+    CtrDiagnostics_ResetClock();
 }
 
 double gpuNow(void)
@@ -117,10 +119,14 @@ bool gpuInit(void)
     initialized=true;
     nextVblank=gpuNow();
     __android_log_print(ANDROID_LOG_INFO,"EmeraldGPU","GLES %s, %s",glGetString(GL_VERSION),glGetString(GL_RENDERER));
+    CtrDiagnostics_Graphics((const char *)glGetString(GL_VENDOR),(const char *)glGetString(GL_RENDERER),(const char *)glGetString(GL_VERSION));
     return true;
-fail:
-    GPU_LOG("EGL/GLES initialization failed: 0x%x",eglGetError());
+fail: {
+    EGLint error=eglGetError();
+    GPU_LOG("EGL/GLES initialization failed: 0x%x",error);
+    CtrDiagnostics_Error(CTR_DIAG_EGL_INIT,error);
     gpuShutdown(); return false;
+}
 }
 static void destroyWindow(int i)
 {
@@ -141,7 +147,11 @@ static void refreshWindow(int i)
     eglGetConfigAttrib(display,config,EGL_NATIVE_VISUAL_ID,&format);
     ANativeWindow_setBuffersGeometry(windows[i].window,0,0,format);
     windows[i].surface=eglCreateWindowSurface(display,config,windows[i].window,NULL);
-    if(windows[i].surface==EGL_NO_SURFACE) { GPU_LOG("window %d surface creation failed: 0x%x",i,eglGetError()); destroyWindow(i); }
+    if(windows[i].surface==EGL_NO_SURFACE) {
+        EGLint error=eglGetError();
+        GPU_LOG("window %d surface creation failed: 0x%x",i,error);
+        CtrDiagnostics_Error(CTR_DIAG_EGL_SURFACE,error); destroyWindow(i);
+    }
 }
 
 void gpuShutdown(void)
@@ -163,6 +173,7 @@ void gpuShutdown(void)
     memset(screens,0,sizeof(screens)); memset(windows,0,sizeof(windows));
     display=EGL_NO_DISPLAY; pbuffer=EGL_NO_SURFACE; context=EGL_NO_CONTEXT; initialized=false; nextVblank=0;
     frameSchedule=(GpuFrameSchedule){0};
+    CtrDiagnostics_ResetClock();
 }
 
 void gpuFlushScreens(void)
@@ -221,6 +232,8 @@ static void drawScreen(int screen,CtrHostRect rect,int width,int height,int filt
 void gpuPresent(void)
 {
     if(!initialized) return;
+    unsigned diagnosticEpoch=CtrDiagnostics_Epoch(),presentedSurfaces=0;
+    uint64_t diagnosticStart=(diagnosticEpoch&1u)?CtrDiagnostics_NowNs():0;
 #ifdef CTR_GPU_TEST
     ++presentCount;
 #endif
@@ -229,7 +242,9 @@ void gpuPresent(void)
     for(int i=0;i<CTR_HOST_MAX_WINDOWS;i++) {
         refreshWindow(i);
         if(windows[i].surface==EGL_NO_SURFACE) continue;
-        if(!eglMakeCurrent(display,windows[i].surface,windows[i].surface,context)) { destroyWindow(i); continue; }
+        if(!eglMakeCurrent(display,windows[i].surface,windows[i].surface,context)) {
+            CtrDiagnostics_Error(CTR_DIAG_EGL_CURRENT,eglGetError()); destroyWindow(i); continue;
+        }
         /* Emulated VBlank paces the game; the 60/120 Hz displays must not add a second wait. */
         eglSwapInterval(display,0);
         EGLint width,height;
@@ -248,14 +263,17 @@ void gpuPresent(void)
         if(layout.bottomWindow==i) drawScreen(1,layout.bottom,width,height,layout.filter);
         if(!eglSwapBuffers(display,windows[i].surface)) {
             EGLint error=eglGetError(); GPU_LOG("window %d swap failed: 0x%x",i,error);
+            CtrDiagnostics_Error(CTR_DIAG_EGL_SWAP,error);
             if(error==EGL_CONTEXT_LOST) CtrHost_SetState(CTR_HOST_EXITING);
             destroyWindow(i);
-        }
+        } else presentedSurfaces++;
     }
     eglMakeCurrent(display,pbuffer,pbuffer,context);
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0);
     if(gpuTarget) glViewport(0,0,gpuTarget->target->frameBuf.width,gpuTarget->target->frameBuf.height);
     gpuApplyState();
+    if(diagnosticStart && presentedSurfaces)
+        CtrDiagnostics_Present(diagnosticEpoch,diagnosticStart,CtrDiagnostics_NowNs(),presentedSurfaces);
 }
 
 void gfxInitDefault(void) { gfxInit(GSP_BGR8_OES,GSP_BGR8_OES,false); }

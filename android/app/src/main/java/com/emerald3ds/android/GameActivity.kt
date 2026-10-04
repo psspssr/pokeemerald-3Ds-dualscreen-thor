@@ -110,6 +110,8 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         super.onCreate(savedInstanceState)
         current = WeakReference(this)
         NativeBridge.appContext = applicationContext
+        Diagnostics.configure(applicationContext)
+        Diagnostics.record(Diagnostics.Event.GAME_CREATED)
         fileModel = ViewModelProvider(this)[GameFilesModel::class.java]
         files = fileModel.files
         settings = AppSettings.load(this)
@@ -173,6 +175,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     override fun onDestroy() {
+        Diagnostics.record(Diagnostics.Event.GAME_DESTROYED)
         if (powerReceiverRegistered) {
             powerReceiverRegistered = false
             unregisterReceiver(powerReceiver)
@@ -199,6 +202,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
 
     override fun onResume() {
         super.onResume()
+        Diagnostics.record(Diagnostics.Event.GAME_RESUMED)
         resumed = true
         settings = AppSettings.load(this)
         physical.labelMapping = settings.labelMapping
@@ -216,6 +220,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     override fun onPause() {
+        Diagnostics.record(Diagnostics.Event.GAME_PAUSED)
         resumed = false
         updateInputEnabled()
         if (!exiting) NativeBridge.setState(NativeBridge.STATE_PAUSED)
@@ -301,6 +306,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     private fun showError(message: String) {
+        Diagnostics.record(Diagnostics.Event.GAME_ERROR)
         phase = Phase.ERROR
         updateInputEnabled()
         showStatus(message, null, progress = false, buttons = true)
@@ -384,6 +390,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             if (acceptsGameInput()) NativeBridge.STATE_RUNNING else NativeBridge.STATE_PAUSED
         )
         Log.i(TAG, "screen power $snapshot; suspended=$suspended")
+        Diagnostics.record(Diagnostics.Event.SCREEN_POWER, "interactive=${snapshot.interactive} locked=${snapshot.keyguardLocked} display=${snapshot.displayState} suspended=$suspended")
     }
 
     private fun applyGameplayOptions() {
@@ -516,6 +523,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         }
         updateInputEnabled()
         Log.d(TAG, "layout ${w}x$h dual=$dual top=${layout.top}@${layout.topWindow} bottom=${layout.bottom}@${layout.bottomWindow}")
+        Diagnostics.layout(layout, currentDisplayId(), p?.display?.displayId, acceptsGameInput())
     }
 
     override fun onControlsVisibilityChanged() {
@@ -562,6 +570,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
                 p.show()
                 Log.i(TAG, "second display ${display.displayId}: ${display.name}")
             } catch (e: WindowManager.InvalidDisplayException) {
+                Diagnostics.record(Diagnostics.Event.DISPLAY_ERROR, "id=${display.displayId}")
                 presentation = null
                 Log.w(TAG, "cannot use display ${display.displayId}", e)
             }
@@ -580,6 +589,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     private fun displaysChanged() {
+        Diagnostics.record(Diagnostics.Event.DISPLAY_CHANGED, "displays=${displayManager.displays.size}")
         refreshScreenPower()
         updatePresentation()
     }

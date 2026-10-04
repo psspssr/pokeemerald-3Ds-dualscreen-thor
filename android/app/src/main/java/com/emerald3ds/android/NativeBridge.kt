@@ -58,6 +58,21 @@ object NativeBridge {
     @JvmStatic private external fun nativeTestShinyFlee(): Boolean
     @JvmStatic private external fun nativeMysteryEvents(): IntArray
     @JvmStatic private external fun nativeActivateMysteryEvent(event: Int): Int
+    @JvmStatic private external fun nativeSetDiagnosticsRecording(enabled: Boolean)
+    @JvmStatic private external fun nativeDiagnosticsIdentity(): Array<String>
+    @JvmStatic private external fun nativeDiagnosticsSamples(): LongArray
+    @JvmStatic private external fun nativeDiagnosticsState(): IntArray
+
+    internal data class DiagnosticSnapshot(val identity: Array<String>, val samples: LongArray, val state: IntArray)
+
+    internal fun setDiagnosticsRecording(enabled: Boolean): Boolean = try {
+        if (loaded) nativeSetDiagnosticsRecording(enabled)
+        loaded
+    } catch (_: UnsatisfiedLinkError) { false }
+
+    internal fun diagnostics(): DiagnosticSnapshot? = try {
+        if (!loaded) null else DiagnosticSnapshot(nativeDiagnosticsIdentity(), nativeDiagnosticsSamples(), nativeDiagnosticsState())
+    } catch (_: UnsatisfiedLinkError) { null }
 
     fun init(romfsDir: String, sdmcDir: String) {
         if (loaded) nativeInit(romfsDir, sdmcDir)
@@ -119,6 +134,7 @@ object NativeBridge {
     @JvmStatic
     @Suppress("UNUSED_PARAMETER")
     fun onBackupFailure(status: Int) {
+        Diagnostics.record(Diagnostics.Event.BACKUP_FAILED, "status=$status")
         Handler(Looper.getMainLooper()).post {
             appContext?.let { Toast.makeText(it, R.string.backup_failed, Toast.LENGTH_LONG).show() }
         }
@@ -130,6 +146,7 @@ object NativeBridge {
     @JvmStatic
     fun onGameExit(status: Int) {
         gameExitStatus = status
+        Diagnostics.record(Diagnostics.Event.NATIVE_EXIT, "status=$status")
         Log.i(TAG, "game exited ($status)")
         Handler(Looper.getMainLooper()).post { GameActivity.onNativeGameExit(status) }
     }
