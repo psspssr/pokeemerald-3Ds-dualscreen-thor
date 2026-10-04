@@ -508,7 +508,10 @@ class ScreenPowerTest {
             assertTrue(HostProbe.snapshot()[1] != 0)
             shell("input keyevent 223") // KEYCODE_SLEEP
             waitUntil("system did not enter sleep") { !powerManager.isInteractive }
-            waitUntil("system sleep did not pause native game") { HostProbe.snapshot()[0] == NativeBridge.STATE_PAUSED }
+            waitUntil("system sleep did not pause native game and release input") {
+                val snapshot = HostProbe.snapshot()
+                snapshot[0] == NativeBridge.STATE_PAUSED && snapshot[1] == 0
+            }
             assertEquals(0, HostProbe.snapshot()[1])
             assertTrue(NativeBridge.awaitPaused(5000))
             val stopped = HostProbe.snapshot()

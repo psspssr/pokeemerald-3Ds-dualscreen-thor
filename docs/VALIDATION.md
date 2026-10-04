@@ -1,5 +1,47 @@
 # Validation — Android previews
 
+## 0.1.0-alpha.7 — sleep and screen-power pause
+
+The app now combines lifecycle, device interactivity, main-display power and
+keyguard state before running the game. It refreshes those signals at startup,
+resume, display/focus changes, system screen broadcasts and callbacks that
+could resume gameplay. The input hot paths retain a cached state check.
+Sleep clears held input, cancels shiny-escape prompts to Stay and removes the
+secondary window. Wake respects existing menu and file-operation pause holds.
+An inactive secondary panel alone continues to use the single-screen fallback.
+
+**93 app instrumentation tests** and harness/release lint pass. Eleven new
+power tests cover OFF/doze/unknown state while still RESUMED, locked wake,
+input/fast-forward release guards, manual/file holds, secondary OFF/reconnect,
+queued menu/export/shiny callbacks and real Android sleep/wake. The native
+harness confirms acknowledged pause and stopped frame counters. An independent
+review checked state composition and receiver lifetime/registration.
+
+The release-signed local ARM probe has SHA-256
+`09bc5dde9681292beed989cc5fc5ba5f8823d982c86a18f216c53fc3a7a7acee`.
+The native engine/data ABI remains `07329dad`. A read-only helper on the rooted
+API 30 emulator samples the real game's two `gMain` VBlank counters and native
+pause acknowledgement, using symbols from the matching native build. No probe
+code is injected into the APK or the game memory.
+
+With both Thor-sized displays attached, the real game's counters stayed at
+**28,729** during sleep, and at **28,901** through sleep and a subsequent awake
+lock screen. They advanced after wake/unlock. A pre-existing manual pause
+stayed at **29,023** across sleep and wake until Resume. The game kept the same
+process throughout; the temporary swipe-lock setting was restored. Screenshots
+were inspected, both displays returned, and Map/Party touch worked after
+resumption. The save and both settings files remained byte-identical. The
+emulator's system server logged an unsupported EGL context attribute during
+lock-screen transitions; the game process logged no EGL/fatal error. Existing
+native affine/OBJ-window/mosaic diagnostics remained. Evidence:
+`build/evidence/lid-suspend/power-events.json`, `power-smoke.log` and captures
+in that directory.
+
+These checks exercise Android power signals, not a physical Thor Hall sensor.
+Firmware that does not report sleep/lock/main-display-off on closure, or that
+wakes while still closed, cannot be inferred from those signals. See the
+[lid behavior boundary and Android sources](AYN_THOR.md#lid-and-sleep).
+
 ## 0.1.0-alpha.6 — input and lifecycle polish
 
 The [alpha.6 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.6)

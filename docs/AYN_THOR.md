@@ -43,12 +43,32 @@ Dual-display mode is the default when a second built-in display is present:
   EGL surfaces. The renderer requests no per-window vsync wait, though the
   display driver can still block during presentation. The actual 120 Hz and
   60 Hz panel timing needs verification on Thor hardware.
-- **Lifecycle**: Android's activity pause callback pauses the game when
-  switching apps. The same applies when lid closure triggers that callback;
-  the firmware's lid behavior needs a device check. The Presentation is
-  dismissed and recreated with the activity. If the second
-  display disappears, both screens move to the top display (a single-display
-  layout) until it returns.
+- **Lifecycle**: switching apps, device sleep, the lock screen, or powering
+  off the app's main display pauses gameplay. Reopening/waking resumes only
+  when the app is active and unlocked, and any manual pause has been cleared.
+  See [lid and sleep behavior](#lid-and-sleep). Turning off or disconnecting
+  only the second display moves both screens to the main display.
+
+## Lid and sleep
+
+Gameplay pauses when Android reports sleep, a lock screen, or a main display
+that is off or in a low-power state. Held controls are released, and a pending
+shiny-escape question chooses Stay. Both game screens return after wake and
+unlock. If you opened the pause menu before closing the lid, it stays paused
+until you choose Resume.
+
+This covers lid closure **when the firmware sleeps, locks, or powers off the
+app's main display**. Android sleep/wake and locked-wake behavior were tested
+with the real game in an emulator, including native counters that stop while
+paused. **The Thor's physical lid sensor still needs a device test.** Firmware
+that leaves Android awake on closure, or wakes it while the lid is still
+closed, needs a verified lid signal; screen state alone cannot identify the
+hinge position. Android's [lid policy permits sleep, lock, or no action](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-13.0.0_r1/services/core/java/com/android/server/policy/PhoneWindowManager.java#L3534-L3550).
+
+The app checks [device interactivity](https://developer.android.com/reference/android/os/PowerManager#isInteractive()),
+[its display state](https://developer.android.com/reference/android/view/Display#getState())
+and [whether keyguard is showing](https://developer.android.com/reference/android/app/KeyguardManager#isKeyguardLocked()).
+It does not treat a secondary-panel disconnect as proof that the lid closed.
 
 ## Controls and shortcuts
 
