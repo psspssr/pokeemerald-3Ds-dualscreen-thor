@@ -3,6 +3,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Reserve a voxel transfer (at most a split and a copy) before touching its
+ * destination. False means retain the completed CPU job for the next frame. */
+bool CtrVideo_TryVoxelUpload(void);
+/* How many more uploads TryVoxelUpload would grant this frame. */
+unsigned CtrVideo_VoxelUploadsLeft(void);
+
 #define CTR_GAME_WIDTH 400
 #define CTR_GAME_HEIGHT 240
 
@@ -83,6 +89,8 @@ enum
     CTR_CENTRED_MAIN_MENU,
     CTR_CENTRED_NAMING,
     CTR_CENTRED_CLOCK,
+    /* The choice of starter from the professor's bag. */
+    CTR_CENTRED_STARTER,
     /*
      * The PokéNav, composed as the others but shown on the bottom screen: its
      * 240x240 area left of the button column, its header on the top edge,
@@ -108,6 +116,14 @@ enum
     CTR_CENTRED_BAG_WHOLE,
     /* The Pokédex, opened from the field: left of the column as the bag. */
     CTR_CENTRED_POKEDEX,
+    /*
+     * The party menu: opened from the field (the start menu, an item used or
+     * given from the bag) left of the column, the picture in its middle;
+     * from a battle, a contest or a facility over the whole bottom screen.
+     * Its olive frame is carried on around it.
+     */
+    CTR_CENTRED_PARTY,
+    CTR_CENTRED_PARTY_WHOLE,
     CTR_CENTRED_SCREENS
 };
 void CtrVideo_SetCentred(unsigned screen);
