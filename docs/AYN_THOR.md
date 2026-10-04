@@ -108,6 +108,19 @@ change the assignment of two physical displays.
 
 ## Game graphics and Summary menus
 
+Current development builds use **Settings → Display → Image filtering →
+Sharp pixels** by default. Upgrading an older preview switches its Linear
+filter to Sharp once; choosing Smooth afterward is respected. Fill still
+uses the entire panel. For equally sized pixel blocks, choose **Fit** and
+enable **Integer scaling**; this adds borders.
+
+**Settings → Display → Voxel anti-aliasing** offers Off, 2× and 4× on supported
+GPUs. It starts off, smooths voxel scenery before sprites and menus are drawn,
+and leaves classic 2D rendering alone. Higher settings can reduce performance.
+Unsupported levels are omitted; a saved setting from another device falls
+back to a supported lower level. This is separate from the game's voxel blur
+effect.
+
 The released **0.1.0-alpha.7** has an optional voxel overworld; enable
 **OPTION → VOXEL 3D** in the game. Current `dev` at upstream `cdc77a3d2b01`
 also has **3D BATTLE**: enable VOXEL 3D, scroll the same options list and turn
@@ -115,6 +128,10 @@ on 3D BATTLE. Both start off. This draws voxel battle scenery behind the
 original 2D Pokémon, health bars, text and move animations, where the voxel
 world is available. **BATTLE SCENE** remains the original animation setting.
 These game options are separate from Android's Settings menu.
+
+The FPS counter is also optional in current development builds:
+**OPTION → SHOW FPS**, off by default. Alpha.7's always-visible counter is
+removed by this upstream update.
 
 The dev build also uses upstream's native Party/Summary menus on the bottom
 screen. In Summary, tap a move to preview it and tap the selected row again
@@ -124,6 +141,13 @@ reorder. When learning a new move, that fifth row is the proposed move;
 use the header Cancel or B to leave without replacing a move.
 
 ## Screen scaling
+
+In development builds, dual-display **Fill** also expands the original GBA
+menu area. Full-screen Summary and PC views use the whole bottom panel;
+Party, Bag and Pokédex views use the full height beside their navigation
+column. Touch targets expand with the visible content. Map, battle commands
+and other menus that already fill their area keep their layout. Fit and
+single-display layouts retain the original framing.
 
 **Settings → Dual display → Screen scaling** offers two choices:
 
