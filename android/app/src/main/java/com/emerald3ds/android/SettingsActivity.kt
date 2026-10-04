@@ -91,6 +91,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         }
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            AppSettings.prepareDefaults(requireContext())
             setPreferencesFromResource(R.xml.preferences, rootKey)
             fileModel = ViewModelProvider(this)[GameFilesModel::class.java]
             diagnosticsModel = ViewModelProvider(requireActivity())[DiagnosticsExportModel::class.java]

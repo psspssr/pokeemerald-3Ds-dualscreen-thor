@@ -31,14 +31,26 @@ data class AppSettings(
         const val LANDSCAPE_TOP_ONLY = "top_only"
         const val LANDSCAPE_STACKED = "stacked"
 
-        fun load(context: Context): AppSettings {
+        internal fun prepareDefaults(context: Context) {
+            val p = PreferenceManager.getDefaultSharedPreferences(context)
+            // Older previews persisted Linear as their default. Switch those
+            // installs to sharp pixels once; a later Smooth choice stays put.
+            if (!p.getBoolean("sharp_filter_defaults_applied", false)) {
+                val edit = p.edit().putBoolean("sharp_filter_defaults_applied", true)
+                if (p.getString("filter", null) == "linear") edit.putString("filter", "nearest")
+                edit.apply()
+            }
             PreferenceManager.setDefaultValues(context, R.xml.preferences, false)
+        }
+
+        fun load(context: Context): AppSettings {
+            prepareDefaults(context)
             val p = PreferenceManager.getDefaultSharedPreferences(context)
             return AppSettings(
                 portraitLayout = p.getString("layout_portrait", PORTRAIT_FILL) ?: PORTRAIT_FILL,
                 landscapeLayout = p.getString("layout_landscape", LANDSCAPE_SIDE_BY_SIDE) ?: LANDSCAPE_SIDE_BY_SIDE,
                 integerScaling = p.getBoolean("integer_scaling", false),
-                linearFilter = p.getString("filter", "linear") != "nearest",
+                linearFilter = p.getString("filter", "nearest") == "linear",
                 keepScreenOn = p.getBoolean("keep_screen_on", true),
                 controlsVisibility = when (p.getString("controls_visibility", "auto")) {
                     "always" -> ControlsVisibility.ALWAYS

@@ -26,7 +26,7 @@
             app:summary="@string/pref_integer_scaling_summary"
             app:title="@string/pref_integer_scaling" />
         <ListPreference
-            app:defaultValue="linear"
+            app:defaultValue="nearest"
             app:entries="@array/filter_entries"
             app:entryValues="@array/filter_values"
             app:iconSpaceReserved="false"
