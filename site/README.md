@@ -8,7 +8,7 @@ motion, visible keyboard focus and narrow screens are supported.
 From the repository root:
 
 ```sh
-# Reproducible local preview, pinned to the verified alpha.7 release metadata.
+# Reproducible local preview, pinned to the verified alpha.8 release metadata.
 python3 tools/build_site.py --snapshot site/release-snapshot.json
 python3 -m http.server 8765 --bind 127.0.0.1 --directory build/site
 ```
@@ -37,11 +37,10 @@ GitHub API. The offline snapshot is an explicit fallback, not a live lookup.
 Only allowlisted tag/date/download-link metadata is written to `release.json`.
 API bodies, author/account data, credentials, game packs and APKs are not copied.
 Image files are copied byte-for-byte from the existing project assets; the
-site's credits page identifies real captures and the AI-edited Thor mockup.
+site distinguishes real gameplay captures from the illustrative Thor mockup.
 
-The game repository remains private. GitHub Pages for that private repository
-is unavailable on the current account plan, so the deployment target is the
-separate public **website-only** repository `psspssr/emerald-dual-screen-site`.
+The game repository remains private. The deployment target is the separate
+public **website-only** repository `psspssr/emerald-dual-screen-site`.
 Publish only generated `build/site` files there, using a deploy key scoped to
 that website repository; never copy the game checkout, APKs or credentials.
 The publisher builds within the private game repository with Contents: read

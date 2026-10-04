@@ -15,12 +15,11 @@ Rebase or remove the affected overlay, then repeat the checks below. Repeated
 builds at the same patch series preserve source timestamps and cached objects;
 changing the series refreshes affected sources and invalidates configuration.
 
-## Current development pin
+## Current upstream pin
 
-The `dev` branch imports upstream `cdc77a3d2b01`. It adds optional voxel battle
-scenery and upstream's native Party/Summary touch menus. Released
-**0.1.0-alpha.7** uses the earlier pin and has voxel overworld rendering only;
-an upstream import does not alter an existing release.
+Alpha.8 and current `main`/`dev` import upstream `cdc77a3d2b01`. It adds optional
+voxel battle scenery and upstream's native Party/Summary touch menus. An
+upstream import does not alter an existing release.
 
 During this update, upstream supplied the Summary asset fix and touch handlers,
 so the older Android selector implementation was removed. The remaining

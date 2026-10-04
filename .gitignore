@@ -8,3 +8,20 @@ android/app/build/
 android/app/.cxx/
 *.apk
 *.keystore
+# Local credentials, signing material and player data are never source assets.
+.env
+.env.*
+!.env.example
+*.jks
+*.p12
+*.pfx
+*.pem
+*.key
+*.pass
+*.sav
+*.srm
+*.dsv
+# Local scratch work and generated previews.
+/tmp/
+/output/
+/private/

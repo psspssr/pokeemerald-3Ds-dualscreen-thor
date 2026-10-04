@@ -5,10 +5,9 @@ only**; check the device's actual ABI list before installing. The separate
 display-test APK also contains x86_64 so the Android UI can be tested on a
 standard hardware-accelerated emulator.
 
-This guide builds the checked-out source. Current `dev` imports upstream
+This guide builds the checked-out source. Alpha.8 and current `main`/`dev` import upstream
 `cdc77a3d2b01`, including opt-in voxel battle scenery and native Party/Summary
-menus. The published **0.1.0-alpha.7** APK predates those changes; its optional
-voxel rendering covers the overworld.
+menus.
 
 ## Install the tools
 
@@ -81,7 +80,7 @@ It is distinct from Gradle's `assembleRelease`, which selects the Android
 release variant and packages whichever native output it is given. The
 engine-only result is
 `android/app/build/outputs/apk/release/emerald3ds-android-release-unsigned.apk`;
-signing and verification are covered in [RELEASING.md](RELEASING.md#align-sign-and-inspect).
+signing and verification are covered in [RELEASING.md](RELEASING.md).
 
 An **engine-only** APK needs `emerald3ds.pak` generated for the **same Android build**.
 The data ABI includes executable-specific pointers. A stock 3DS pack, or a
@@ -118,7 +117,7 @@ destination points back to the live save and the provider fails while writing,
 the original is restored. If storage prevents restoration, the app keeps the
 copy and pauses gameplay; retry the export or restart after storage is available.
 
-The port keeps its voxel/camera options, including the dev build's `3D BATTLE`
+The port keeps its voxel/camera options, including `3D BATTLE`,
 choice, separately at
 `sdmc/3ds/emerald3ds/settings.txt`; Android screen and control preferences are
 app settings. Neither is inserted into the GBA `.sav`. Transfer the raw save

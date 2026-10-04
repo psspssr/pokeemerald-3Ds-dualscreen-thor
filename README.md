@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="android/app/src/main/res/drawable-nodpi/ic_launcher_art.png" width="160" alt="Emerald dragon wrapped around two glowing emerald facets">
+  <img src="android/app/src/main/res/drawable-nodpi/ic_launcher_art.png" width="160" alt="Emerald Dual Screen app icon">
 </p>
 
 <h1 align="center">Pokémon Emerald Dual Screen</h1>
@@ -7,8 +7,8 @@
 <p align="center"><strong>Emerald on Android. Built for two screens.</strong></p>
 
 <p align="center">
-  Explore Hoenn with the game above, touch controls below, and optional voxel scenery.<br>
-  Designed for the AYN Thor, with layouts for phones and other Android handhelds.
+  Explore Hoenn on your AYN Thor, with the adventure above and touch menus below.<br>
+  Classic 2D, optional voxel scenery, and layouts for compatible Android phones and handhelds.
 </p>
 
 <p align="center">
@@ -27,8 +27,7 @@
 
 <p align="center">
   <a href="docs/images/thor-presentation.png"><img src="docs/images/thor-presentation.png" width="760" alt="Presentation mockup of a black AYN Thor with Oldale Town on the upper display and the Hoenn map and touch menu on the lower display"></a>
-  <br><em>Presentation mockup using emulator captures</em>
-  <br><sub>Device reference: <a href="https://droix.net/wp-content/uploads/2025/08/AYN-THOR-BLACK-LISTING-DONE-01.png">DROIX</a> · <a href="docs/images/thor-presentation.json">Image provenance</a></sub>
+  <br><em>Illustrative device mockup.</em>
 </p>
 
 An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen), built on [pret/pokeemerald](https://github.com/pret/pokeemerald).
@@ -37,17 +36,17 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 
 ## Get started
 
-Download the signed **[0.1.0-alpha.8 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.8)** and install its `armeabi-v7a.apk`. Matching game data is included. Downloads currently require access to this private repository. Export your save before replacing a development APK, which uses a different signing key.
+Download the signed **[0.1.0-alpha.8 Android preview](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.8)** and install its ARMv7 APK. Matching game data is included. **Downloads require access to this private GitHub repository.**
 
-**Pause with L1 + R1 together** or keyboard **Escape**, then open **Settings**. On Thor, both panels fill by default while keeping game content visible; choose **Fit** to keep the original proportions. Phone layouts include on-screen controls. See [Thor setup](docs/AYN_THOR.md).
+**Press L1 + R1 together** or keyboard **Escape** for Pause and Settings. Both Thor panels fill by default; choose **Fit** to preserve the original proportions. Phone layouts include on-screen controls. [Thor setup](docs/AYN_THOR.md).
 
-Use **Settings → Import save / Export save** to transfer Emerald `.sav` files, then restart after importing. Standard GBA/emulator saves and mGBA RTC trailers are supported; emulator save states are not. Save normally in the game to keep your progress. [Save details](docs/BUILDING.md#engine-only-build-and-data-packs).
+Bring your progress through **Settings → Import save / Export save**. Standard Emerald GBA and emulator `.sav` files are supported; save states are not. Restart after importing and save normally in-game. Export your save before replacing a development APK, which uses a different signing key. [Save details](docs/BUILDING.md#engine-only-build-and-data-packs).
 
-**Sharp pixels are now the default.** Optional **voxel anti-aliasing (Off / 2× / 4×)** is in Settings → Display. Enable voxel scenery and battles in the game’s **OPTION** menu; **SHOW FPS** is there too and starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
+**Sharp pixels are the default.** Choose optional **voxel anti-aliasing** in Settings → Display, with Off, 2× and 4× available where supported. Enable voxel scenery and battles in the game’s **OPTION** menu; **SHOW FPS** is there too and starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
 
 ## Compatibility
 
-Requires **Android 9+, OpenGL ES 3.0 and 32-bit ARM app support** (`armeabi-v7a`). Firmware limited to 64-bit apps cannot run this build. **Physical Thor testing and sustained hardware performance remain open**; [test results](docs/VALIDATION.md) describe the emulator coverage and limits.
+Requires **Android 9+, OpenGL ES 3.0 and 32-bit ARM app support** (`armeabi-v7a`). Firmware limited to 64-bit apps cannot run this build. Tested in Android emulators; **full physical Thor validation and sustained performance testing remain open**. [Test results and limits](docs/VALIDATION.md).
 
 ## Controls
 
@@ -109,13 +108,13 @@ Fast-forward requires enabling it and choosing **2×, 4× or 8×** in Settings. 
   </tr>
 </table>
 
-Actual ARM Android game in an emulator; [capture details](docs/images/README.md) and [portrait phone view](docs/images/portrait-controls.png). The Thor image above is a presentation mockup, not a hardware test.
+Emulator screenshots from the Android port. Some gallery images show earlier previews. [Screenshot notes](docs/images/README.md) · [Portrait phone layout](docs/images/portrait-controls.png).
 
 ## Project guides
 
 [Build and test](docs/BUILDING.md) · [Thor setup](docs/AYN_THOR.md) · [Validation](docs/VALIDATION.md) · [Upstream updates](docs/UPDATING_FROM_ORIGIN.md)
 
-[Automatic releases](docs/RELEASING.md) · [Architecture](docs/ANDROID_ARCHITECTURE.md) · [Icon artwork](docs/ICON.md)
+[Automatic releases](docs/RELEASING.md) · [Architecture](docs/ANDROID_ARCHITECTURE.md)
 
 ## Credits and licensing
 
@@ -124,8 +123,6 @@ Actual ARM Android game in an emulator; [capture details](docs/images/README.md)
 - **gradenGnostic/pokeemerald-multiplatform contributors** — voxel logic adapted by the 3DS project; see its [attribution](origin/3ds_port/src/voxel/NOTICE.md).
 - **devkitPro** — libctru, Citro3D and Citro2D interfaces; implementation and licence details are recorded in the relevant `THIRD_PARTY.md` files.
 
-The Android port's original code is [MIT licensed](LICENSE). Imported projects retain their own terms; see [NOTICE.md](NOTICE.md) and [upstream provenance](origin/docs/PROVENANCE.md). The code licence does not grant rights to Pokémon game assets. Screenshots show the game running in the Android port.
+The Android port's original code is [MIT licensed](LICENSE). Imported components and game assets retain their owners' rights and terms; see [project notices](NOTICE.md). The code licence does not grant rights to Pokémon game assets.
 
-This is an independent, unofficial fan project. It is not affiliated with, endorsed, sponsored or supported by Nintendo, Game Freak, Creatures, The Pokémon Company, AYN or other hardware vendors. Credits and upstream links identify sources; they do not imply endorsement or support for this Android port. All names, trademarks, logos and game assets belong to their respective owners.
-
-**Provided “as is” and “as available,” without warranties or guarantees of any kind, to the extent permitted by applicable law. No technical support or other services are offered or promised.** There is no commitment to maintenance, updates, fixes, compatibility or continued availability. Use at your own risk and keep backups of your saves. The [licence's warranty disclaimer and limitation of liability](LICENSE) apply within its stated scope; third-party licences and mandatory legal rights remain unaffected.
+An independent, unofficial fan project, unaffiliated with Nintendo, Game Freak, Creatures, The Pokémon Company or AYN. Provided “as is” and “as available,” without warranties where permitted by law. No support or services are offered or promised. [Full credits and notice](https://psspssr.github.io/emerald-dual-screen-site/credits.html#disclaimer).

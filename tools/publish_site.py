@@ -85,7 +85,7 @@ def publish():
             'Edit that source; the publishing workflow replaces generated files here.\n\n'
             'Original website code uses the MIT licence. Fonts retain SIL OFL 1.1; '
             'game images, trademarks and device imagery retain their respective owners’ rights. '
-            'See credits.html for provenance and the as-is/no-support notice.\n')
+            'See credits.html for credits and the as-is/no-support notice.\n')
         git('config', 'user.name', 'psspssr', cwd=checkout)
         git('config', 'user.email', '125391196+psspssr@users.noreply.github.com', cwd=checkout)
         git('add', '--all', cwd=checkout)

@@ -6,6 +6,14 @@
   <meta name="theme-color" content="#164d3b">
   <meta name="description" content="Pokémon Emerald for the AYN Thor. Explore Hoenn on the top display, use touch menus below, and play with the handheld’s built-in controls.">
   <title>Pokémon Emerald Dual Screen for AYN Thor</title>
+  <link rel="icon" href="assets/app-icon.png" type="image/png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Pokémon Emerald Dual Screen for AYN Thor">
+  <meta property="og:description" content="Explore Hoenn above, touch your map and menus below. An unofficial Android port built for AYN Thor.">
+  <meta property="og:url" content="https://psspssr.github.io/emerald-dual-screen-site/">
+  <meta property="og:image" content="https://psspssr.github.io/emerald-dual-screen-site/assets/thor-presentation.png">
+  <meta property="og:image:alt" content="Illustrative AYN Thor mockup showing Emerald on two screens">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="styles.css">
   <link rel="preload" href="assets/fonts/pixelify-sans.ttf" as="font" type="font/ttf" crossorigin>
   <script src="site.js" defer></script>
@@ -15,7 +23,7 @@
   <header class="site-header">
     <div class="header-inner">
       <a class="wordmark" href="./" aria-label="Emerald Dual Screen home">
-        <span class="emerald-mark" aria-hidden="true"><i></i></span>
+        <img class="wordmark-icon" src="assets/app-icon.png" width="48" height="48" alt="">
         <span>EMERALD<small>DUAL SCREEN</small></span>
       </a>
       <nav aria-label="Main navigation">
@@ -32,7 +40,7 @@
         <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> HOENN, MEET YOUR AYN THOR</p>
         <h1 id="hero-title">Pokémon<br><span>Emerald.</span></h1>
         <p class="hero-subtitle">Made for AYN Thor.</p>
-        <p class="hero-description">Your Thor’s two screens, put to work. Explore Hoenn up top, keep your map and touch menus below, and play with the built-in controls.</p>
+        <p class="hero-description">Explore Hoenn on the top screen, keep your map and touch menus below, and play with your Thor’s built-in controls.</p>
         <div class="hero-actions">
           <a class="button button-primary" href="#play"><span class="play-arrow" aria-hidden="true">▶</span> Get the Thor preview</a>
           <a class="text-link" href="#screens">Take a look <span aria-hidden="true">↓</span></a>
@@ -47,7 +55,7 @@
           <img src="assets/thor-presentation.png" width="1254" height="1254" alt="Presentation mockup of a black AYN Thor with Oldale Town above and the Hoenn touch map below" fetchpriority="high">
           <span class="device-label label-bottom">TOUCH MENUS BELOW</span>
         </div>
-        <figcaption>Presentation mockup using emulator captures.<br><a href="credits.html">DROIX device reference · image credits</a></figcaption>
+        <figcaption>Illustrative device mockup.</figcaption>
       </figure>
       <div class="hero-bottom"><span>TOP · 1920 × 1080</span><span>TOUCH · 1240 × 1080</span><span>DESIGNED FOR AYN THOR</span></div>
     </section>
@@ -61,7 +69,7 @@
               <img class="app-icon" src="assets/app-icon.png" width="1254" height="1254" alt="" loading="lazy">
               <div><p class="eyebrow">{{RELEASE_KIND}}</p><h2 id="play-title">{{RELEASE_VERSION}}</h2><p class="release-date">{{RELEASE_DATE}} · {{APK_SIZE}} · ARMv7</p></div>
             </div>
-            <p>Install the Android APK on your Thor and start playing. Matching game data is included.</p>
+            <p>Install the signed Android APK on a compatible Thor. Matching game data is included.</p>
             <a class="button button-primary download-button" href="{{APK_URL}}"><span aria-hidden="true">↓</span> Download Android APK</a>
             <div class="access-notice"><strong>{{ACCESS_LABEL}}</strong><p>{{ACCESS_NOTE}}</p></div>
             <div class="release-links"><a href="{{RELEASE_URL}}">Release notes</a><a href="{{CHECKSUMS_URL}}">Checksums</a><a href="{{MANIFEST_URL}}">Build details</a></div>
@@ -69,13 +77,13 @@
         </div>
         <div class="before-play">
           <p class="section-kicker">BEFORE YOU SET OFF</p>
-          <h2>Your Thor.<br>Your next adventure.</h2>
+          <h2>Set up.<br>Head to Hoenn.</h2>
           <ol class="setup-list">
             <li><span class="step-number">01</span><div><h3>Check your Thor’s firmware</h3><p>Android 9 or newer, OpenGL ES 3.0, and <strong>32-bit ARM app support</strong>. Firmware that only runs 64-bit apps cannot run this preview.</p></div></li>
-            <li><span class="step-number">02</span><div><h3>Bring your save</h3><p>Import an Emerald <code>.sav</code> in Settings, then restart. Export it to return to a GBA emulator. Save states are a different format.</p></div></li>
-            <li><span class="step-number">03</span><div><h3>Make both screens yours</h3><p>Both Thor panels fill by default while keeping game content visible. Keep the adventure above and touch menus below, or choose <strong>Fit</strong> for original proportions.</p></div></li>
+            <li><span class="step-number">02</span><div><h3>Bring your save</h3><p>Import an Emerald <code>.sav</code> in Settings, then restart. Export it to continue in a GBA emulator. Save normally in-game; save states are not supported.</p></div></li>
+            <li><span class="step-number">03</span><div><h3>Set your screen layout</h3><p>Both Thor panels fill by default, with the adventure above and touch menus below. Choose <strong>Fit</strong> to preserve the original proportions.</p></div></li>
           </ol>
-          <p class="tested-note">Also supports compatible Android phones and other handhelds. Builds are tested in emulators; Thor hardware and sustained performance validation remain ongoing. <a href="{{REPOSITORY_URL}}/blob/main/docs/VALIDATION.md">See the test report ↗</a></p>
+          <p class="tested-note">Compatible Android phones and other handhelds are supported too. Tested in emulators; full Thor hardware validation and sustained performance testing remain open. <a href="{{REPOSITORY_URL}}/blob/main/docs/VALIDATION.md">Test results and limits ↗</a></p>
         </div>
       </div>
     </section>
@@ -83,7 +91,7 @@
     <section id="screens" class="section-wrap screenshots-section" aria-labelledby="screens-title">
       <div class="section-heading">
         <div><p class="section-kicker">A VIEW OF HOENN</p><h2 id="screens-title">Familiar places.<br>A different perspective.</h2></div>
-        <p>Keep classic 2D sharp, or enable voxel scenery and battles in the game’s OPTION menu. Optional voxel anti-aliasing is in Settings.</p>
+        <p>Classic 2D stays sharp by default. Enable voxel scenery and battles in the game’s OPTION menu, with optional voxel anti-aliasing in Settings.</p>
       </div>
       <div class="gallery">
         <figure class="screenshot-card">
@@ -92,7 +100,7 @@
             <img src="assets/classic-town.png" width="1920" height="1080" alt="Classic 2D Oldale Town and Pokémon Center alongside the bottom-screen Hoenn map" loading="lazy" decoding="async">
             <span class="enlarge-hint" aria-hidden="true">+</span>
           </a>
-          <figcaption><h3>The original 2D look</h3><p>The world you remember, with your next stop always in view.</p></figcaption>
+          <figcaption><h3>The original 2D look</h3><p>Classic Hoenn, with the map and touch menu beside it.</p></figcaption>
         </figure>
         <figure class="screenshot-card">
           <a class="screenshot-link" href="assets/voxel-world.png" data-shot data-caption="The optional voxel overworld in Littleroot Town. Actual ARM Android emulator capture." aria-label="Enlarge the voxel overworld screenshot">
@@ -116,10 +124,10 @@
             <img src="assets/classic-route.png" width="1920" height="1080" alt="Original 2D Route 101 with tall grass, trees, ledges and the touch menu" loading="lazy" decoding="async">
             <span class="enlarge-hint" aria-hidden="true">+</span>
           </a>
-          <figcaption><h3>Room for the journey</h3><p>The adventure on your Thor’s top display. Map and touch menus within reach below.</p></figcaption>
+          <figcaption><h3>Room for the journey</h3><p>Explore Hoenn while keeping the map within reach.</p></figcaption>
         </figure>
       </div>
-      <p class="gallery-note">Unmodified captures from actual ARM Android builds, shown in the combined landscape layout. <a href="assets/portrait-controls.png">See the portrait phone layout</a> · <a href="credits.html">Capture provenance</a></p>
+      <p class="gallery-note">Android emulator screenshots in the combined landscape layout; some show earlier previews. <a href="assets/portrait-controls.png">See the portrait phone layout</a>.</p>
     </section>
 
     <section id="controls" class="controls-section" aria-labelledby="controls-title">
@@ -154,19 +162,19 @@
     </section>
 
     <section id="extras" class="section-wrap extras-section" aria-labelledby="extras-title">
-      <div class="section-heading"><div><p class="section-kicker">A FEW THINGS IN YOUR BAG</p><h2 id="extras-title">Your adventure.<br>Your options.</h2></div><p>Quality-of-life options start off. Turn on only what you want in Settings → Gameplay.</p></div>
+      <div class="section-heading"><div><p class="section-kicker">OPTIONAL EXTRAS</p><h2 id="extras-title">Your adventure.<br>Your options.</h2></div><p>Quality-of-life options start off. Turn on what you want in Settings → Gameplay.</p></div>
       <div class="extras-grid">
         <article class="extra-card"><span class="item-symbol" aria-hidden="true">»</span><h3>Set your pace</h3><p>Optional 2×, 4× or 8× fast-forward and shared experience for eligible benched Pokémon.</p></article>
-        <article class="extra-card"><span class="item-symbol sparkle-symbol" aria-hidden="true">✦</span><h3>A little extra sparkle</h3><p>Five shiny-odds choices, from the original rate to about 1 in 128. Optional confirmation before fleeing a shiny.</p></article>
+        <article class="extra-card"><span class="item-symbol sparkle-symbol" aria-hidden="true">✦</span><h3>Shiny encounters</h3><p>Five shiny-odds choices, from the original rate to about 1 in 128. Optional confirmation before fleeing a shiny.</p></article>
         <article class="extra-card"><span class="item-symbol" aria-hidden="true">▤</span><h3>Keep your progress</h3><p>Portable Emerald saves and an optional rotation of five completed in-game save backups.</p></article>
         <article class="extra-card"><span class="item-symbol ticket-symbol" aria-hidden="true">◇</span><h3>Choose an event</h3><p>Event-island tickets, offline Jirachi/Celebi gifts and missing Regi dolls. Activate individually, then save in-game.</p></article>
       </div>
-      <p class="extras-footnote">Shiny targets can be reduced by personality constraints. Mystery events retain normal story requirements. <a href="{{REPOSITORY_URL}}/blob/main/docs/QUALITY_OF_LIFE.md">Quality of life</a> · <a href="{{REPOSITORY_URL}}/blob/main/docs/MYSTERY_EVENTS.md">Mystery events</a></p>
+      <p class="extras-footnote">Boosted shiny odds are approximate. Mystery events retain normal story requirements. <a href="{{REPOSITORY_URL}}/blob/main/docs/QUALITY_OF_LIFE.md">Quality of life</a> · <a href="{{REPOSITORY_URL}}/blob/main/docs/MYSTERY_EVENTS.md">Mystery events</a></p>
       <div class="closing-menu menu-panel"><div><p class="section-kicker">YOUR SAVE FILE IS WAITING</p><h2>Ready to head out?</h2></div><a class="button button-primary" href="#play">Get the preview <span aria-hidden="true">→</span></a></div>
     </section>
   </main>
   <footer class="site-footer">
-    <div class="section-wrap footer-top"><a class="wordmark" href="./"><span class="emerald-mark" aria-hidden="true"><i></i></span><span>EMERALD<small>DUAL SCREEN</small></span></a><nav aria-label="Project links"><a href="{{REPOSITORY_URL}}">GitHub</a><a href="{{REPOSITORY_URL}}/blob/main/docs/BUILDING.md">Build guide</a><a href="credits.html">Credits & captures</a></nav></div>
+    <div class="section-wrap footer-top"><a class="wordmark" href="./"><img class="wordmark-icon" src="assets/app-icon.png" width="48" height="48" alt=""><span>EMERALD<small>DUAL SCREEN</small></span></a><nav aria-label="Project links"><a href="{{REPOSITORY_URL}}">GitHub</a><a href="{{REPOSITORY_URL}}/blob/main/docs/BUILDING.md">Build guide</a><a href="credits.html">Credits & notices</a></nav></div>
     <div class="section-wrap footer-bottom"><p>Android port of <a href="https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen">ZallaxDev's 3DS project</a>, built on <a href="https://github.com/pret/pokeemerald">pret/pokeemerald</a>.</p><p>Unofficial fan project, unaffiliated with Nintendo, Game Freak, Creatures, The Pokémon Company or AYN. Provided “as is” and “as available,” without warranties where permitted by law. No support or services are offered or promised. <a href="credits.html#disclaimer">Full notice</a>.</p></div>
   </footer>
   <dialog id="screenshot-dialog" class="lightbox" aria-label="Game screenshot viewer" aria-describedby="lightbox-caption">

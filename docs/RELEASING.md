@@ -25,10 +25,9 @@ The repository owner configures these two GitHub Actions repository secrets:
 
 Keep alias `emerald-thor` and the established signing certificate SHA-256:
 `eeb95f89fcb944d3a62cc2aa8d0bb720584333d476c13b5a823ef486fdcd0389`.
-The owner-managed originals are
-`/root/.local/share/emerald-thor/signing/release.keystore` and `release.pass`
-in that directory. Maintain a separate owner-controlled backup with restricted
-permissions. Never print or commit either secret, or replace the signing key
+Keep the original keystore and password outside the checkout, with a separate
+owner-controlled backup and restricted permissions. Never print or commit
+either secret, or replace the signing key
 for a normal update. Android updates require the same signing identity.
 
 Only the isolated signing job's signing step receives the secrets. That job
@@ -39,7 +38,7 @@ needed; the publisher alone gets `contents: write` on its `GITHUB_TOKEN`.
 
 ## Publish a reviewed source commit
 
-Use a strict SemVer tag, for example `v0.1.0-alpha.2`. The workflow derives
+Use a strict SemVer tag, for example `v0.1.0-alpha.9`. The workflow derives
 Android `versionName` by removing `v`, and assigns `versionCode` as its
 `GITHUB_RUN_NUMBER + 1`. Code **1** belongs to the first manual release,
 `v0.1.0-alpha.1`; the first automated run uses code **2**. New runs increase
@@ -59,7 +58,7 @@ CLI sequence is below; publishing is the step that triggers the workflow:
 
 ```sh
 release_repo=psspssr/pokeemerald-3Ds-dualscreen-thor
-release_tag=v0.1.0-alpha.2
+release_tag=v0.1.0-alpha.9
 release_commit=$(git rev-parse HEAD)
 release_notes=build/release-notes.md  # Prepare and review this file first.
 test -z "$(git status --porcelain)"

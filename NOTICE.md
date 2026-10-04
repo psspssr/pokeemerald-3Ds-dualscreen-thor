@@ -21,5 +21,12 @@ build time and never vendored) and devkitARM's `3dsx.ld` (MPL 2.0).
 
 ## Game content
 
-Pokémon Emerald's code, data, graphics, audio and text are © Nintendo, Game
-Freak and Creatures. None of it is included in this repository.
+Pokémon Emerald's code, data, graphics, audio and text belong to Nintendo,
+Game Freak, Creatures and their respective rights holders. The Android port's
+MIT licence does not grant rights to that content. Source patches contain
+context from the files they modify, and screenshots depict game artwork.
+
+Current private preview APKs include generated game data. Making the source
+repository public would also expose its historical release assets; the private
+release workflow is not a public game-data distribution workflow. See
+[release packaging](docs/RELEASING.md).

@@ -4,7 +4,17 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$repo_root"
 ndk_dir="${ANDROID_NDK_HOME:-${NDK:-$repo_root/build/tooling/android-ndk-r27c}}"
-adb_bin="${ADB:-${ANDROID_HOME:-/root/android-sdk}/platform-tools/adb}"
+if [[ -n "${ADB:-}" ]]; then
+    adb_bin="$(command -v "$ADB" || true)"
+elif [[ -n "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}" ]]; then
+    adb_bin="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/platform-tools/adb"
+else
+    adb_bin="$(command -v adb || true)"
+fi
+if [[ -z "$adb_bin" || ! -x "$adb_bin" ]]; then
+    echo "adb not found; set ADB, ANDROID_HOME or ANDROID_SDK_ROOT, or add adb to PATH." >&2
+    exit 1
+fi
 serial="${1:-${ANDROID_SERIAL:-}}"
 adb_cmd=("$adb_bin")
 if [[ -n "$serial" ]]; then adb_cmd+=(-s "$serial"); fi
