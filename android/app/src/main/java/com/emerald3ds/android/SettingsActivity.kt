@@ -71,10 +71,8 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             private set
         private var aboutDialog: AlertDialog? = null
 
-        private val exportDiagnostics = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-            diagnosticsModel.destination(uri)
-        }
-
+        // Preserve alpha.7's registration order for in-flight picker results.
+        // Append new contracts after the existing import/export launchers.
         private val importPak = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) import(uri, GameFiles.Kind.PAK)
         }
@@ -86,6 +84,10 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         ) { uri ->
             if (uri == null) return@registerForActivityResult
             fileModel.exportSave(uri)
+        }
+
+        private val exportDiagnostics = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            diagnosticsModel.destination(uri)
         }
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {

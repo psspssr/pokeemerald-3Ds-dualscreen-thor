@@ -59,6 +59,14 @@ class DiagnosticsTest {
         return ViewModelProvider(store, ViewModelProvider.AndroidViewModelFactory.getInstance(app))[DiagnosticsExportModel::class.java]
     }
 
+    @Test fun assetAbiMatchesManifestByteOrderAndRejectsIncompleteMetadata() {
+        // Values from published alpha.7 and the combined voxel/diagnostics build.
+        assertEquals("07329dad", Diagnostics.readEngineAbi(byteArrayOf(0xad.toByte(), 0x9d.toByte(), 0x32, 0x07).inputStream()))
+        assertEquals("e85c3cc8", Diagnostics.readEngineAbi(byteArrayOf(0xc8.toByte(), 0x3c, 0x5c, 0xe8.toByte()).inputStream()))
+        assertEquals("00000001", Diagnostics.readEngineAbi(byteArrayOf(1, 0, 0, 0).inputStream()))
+        for (size in listOf(0, 1, 2, 3, 5)) assertNull(Diagnostics.readEngineAbi(ByteArray(size).inputStream()))
+    }
+
     private fun waitUntil(message: String, test: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15_000
         while (SystemClock.uptimeMillis() < deadline) {

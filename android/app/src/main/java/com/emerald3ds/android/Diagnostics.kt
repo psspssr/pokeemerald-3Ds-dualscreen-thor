@@ -10,6 +10,7 @@ import android.view.Display
 import androidx.preference.PreferenceManager
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.InputStream
 import java.time.Instant
 import java.util.ArrayDeque
 import kotlin.math.ceil
@@ -145,17 +146,20 @@ internal object Diagnostics {
 
     private fun engineAbi(context: Context): String? = try {
         // Four generated build-metadata bytes from the APK, never a save or external data pack.
-        context.assets.open("romfs/engine/abi.bin").use { input ->
-            val bytes = ByteArray(4)
-            var count = 0
-            while (count < bytes.size) {
-                val n = input.read(bytes, count, bytes.size - count)
-                if (n < 0) break
-                count += n
-            }
-            if (count == bytes.size) bytes.joinToString("") { "%02x".format(it.toInt() and 255) } else null
-        }
+        context.assets.open("romfs/engine/abi.bin").use(::readEngineAbi)
     } catch (_: java.io.IOException) { null }
+
+    internal fun readEngineAbi(input: InputStream): String? {
+        // Match the build manifest's uint32 ID, not its little-endian byte dump.
+        var value = 0
+        repeat(4) { index ->
+            val byte = input.read()
+            if (byte < 0) return null
+            value = value or (byte shl (index * 8))
+        }
+        if (input.read() != -1) return null
+        return value.toUInt().toString(16).padStart(8, '0')
+    }
 
     private fun statistics(values: List<Long>): Any {
         if (values.isEmpty()) return JSONObject.NULL
