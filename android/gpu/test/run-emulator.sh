@@ -23,7 +23,7 @@ python3 tools/picasso2glsl.py origin/3ds_port/src/voxel/voxel.v.pica -o "$out/vo
 "$compiler" -std=gnu11 -O2 -Wall -Wextra -Werror -D__3DS__ -DCTR_GPU_TEST \
     -Iandroid/gpu/include -Iandroid/shim/include -Iandroid/host/include \
     android/gpu/test/offscreen.c android/gpu/src/*.c android/gpu/src/maths/*.c android/host/src/diagnostics.c \
-    -Wl,--wrap=glUniform4fv -Wl,--wrap=glBindTexture \
+    -Wl,--wrap=glUniform4fv -Wl,--wrap=glBindTexture -Wl,--wrap=GX_BindQueue \
     -Wl,--wrap=glDisableVertexAttribArray -Wl,--wrap=glVertexAttribPointer \
     -lEGL -lGLESv3 -landroid -llog -lm -o "$out/gpu-offscreen-test"
 "${adb_cmd[@]}" push "$out/gpu-offscreen-test" "$out/voxel.shbin" /data/local/tmp/

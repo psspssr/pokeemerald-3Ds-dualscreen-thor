@@ -27,13 +27,21 @@ static const u16 slidingAsset[1]={0};
 static const u16 gSummaryScreen_MoveEffect_Cancel_Tilemap[]={CANCEL_DATA};
 static const u16 slidingAsset[]={SLIDING_DATA};
 #endif
-static unsigned resolves;
+static unsigned resolves, requested;
+static bool8 missing;
 static const void *Port_ResolveAssetPointer(const void *base)
 {
     resolves++;
     if(base==gSummaryScreen_MoveEffect_Cancel_Tilemap) return cancelPayload;
     assert(base==slidingAsset);
     return slidingPayload;
+}
+static const void *Port_ResolveAssetPointerSized(const void *base, unsigned bytes)
+{
+    requested=bytes;
+    const void *payload=Port_ResolveAssetPointer(base);
+    assert(bytes <= (base==gSummaryScreen_MoveEffect_Cancel_Tilemap ? sizeof(cancelPayload) : sizeof(slidingPayload)));
+    return missing ? NULL : payload;
 }
 static void *Alloc(unsigned size) { void *p=malloc(size); assert(p); return p; }
 static void Free(void *p) { free(p); }
@@ -70,6 +78,7 @@ static void fiveRows(void)
         }
 #ifdef PORT_BRIDGE
         assert(resolves==1);
+        assert(requested==60*sizeof(u16));
 #else
         assert(resolves==0);
 #endif
@@ -97,7 +106,7 @@ static void slidingPanels(void)
             assert(destination[i]==expected);
         }
 #ifdef PORT_BRIDGE
-        assert(resolves==(hidden<10));
+        assert(resolves==1 && requested==10*7*sizeof(u16));
 #else
         assert(resolves==0);
 #endif
@@ -109,8 +118,19 @@ int main(int argc,char **argv)
 {
     /* Keep the mock resolver type-checked in an embedded-data build too. */
     (void)Port_ResolveAssetPointer;
+    (void)Port_ResolveAssetPointerSized;
     if(argc<2 || strcmp(argv[1],"sliding")) fiveRows();
     slidingPanels();
+#ifdef PORT_BRIDGE
+    u16 intact[2048];
+    for(unsigned i=0;i<2048;i++) intact[i]=0xDEAD;
+    missing=1;
+    TilemapFiveMovesDisplay(intact,3,0);
+    const struct TilemapCtrl panel={slidingAsset,7,10,7,3,45};
+    ChangeTilemap(&panel,intact,0,0);
+    for(unsigned i=0;i<2048;i++) assert(intact[i]==0xDEAD);
+    puts("PASS unavailable or undersized payload leaves existing tilemaps intact");
+#endif
     puts("PASS summary assets under address/undefined-behavior sanitizers");
     return 0;
 }

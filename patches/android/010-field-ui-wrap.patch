@@ -1,6 +1,6 @@
 --- a/3ds_port/src/3ds_video.c
 +++ b/3ds_port/src/3ds_video.c
-@@ -1767,6 +1767,24 @@
+@@ -1825,6 +1825,24 @@
      return false;
  }
  
@@ -25,7 +25,7 @@
  static void DrawTextBg(unsigned bg)
  {
      unsigned control = Reg(8 + bg * 2), size = control >> 14;
-@@ -1805,6 +1823,7 @@
+@@ -1863,6 +1881,7 @@
          if (bottom > 160) bottom = 160;
      }
      if (bg == 0 && sFieldBanner) right = CTR_GAME_WIDTH;
@@ -33,7 +33,7 @@
      if (right > sClipX1) right = sClipX1;
      if (bottom > sClipY1) bottom = sClipY1;
      if (left < sClipX0) left = sClipX0;
-@@ -2156,6 +2175,7 @@
+@@ -2214,6 +2233,7 @@
      /* The texture repeats as the tilemap wraps. */
      if (bg == 0 && sFieldBanner) x1 = sClipX1;
      y1 = sClipY1 < (int)height ? sClipY1 : (int)height;

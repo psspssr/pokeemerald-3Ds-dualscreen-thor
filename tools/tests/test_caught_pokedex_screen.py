@@ -63,9 +63,11 @@ class CaughtPokedexScreenTests(unittest.TestCase):
 typedef uint8_t bool8;
 typedef void (*IntrCallback)(void);
 typedef void (*TaskFunc)(unsigned);
-static struct { IntrCallback vblankCallback; } gMain;
+static struct { IntrCallback vblankCallback; bool inBattle; } gMain;
 static struct { unsigned location; } gBagPosition;
+static struct { unsigned menuType; } gPartyMenu;
 #define ITEMMENULOCATION_FIELD 0
+#define PARTY_MENU_TYPE_FIELD 0
 #define CTR_LOG_VIDEO 0
 #define CtrLog_Write(...) ((void)0)
 static void SetVBlankCallback(IntrCallback cb) { gMain.vblankCallback=cb; }

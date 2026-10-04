@@ -1,7 +1,7 @@
-# The origin commit imported in origin/ (git subtree, squashed).
-# Rewritten by tools/sync_origin.py; do not edit by hand.
+# The upstream commit imported unchanged into origin/ (squashed git subtree).
+# Updated by tools/sync_origin.py; tree is checked by tools/check_origin.py.
 [origin]
 repository = "https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen"
 branch = "main"
-commit = "4c64da2644223668c60e59c7731347baada7295d"
-tree = "6d909815a5ffaede2e8f31ea0df5d08a6acee73a"
+commit = "cdc77a3d2b0132d57ed29c4887e64b0a41051ded"
+tree = "329472773b9fec6af716eca7e51ed02ed7551383"

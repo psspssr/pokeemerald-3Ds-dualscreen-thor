@@ -1,0 +1,21 @@
+--- a/3ds_port/tests/voxel_runtime_test.py
++++ b/3ds_port/tests/voxel_runtime_test.py
+@@ -1,12 +1,16 @@
+ """Compile actual runtime functions in a host harness, without emulating PICA."""
+ import argparse
++import re
+ from pathlib import Path
+ import subprocess
+ import tempfile
+ ROOT = Path(__file__).resolve().parents[1]
+ def function(source, signature):
+-    start = source.index(signature)
+-    brace = source.index('{', start)
++    signature = signature.rstrip().removesuffix('{').rstrip()
++    match = re.search(re.escape(signature) + r'[^;{}]*\{', source)
++    if match is None:
++        raise ValueError('missing function definition: ' + signature)
++    start, brace = match.start(), match.end() - 1
+     depth, end = 1, brace + 1
+     while depth:
+         depth += (source[end] == '{') - (source[end] == '}')
