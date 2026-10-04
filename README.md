@@ -119,4 +119,6 @@ Actual ARM Android game in an emulator; [capture details](docs/images/README.md)
 
 The Android port's original code is [MIT licensed](LICENSE). Imported projects retain their own terms; see [NOTICE.md](NOTICE.md) and [upstream provenance](origin/docs/PROVENANCE.md). The code licence does not grant rights to Pokémon game assets. Screenshots show the game running in the Android port.
 
-This is an unofficial fan project, unaffiliated with Nintendo, Game Freak, Creatures or The Pokémon Company. Pokémon and Pokémon Emerald are their respective owners' trademarks.
+This is an independent, unofficial fan project. It is not affiliated with, endorsed, sponsored or supported by Nintendo, Game Freak, Creatures, The Pokémon Company, AYN or other hardware vendors. Credits and upstream links identify sources; they do not imply endorsement or support for this Android port. All names, trademarks, logos and game assets belong to their respective owners.
+
+**Provided “as is” and “as available,” without warranties or guarantees of any kind, to the extent permitted by applicable law. No technical support or other services are offered or promised.** There is no commitment to maintenance, updates, fixes, compatibility or continued availability. Use at your own risk and keep backups of your saves. The [licence's warranty disclaimer and limitation of liability](LICENSE) apply within its stated scope; third-party licences and mandatory legal rights remain unaffected.
