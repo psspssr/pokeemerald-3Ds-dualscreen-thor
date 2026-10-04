@@ -1,0 +1,48 @@
+name: Website
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'site/**'
+      - 'tools/build_site.py'
+      - 'tools/publish_site.py'
+      - 'tools/tests/test_site.py'
+      - 'docs/images/**'
+      - 'android/app/src/main/res/drawable-nodpi/ic_launcher_art.png'
+      - '.github/workflows/website.yml'
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Android release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emerald-public-website
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'release')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Site development is independent of the signed game's source tag.
+          ref: dev
+          persist-credentials: false
+      - name: Validate website rendering and publication boundaries
+        run: |
+          python3 -m unittest discover -s tools/tests -p test_site.py -v
+          node --check site/site.js
+      - name: Resolve the latest complete tagged APK, including previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/build_site.py --repository psspssr/pokeemerald-3Ds-dualscreen-thor
+      - name: Publish only the public website files
+        env:
+          WEBSITE_DEPLOY_KEY: ${{ secrets.WEBSITE_DEPLOY_KEY }}
+        run: python3 tools/publish_site.py
