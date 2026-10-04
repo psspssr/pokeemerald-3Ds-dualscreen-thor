@@ -6,9 +6,12 @@
 #include <math.h>
 #include <time.h>
 #include <ctrshim_apt.h>
+#include <ctr_bottom_content.h>
 
 static CtrHostState state=CTR_HOST_RUNNING;
 static unsigned gameSpeed=1;
+static CtrHostBottomMenuContent bottomContent;
+static int voxelAaRequested,voxelAaCapabilities=-1;
 /* Link wrappers count actual backend/driver work without adding counters to
  * the production renderer. Pixel checks below still use the real GLES API. */
 static unsigned uniformCalls,uniformVectors,textureBinds,attributeCalls;
@@ -43,7 +46,11 @@ void CtrMem_Register(CtrMemKind k,void *p,size_t s,void *o) { (void)k;(void)p;(v
 void CtrMem_Unregister(void *p) { (void)p; }
 bool CtrMem_Find(const void *p,CtrMemBlock *out) { (void)p;(void)out;return false; }
 void CtrMem_SetOwner(void *p,void *owner) { (void)p;(void)owner; }
-void CtrHost_GetLayout(CtrHostLayout *layout) { memset(layout,0,sizeof(*layout)); }
+void CtrHost_GetLayout(CtrHostLayout *layout) { memset(layout,0,sizeof(*layout)); layout->voxelAASamples=voxelAaRequested; }
+CtrHostBottomMenuContent CtrHost_BottomMenuContent(void) { return bottomContent; }
+void CtrHost_SetPresentedBottomMenuContent(CtrHostBottomMenuContent content) { (void)content; }
+void CtrHost_SetVoxelAACapabilities(int samples) { voxelAaCapabilities=samples; }
+int CtrHost_VoxelAACapabilities(void) { return voxelAaCapabilities; }
 CtrHostState CtrHost_GetState(void) { return state; }
 unsigned CtrHost_GameSpeed(void) { return gameSpeed; }
 void CtrHost_SetState(CtrHostState s) { state=s; }
@@ -128,6 +135,78 @@ static void presentationRectangles(C3D_RenderTarget *restore)
     C3D_RenderTargetDelete(canvases[0]); C3D_RenderTargetDelete(canvases[1]);
     C3D_FrameDrawOn(restore);
 }
+
+static void presentationSampling(C3D_RenderTarget *restore)
+{
+    /* One-pixel source detail distinguishes a crisp final upscale from a
+     * blurred one; large uniform corner markers cannot detect filtering. */
+    for(unsigned screen=0;screen<2;screen++) {
+        unsigned columns=screen?320:400;
+        gfxSetScreenFormat((gfxScreen_t)screen,GSP_RGB565_OES);
+        u16 *lcd=(u16 *)gfxGetFramebuffer((gfxScreen_t)screen,GFX_LEFT,NULL,NULL);
+        for(unsigned x=0;x<columns;x++) for(unsigned y=0;y<240;y++)
+            lcd[x*240+239-y]=((x^y)&1)?0xffff:0;
+    }
+    gfxFlushBuffers(); gpuFlushScreens();
+    const unsigned widths[]={1920,1240};
+    for(unsigned panel=0;panel<2;panel++) {
+        unsigned width=widths[panel],height=1080;
+        C3D_RenderTarget *canvas=C3D_RenderTargetCreate(width,height,GPU_RB_RGBA8,-1);
+        unsigned char *rgba=malloc((size_t)width*height*4);
+        assert(canvas && rgba);
+        for(unsigned screen=0;screen<2;screen++) for(unsigned mode=0;mode<3;mode++) {
+            /* Switch back to nearest after linear on the same LCD texture. */
+            int filter=mode==1;
+            unsigned columns=screen?320:400,mixed=0,checked=0;
+            C3D_FrameDrawOn(canvas);
+            gpuTestDrawScreen((gfxScreen_t)screen,(CtrHostRect){0,0,width,height},width,height,filter);
+            glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,rgba);
+            assert(glGetError()==GL_NO_ERROR);
+            for(unsigned y=0;y<height;y++) for(unsigned x=0;x<width;x++) {
+                const unsigned char *p=rgba+((size_t)(height-1-y)*width+x)*4;
+                assert(p[0]==p[1] && p[1]==p[2] && p[3]==255);
+                mixed+=p[0]>0 && p[0]<255;
+                if(!filter) {
+                    assert(p[0]==0 || p[0]==255);
+                    unsigned u=(2*x+1)*columns,v=(2*y+1)*240;
+                    /* Exact texel boundaries may choose either neighbour;
+                     * all other samples must match the source pixel centre. */
+                    if(u%(2*width) && v%(2*height)) {
+                        unsigned expected=((u/(2*width))^(v/(2*height)))&1?255:0;
+                        if(p[0]!=expected) {
+                            fprintf(stderr,"FAIL nearest LCD%u panel%ux%u (%u,%u): got%u expected%u\n",
+                                    screen,width,height,x,y,p[0],expected);
+                            abort();
+                        }
+                        checked++;
+                    }
+                }
+            }
+            assert(filter?mixed>width*height/2:mixed==0);
+            printf("PASS LCD%u %ux%u %s: %u blended pixels, %u exact non-boundary source samples\n",
+                   screen,width,height,filter?"linear":"nearest",mixed,checked);
+            checks++;
+        }
+        free(rgba); C3D_RenderTargetDelete(canvas);
+    }
+    /* Final LCD sampling must not override the game's intentional filtering
+     * for voxel effects or the battle scene's fractional downsample. */
+    C3D_Tex smooth={0}; assert(C3D_TexInit(&smooth,8,8,GPU_RGBA5551));
+    for(unsigned y=0;y<8;y++) for(unsigned x=0;x<8;x++)
+        ((u16 *)smooth.data)[morton(x,y)]=(x&1)?0xffff:0x0001;
+    const Tex3DS_SubTexture sub={8,8,0,1,1,0};
+    C2D_Prepare(); C2D_SceneBegin(restore); C2D_ViewReset();
+    C3D_TexSetFilter(&smooth,GPU_LINEAR,GPU_LINEAR);
+    C2D_DrawImageAt((C2D_Image){&smooth,&sub},0,0,0,NULL,2,2);
+    pixel(2,8,191,191,191,255);
+    C3D_TexSetFilter(&smooth,GPU_NEAREST,GPU_NEAREST);
+    C2D_DrawImageAt((C2D_Image){&smooth,&sub},0,0,0,NULL,2,2);
+    pixel(2,8,255,255,255,255);
+    C3D_TexDelete(&smooth);
+}
+
+#include "bottom_content_checks.inc"
+#include "voxel_msaa_checks.inc"
 
 int main(int argc,char **argv)
 {
@@ -400,6 +479,14 @@ int main(int argc,char **argv)
         if(C3D_FrameBegin(0)) C3D_FrameEnd(0); else skipped++;
     }
     assert(skipped==6 && gpuTestPresentCount()==before+2);
+    gameSpeed=8; before=gpuTestPresentCount(); skipped=0;
+    for(unsigned tick=0;tick<16;tick++) {
+        if(C3D_FrameBegin(0)) C3D_FrameEnd(0); else skipped++;
+    }
+    assert(skipped==14 && gpuTestPresentCount()==before+2);
+    before=gpuTestPresentCount();
+    for(unsigned tick=0;tick<16;tick++) gspWaitForVBlank();
+    assert(gpuTestPresentCount()==before+2);
     gameSpeed=3; before=gpuTestPresentCount();
     for(unsigned tick=0;tick<6;tick++) gspWaitForVBlank();
     assert(gpuTestPresentCount()==before+2);
@@ -418,8 +505,10 @@ int main(int argc,char **argv)
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_BOTTOM));
     pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255);
     presentationRectangles(target);
+    presentationSampling(target);
+    bottomContentChecks(target);
+    voxelAaChecks(&program,target);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
-    printf("PASS %d GLES pixel assertions and fast-forward presentation scheduling: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display, full-panel/offset presentation and source-screen switches\n",checks);
     if(argc==3) {
         /* Upstream's atlas is 1024x1024, but a typed glyph can change one
          * 8x8 tile. Measure that real update pattern separately from VBlank. */
@@ -469,5 +558,8 @@ int main(int argc,char **argv)
         C3D_TexDelete(&atlas);
     }
     C2D_Fini(); C3D_Fini(); assert(observedQueue==NULL);
+    voxelAaReinitChecks(&program);
+    assert(observedQueue==NULL);
+    printf("PASS %d GLES pixel assertions and fast-forward presentation scheduling: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display, full-panel/offset presentation, sharp single-pass menus and voxel MSAA/reinitialization\n",checks);
     shaderProgramFree(&program); DVLB_Free(binary); gfxExit(); return 0;
 }

@@ -201,7 +201,7 @@ static void TestAudioAndLifecycle(void)
     CtrNdsp_Render(muted, 200, NDSP_SAMPLE_RATE);
     for (unsigned i = 0; i < 400; ++i) assert(muted[i] == 0.0f);
     assert(wave.status == NDSP_WBUF_DONE && !ndspChnIsPlaying(0) && audioFrames > 0);
-    for (unsigned speed = 2; speed <= 4; ++speed)
+    for (unsigned speed = 2; speed <= 8; ++speed)
     {
         atomic_store(&gameSpeed, speed);
         for (unsigned tick = 0; tick < 32; ++tick)

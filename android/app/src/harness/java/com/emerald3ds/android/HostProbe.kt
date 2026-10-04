@@ -4,4 +4,5 @@ package com.emerald3ds.android
 object HostProbe {
     init { check(NativeBridge.loaded) }
     @JvmStatic external fun snapshot(): IntArray
+    @JvmStatic external fun setVoxelAACapabilities(mask: Int)
 }

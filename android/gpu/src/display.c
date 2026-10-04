@@ -6,6 +6,7 @@
 #include <stdatomic.h>
 #include <ctrshim_apt.h>
 #include <ctr_diagnostics.h>
+#include <ctr_bottom_content.h>
 
 static EGLDisplay display=EGL_NO_DISPLAY;
 static EGLContext context=EGL_NO_CONTEXT;
@@ -51,7 +52,7 @@ double gpuNow(void)
 bool gpuShouldRender(void)
 {
     unsigned speed=CtrHost_GameSpeed();
-    if(speed<1 || speed>4) speed=1;
+    if(speed<1 || speed>8) speed=1;
     if(frameSchedule.speed && frameSchedule.speed!=speed) nextVblank=gpuNow();
     return gpuFrameDue(&frameSchedule,speed);
 }
@@ -93,7 +94,7 @@ bool gpuInit(void)
     pbuffer=eglCreatePbufferSurface(display,config,pbAttributes);
     if(context==EGL_NO_CONTEXT || pbuffer==EGL_NO_SURFACE || !eglMakeCurrent(display,pbuffer,pbuffer,context)) goto fail;
     const char *vs="#version 300 es\nlayout(location=0) in vec2 pos; layout(location=1) in vec2 uv; out vec2 tc; void main(){gl_Position=vec4(pos,0,1);tc=uv;}";
-    const char *fs="#version 300 es\nprecision mediump float;in vec2 tc;uniform sampler2D image;out vec4 color;void main(){color=vec4(texture(image,tc).rgb,1);}";
+    const char *fs="#version 300 es\nprecision highp float;in vec2 tc;uniform sampler2D image;uniform vec4 sampleBounds;out vec4 color;void main(){color=vec4(texture(image,clamp(tc,sampleBounds.xy,sampleBounds.zw)).rgb,1);}";
     GLuint vertex=gpuCompile(GL_VERTEX_SHADER,vs),fragment=gpuCompile(GL_FRAGMENT_SHADER,fs);
     presentProgram=gpuLink(vertex,fragment); glDeleteShader(vertex); glDeleteShader(fragment);
     if(!presentProgram) goto fail;
@@ -117,6 +118,7 @@ bool gpuInit(void)
     listenerRegistered=CtrApt_AddListener(lifecycle,NULL);
     if(!listenerRegistered) goto fail;
     initialized=true;
+    gpuVoxelAaInit();
     nextVblank=gpuNow();
     __android_log_print(ANDROID_LOG_INFO,"EmeraldGPU","GLES %s, %s",glGetString(GL_VERSION),glGetString(GL_RENDERER));
     CtrDiagnostics_Graphics((const char *)glGetString(GL_VENDOR),(const char *)glGetString(GL_RENDERER),(const char *)glGetString(GL_VERSION));
@@ -158,6 +160,7 @@ void gpuShutdown(void)
 {
     if(listenerRegistered) { CtrApt_RemoveListener(lifecycle,NULL); listenerRegistered=false; }
     if(display!=EGL_NO_DISPLAY) {
+        gpuVoxelAaShutdown();
         for(int i=0;i<CTR_HOST_MAX_WINDOWS;i++) destroyWindow(i);
         for(int i=0;i<2;i++) {
             if(screens[i].data) CtrMem_Unregister(screens[i].data);
@@ -216,18 +219,36 @@ void gpuTransferToScreen(GpuTarget *target,gfxScreen_t screen,unsigned width,uns
     glBlitFramebuffer(0,0,width,height,0,0,width,height,GL_COLOR_BUFFER_BIT,GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0); gpuApplyState();
 }
-static void drawScreen(int screen,CtrHostRect rect,int width,int height,int filter)
+static void drawScreenRegion(int screen,CtrHostRect rect,CtrHostRect source,int width,int height,int filter)
 {
     if(rect.w<=0 || rect.h<=0) return;
     float x0=2.f*rect.x/width-1, x1=2.f*(rect.x+rect.w)/width-1;
     float y0=1-2.f*rect.y/height, y1=1-2.f*(rect.y+rect.h)/height;
     /* Rotated LCD geometry: texture x runs bottom-to-top, y runs left-to-right. */
-    const float vertices[]={x0,y0,1,0, x0,y1,0,0, x1,y0,1,1, x1,y1,0,1};
+    float u0=1-source.y/240.f,u1=1-(source.y+source.h)/240.f;
+    float v0=(float)source.x/screens[screen].columns,v1=(float)(source.x+source.w)/screens[screen].columns;
+    const float vertices[]={x0,y0,u0,v0, x0,y1,u1,v0, x1,y0,u0,v1, x1,y1,u1,v1};
+    /* A cropped menu region has real pixels just outside it (decoration or
+     * navigation). Smooth scaling must clamp to this region's texel centres,
+     * not bleed those neighbours into its outermost visible pixels. */
+    glUniform4f(glGetUniformLocation(presentProgram,"sampleBounds"),
+                u1+0.5f/240,v0+0.5f/screens[screen].columns,
+                u0-0.5f/240,v1-0.5f/screens[screen].columns);
     glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,screens[screen].texture);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,filter?GL_LINEAR:GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,filter?GL_LINEAR:GL_NEAREST);
     glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STREAM_DRAW);
     glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+}
+static void drawScreen(int screen,CtrHostRect rect,int width,int height,int filter,
+                       CtrHostBottomMenuContent content)
+{
+    if(screen==GFX_BOTTOM) {
+        CtrBottomContentRegion regions[2];
+        unsigned count=CtrBottomContent_Regions(content,rect,regions);
+        for(unsigned i=0;i<count;i++)
+            drawScreenRegion(screen,regions[i].destination,regions[i].source,width,height,filter);
+    } else drawScreenRegion(screen,rect,(CtrHostRect){0,0,400,240},width,height,filter);
 }
 void gpuPresent(void)
 {
@@ -239,6 +260,7 @@ void gpuPresent(void)
 #endif
     gpuC2DFlush(); gpuFlushScreens();
     CtrHostLayout layout; CtrHost_GetLayout(&layout);
+    CtrHostBottomMenuContent content=layout.expandBottomMenus?CtrHost_BottomMenuContent():CTR_HOST_BOTTOM_ORIGINAL;
     for(int i=0;i<CTR_HOST_MAX_WINDOWS;i++) {
         refreshWindow(i);
         if(windows[i].surface==EGL_NO_SURFACE) continue;
@@ -259,14 +281,18 @@ void gpuPresent(void)
         glEnableVertexAttribArray(0); glEnableVertexAttribArray(1);
         glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(float),(void *)0);
         glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(float),(void *)(2*sizeof(float)));
-        if(layout.topWindow==i) drawScreen(0,layout.top,width,height,layout.filter);
-        if(layout.bottomWindow==i) drawScreen(1,layout.bottom,width,height,layout.filter);
+        if(layout.topWindow==i) drawScreen(0,layout.top,width,height,layout.filter,CTR_HOST_BOTTOM_ORIGINAL);
+        if(layout.bottomWindow==i) drawScreen(1,layout.bottom,width,height,layout.filter,content);
         if(!eglSwapBuffers(display,windows[i].surface)) {
             EGLint error=eglGetError(); GPU_LOG("window %d swap failed: 0x%x",i,error);
             CtrDiagnostics_Error(CTR_DIAG_EGL_SWAP,error);
             if(error==EGL_CONTEXT_LOST) CtrHost_SetState(CTR_HOST_EXITING);
             destroyWindow(i);
-        } else presentedSurfaces++;
+        } else {
+            presentedSurfaces++;
+            if(layout.bottomWindow==i && layout.bottom.w>0 && layout.bottom.h>0)
+                CtrHost_SetPresentedBottomMenuContent(content);
+        }
     }
     eglMakeCurrent(display,pbuffer,pbuffer,context);
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0);
@@ -333,7 +359,7 @@ void gpuTestDrawScreen(gfxScreen_t screen,CtrHostRect rect,int width,int height,
     glEnableVertexAttribArray(0); glEnableVertexAttribArray(1);
     glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(float),(void *)0);
     glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(float),(void *)(2*sizeof(float)));
-    drawScreen(screen,rect,width,height,filter);
+    drawScreen(screen,rect,width,height,filter,CtrHost_BottomMenuContent());
     gpuApplyState();
 }
 #endif

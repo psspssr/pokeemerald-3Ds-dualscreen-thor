@@ -33,6 +33,14 @@
             app:key="filter"
             app:title="@string/pref_filter"
             app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:defaultValue="0"
+            app:entries="@array/voxel_aa_entries"
+            app:entryValues="@array/voxel_aa_values"
+            app:iconSpaceReserved="false"
+            app:key="voxel_aa"
+            app:title="@string/pref_voxel_aa"
+            app:dialogMessage="@string/pref_voxel_aa_description" />
         <SwitchPreferenceCompat
             app:defaultValue="true"
             app:iconSpaceReserved="false"

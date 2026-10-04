@@ -40,6 +40,7 @@ bool C3D_Init(size_t size)
 {
     (void)size;
     if(!gpuInit()) return false;
+    gpuVoxelAaInit();
     /* Citro3D reserves 32 GX entries. Preserve that upload allowance even
      * though GLES performs the transfers directly, without a PICA queue. */
     frameQueue=(gxCmdQueue_s){.maxEntries=32};
@@ -51,6 +52,7 @@ bool C3D_Init(size_t size)
 void C3D_Fini(void)
 {
     gpuC2DFlush();
+    gpuVoxelAaShutdown();
     GX_BindQueue(NULL);
     while(gpuTargets) C3D_RenderTargetDelete(gpuTargets->target);
     while(gpuTextures) C3D_TexDelete(gpuTextures->tex);

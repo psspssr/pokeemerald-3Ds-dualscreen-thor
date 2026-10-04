@@ -47,6 +47,8 @@ typedef struct
 static HostWindow sWindows[CTR_HOST_MAX_WINDOWS];
 
 static CtrHostLayout sLayout;
+static CtrHostBottomMenuContent sBottomMenuContent, sPresentedBottomMenuContent;
+static int sVoxelAACapabilities = -1;
 static CtrHostInput sInput;
 static CtrHostState sState = CTR_HOST_RUNNING;
 static bool sPauseAcknowledged;
@@ -230,14 +232,84 @@ void CtrHost_SetLayout(const CtrHostLayout *layout)
         sLayout.topWindow = 0;
     if (!ValidIndex(sLayout.bottomWindow))
         sLayout.bottomWindow = 0;
+    if (sLayout.voxelAASamples != 2 && sLayout.voxelAASamples != 4)
+        sLayout.voxelAASamples = 0;
     pthread_mutex_unlock(&sLock);
+}
+
+static bool ExpandBottomMenusLocked(void)
+{
+    return sLayout.expandBottomMenus && sLayout.topWindow != sLayout.bottomWindow
+        && sLayout.top.w > 0 && sLayout.top.h > 0 && sLayout.bottom.w > 0 && sLayout.bottom.h > 0
+        && sWindows[sLayout.topWindow].window && sWindows[sLayout.bottomWindow].window;
 }
 
 void CtrHost_GetLayout(CtrHostLayout *out)
 {
     pthread_mutex_lock(&sLock);
     *out = sLayout;
+    out->expandBottomMenus = ExpandBottomMenusLocked();
     pthread_mutex_unlock(&sLock);
+}
+
+bool CtrHost_ExpandBottomMenus(void)
+{
+    pthread_mutex_lock(&sLock);
+    bool expand = ExpandBottomMenusLocked();
+    pthread_mutex_unlock(&sLock);
+    return expand;
+}
+
+static CtrHostBottomMenuContent NormalizeBottomMenuContent(CtrHostBottomMenuContent content)
+{
+    return content == CTR_HOST_BOTTOM_FIELD || content == CTR_HOST_BOTTOM_WHOLE
+        ? content : CTR_HOST_BOTTOM_ORIGINAL;
+}
+
+void CtrHost_SetBottomMenuContent(CtrHostBottomMenuContent content)
+{
+    pthread_mutex_lock(&sLock);
+    sBottomMenuContent = NormalizeBottomMenuContent(content);
+    pthread_mutex_unlock(&sLock);
+}
+
+CtrHostBottomMenuContent CtrHost_BottomMenuContent(void)
+{
+    pthread_mutex_lock(&sLock);
+    CtrHostBottomMenuContent content = ExpandBottomMenusLocked()
+        ? sBottomMenuContent : CTR_HOST_BOTTOM_ORIGINAL;
+    pthread_mutex_unlock(&sLock);
+    return content;
+}
+
+void CtrHost_SetPresentedBottomMenuContent(CtrHostBottomMenuContent content)
+{
+    pthread_mutex_lock(&sLock);
+    sPresentedBottomMenuContent = NormalizeBottomMenuContent(content);
+    pthread_mutex_unlock(&sLock);
+}
+
+CtrHostBottomMenuContent CtrHost_PresentedBottomMenuContent(void)
+{
+    pthread_mutex_lock(&sLock);
+    CtrHostBottomMenuContent content = sPresentedBottomMenuContent;
+    pthread_mutex_unlock(&sLock);
+    return content;
+}
+
+void CtrHost_SetVoxelAACapabilities(int mask)
+{
+    pthread_mutex_lock(&sLock);
+    sVoxelAACapabilities = mask < 0 ? -1 : mask & (CTR_HOST_VOXEL_AA_2X | CTR_HOST_VOXEL_AA_4X);
+    pthread_mutex_unlock(&sLock);
+}
+
+int CtrHost_VoxelAACapabilities(void)
+{
+    pthread_mutex_lock(&sLock);
+    int mask = sVoxelAACapabilities;
+    pthread_mutex_unlock(&sLock);
+    return mask;
 }
 
 void CtrHost_SetInput(const CtrHostInput *input)
@@ -257,7 +329,7 @@ void CtrHost_GetInput(CtrHostInput *out)
 void CtrHost_SetGameplayOptions(unsigned speed, unsigned shinyMultiplier,
                                bool sharedExperience, bool saveBackups, bool protectShinies)
 {
-    if (speed < 1 || speed > 4) speed = 1;
+    if (speed < 1 || speed > 8) speed = 1;
     if (!shinyMultiplier || shinyMultiplier > 64 || (shinyMultiplier & (shinyMultiplier - 1)))
         shinyMultiplier = 1;
     pthread_mutex_lock(&sLock);

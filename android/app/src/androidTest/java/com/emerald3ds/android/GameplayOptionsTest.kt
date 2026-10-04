@@ -9,6 +9,7 @@ import androidx.preference.ListPreference
 import androidx.preference.ListPreferenceDialogFragmentCompat
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -28,10 +29,10 @@ class GameplayOptionsTest {
         instrumentation.runOnMainSync { InputHub.clear() }
     }
 
-    @Test fun optionsAreOptInAndSelectorIsExactlyTwoOrFour() {
+    @Test fun optionsAreOptInAndSelectorOffersTwoFourEight() {
         val options = GameplayOptions.load(context)
         assertEquals(GameplayOptions(), options)
-        assertArrayEquals(arrayOf("2", "4"), context.resources.getStringArray(R.array.qol_speed_values))
+        assertArrayEquals(arrayOf("2", "4", "8"), context.resources.getStringArray(R.array.qol_speed_values))
         val state = FastForwardState { }
         state.configure(options)
         state.toggle(); state.hold(true)
@@ -40,6 +41,50 @@ class GameplayOptionsTest {
             .putString("qol_shiny", "999").commit()
         assertEquals(4, GameplayOptions.load(context).fastForwardSpeed)
         assertEquals(1, GameplayOptions.load(context).shinyMultiplier)
+    }
+
+    @Test fun speedPickerPersistsAllRatesAcrossRecreation() {
+        val labels = arrayOf("2×", "4×", "8×")
+        val speeds = intArrayOf(2, 4, 8)
+        // A saved pre-existing choice survives the newly added option.
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putString("qol_speed", "2").commit()
+        ActivityScenario.launch(SettingsActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val root = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                    as SettingsActivity.SettingsFragment
+                assertTrue(activity.onPreferenceStartScreen(root, root.findPreference<PreferenceScreen>("qol")!!))
+                activity.supportFragmentManager.executePendingTransactions()
+                val fragment = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                    as SettingsActivity.SettingsFragment
+                assertEquals(2, GameplayOptions.load(context).fastForwardSpeed)
+                assertFalse(GameplayOptions.load(context).fastForwardEnabled)
+                fragment.findPreference<SwitchPreferenceCompat>("qol_fast_forward")!!.isChecked = true
+            }
+            for (index in listOf(2, 0, 1)) {
+                scenario.onActivity { activity ->
+                    val fragment = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                        as SettingsActivity.SettingsFragment
+                    val preference = fragment.findPreference<ListPreference>("qol_speed")!!
+                    assertTrue(preference.isEnabled)
+                    fragment.onDisplayPreferenceDialog(preference)
+                    activity.supportFragmentManager.executePendingTransactions()
+                    val chooser = activity.supportFragmentManager.fragments
+                        .filterIsInstance<ListPreferenceDialogFragmentCompat>().single()
+                    val list = (chooser.requireDialog() as AlertDialog).listView
+                    assertEquals(3, list.adapter.count)
+                    for (row in labels.indices) assertEquals(labels[row], list.adapter.getItem(row).toString())
+                    assertTrue(list.performItemClick(null, index, list.adapter.getItemId(index)))
+                }
+                instrumentation.waitForIdleSync()
+                scenario.recreate()
+                scenario.onActivity { activity ->
+                    val fragment = activity.supportFragmentManager.findFragmentById(R.id.settings_container)
+                        as SettingsActivity.SettingsFragment
+                    assertEquals(labels[index], fragment.findPreference<ListPreference>("qol_speed")!!.summary.toString())
+                    assertEquals(speeds[index], GameplayOptions.load(context).fastForwardSpeed)
+                }
+            }
+        }
     }
 
     @Test fun shinyOddsPickerPersistsEachDisplayedRateAcrossRecreation() {
@@ -102,6 +147,35 @@ class GameplayOptionsTest {
             arrayOf(MotionEvent.PointerProperties().apply { id = 0 }), arrayOf(coordinates),
             0, 0, 1f, 1f, device, 0, InputDevice.SOURCE_JOYSTICK, 0)
         try { assertTrue(input.onMotion(event)) } finally { event.recycle() }
+    }
+
+    @Test fun eightTimesToggleAndHoldKeepTheirExistingOwnership() {
+        instrumentation.runOnMainSync {
+            val state = FastForwardState { }.apply {
+                configure(GameplayOptions(fastForwardEnabled = true, fastForwardSpeed = 8))
+            }
+            val input = digitalInput(object : PhysicalInput.Callbacks {
+                override fun onPhysicalInput() {}
+                override fun onMenuKey() {}
+                override fun onToggleBottomScreen() {}
+                override fun onFastForwardToggle() = state.toggle()
+                override fun onFastForwardHold(held: Boolean) = state.hold(held)
+            }).apply { fastForwardEnabled = true }
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
+            assertEquals(8, state.speed)
+            key(input, KeyEvent.KEYCODE_BUTTON_L2, true)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, true)
+            key(input, KeyEvent.KEYCODE_BUTTON_R2, false)
+            assertFalse(state.toggled)
+            assertEquals(8, state.speed) // L2 still owns acceleration.
+            key(input, KeyEvent.KEYCODE_BUTTON_L2, false)
+            assertEquals(1, state.speed)
+            key(input, KeyEvent.KEYCODE_BUTTON_L2, true)
+            assertEquals(8, state.speed)
+            input.clear() // Pause clears a hold without inventing a toggle.
+            assertEquals(1, state.speed)
+        }
     }
 
     @Test fun thorTriggersMergeDigitalAndAnalogAndHoldReleasesCleanly() {

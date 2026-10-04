@@ -93,7 +93,7 @@ Release the shortcut buttons before pressing them again. If you released a
 button while another app had focus, one extra press-and-release may be needed
 after returning.
 
-Enable fast-forward controls and select **2× or 4×** in
+Enable fast-forward controls and select **2× or 4×** (also **8×** in `dev`) in
 **Settings → Gameplay → Quality of life** first. Audio is muted while speeding
 up. [Fast-forward behavior and other options](QUALITY_OF_LIFE.md).
 

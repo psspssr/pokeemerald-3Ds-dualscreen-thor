@@ -7,8 +7,9 @@ from the original Emerald `.sav` format.
 
 ## Fast-forward
 
-Enable **fast-forward controls**, then choose **2× or 4×**. The selected rate
-starts at 4×, but play remains at normal speed until activated:
+Enable **fast-forward controls**, then choose **2× or 4×**; the current `dev`
+build adds **8×**. The selected rate starts at 4×, and existing choices are
+preserved. Play remains at normal speed until activated:
 
 - **R2:** toggle fast-forward on or off.
 - **L2:** hold to fast-forward; release to return to normal unless R2's toggle
@@ -23,7 +24,7 @@ If its release happened outside the app, an extra press-and-release may be
 needed after returning. Releases inside the pause menu and Settings are tracked.
 
 Game logic advances multiple times per displayed frame; the renderer keeps its
-59.83 Hz target rather than asking the displays to draw 240 frames per second.
+59.83 Hz target while higher rates skip intermediate presentations.
 Actual acceleration depends on the device and scene. Audio is deliberately
 muted during acceleration, with queued sound discarded so returning to 1× does
 not play a delayed backlog.

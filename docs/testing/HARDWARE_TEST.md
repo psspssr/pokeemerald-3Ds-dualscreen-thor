@@ -14,7 +14,7 @@ same saved location when comparing builds. Check:
 3. Close the lid during gameplay, wait, reopen, and verify that the game did
    not advance. Repeat after opening the app pause menu: it must remain paused.
 4. Home and return, lock/unlock, and the single-display fallback.
-5. Normal speed, optional 2×/4×, R2 toggle and L2 hold; listen for audio glitches
+5. Normal speed, optional 2×/4× (also 8× in `dev`), R2 toggle and L2 hold; listen for audio glitches
    at normal speed after returning from fast-forward and sleep.
 6. Save normally, quit, relaunch and Continue. Export a copy before testing
    imports or restoring backups.
@@ -66,7 +66,7 @@ Native game rendering uses SurfaceView. Android UI `gfxinfo` FPS or
 Choreographer timing is not a measurement of the game's two display surfaces.
 The optional Android 12+ FrameTimeline source is useful system context, but
 Perfetto documents a [SurfaceView coverage limitation](https://perfetto.dev/docs/data-sources/frametimeline).
-Game presentation intervals also differ from simulation speed at 2×/4× and
+Game presentation intervals also differ from simulation speed at 2×/4×/8× and
 from the panel's actual scanout time. Keep those measurements separate.
 
 References: [Perfetto system tracing](https://perfetto.dev/docs/getting-started/system-tracing)

@@ -61,7 +61,7 @@ Face buttons use Nintendo positions by default, regardless of their printed labe
 | App pause menu | **L1 + R1 together** | Escape |
 | Fast-forward toggle / hold | R2 / L2 | Tab: hold |
 
-Fast-forward requires enabling it and choosing **2× or 4×** in Settings. Touch the bottom screen for game menus. [Full controls sheet, display swapping and optional controls](docs/AYN_THOR.md#controls-and-shortcuts).
+Fast-forward requires enabling it and choosing **2× or 4×** in Settings; `dev` also offers **8×**. Touch the bottom screen for game menus. [Full controls sheet, display swapping and optional controls](docs/AYN_THOR.md#controls-and-shortcuts).
 
 ## Optional extras
 

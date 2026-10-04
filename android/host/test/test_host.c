@@ -10,6 +10,8 @@
 #include <time.h>
 #include "ctr_host.h"
 
+struct ANativeWindow { int id; };
+
 void ANativeWindow_acquire(ANativeWindow *window) { (void)window; }
 void ANativeWindow_release(ANativeWindow *window) { (void)window; }
 int __android_log_print(int priority, const char *tag, const char *format, ...)
@@ -136,14 +138,14 @@ static void TestDefaultsAndConfiguration(void)
     assert(CtrHost_GameSpeed() == 1 && CtrHost_ShinyMultiplier() == 1);
     assert(!CtrHost_SharedExperience() && !CtrHost_SaveBackups() && !CtrHost_ProtectShinies());
     assert(!CtrHost_IsShinyFleePending(0) && !CtrHost_IsShinyFleePending(1));
-    for (unsigned speed = 1; speed <= 4; ++speed)
+    for (unsigned speed = 1; speed <= 8; ++speed)
         for (unsigned shiny = 1; shiny <= 64; shiny *= 2)
         {
             CtrHost_SetGameplayOptions(speed, shiny, true, true, true);
             assert(CtrHost_GameSpeed() == speed && CtrHost_ShinyMultiplier() == shiny);
             assert(CtrHost_SharedExperience() && CtrHost_SaveBackups() && CtrHost_ProtectShinies());
         }
-    const unsigned badSpeed[] = {0, 5, UINT_MAX};
+    const unsigned badSpeed[] = {0, 9, UINT_MAX};
     const unsigned badShiny[] = {0, 3, 6, 63, 65, UINT_MAX};
     for (unsigned i = 0; i < sizeof(badSpeed) / sizeof(*badSpeed); ++i)
     {
@@ -156,14 +158,122 @@ static void TestDefaultsAndConfiguration(void)
         assert(CtrHost_GameSpeed() == 4 && CtrHost_ShinyMultiplier() == 1);
         assert(CtrHost_SharedExperience() && !CtrHost_SaveBackups() && CtrHost_ProtectShinies());
     }
-    CtrHost_SetGameplayOptions(4, 16, true, true, true);
+    CtrHost_SetGameplayOptions(8, 16, true, true, true);
     CtrHost_SetState(CTR_HOST_PAUSED);
     assert(CtrHost_GameSpeed() == 1 && CtrHost_ShinyMultiplier() == 16);
     assert(CtrHost_SharedExperience() && CtrHost_SaveBackups() && CtrHost_ProtectShinies());
     CtrHost_SetState(CTR_HOST_RUNNING);
-    assert(CtrHost_GameSpeed() == 4);
+    assert(CtrHost_GameSpeed() == 8);
     CtrHost_SetGameplayOptions(1, 1, false, false, false);
     assert(!CtrHost_SharedExperience() && !CtrHost_SaveBackups() && !CtrHost_ProtectShinies());
+}
+
+static void TestBottomMenuExpansion(void)
+{
+    struct ANativeWindow mainWindow = {0}, secondWindow = {1};
+    CtrHostLayout observed;
+    CtrHostLayout layout = {
+        .top = {0, 0, 1920, 1080}, .bottom = {0, 0, 1240, 1080},
+        .topWindow = 0, .bottomWindow = 1, .expandBottomMenus = true,
+    };
+
+    assert(!CtrHost_ExpandBottomMenus());
+    assert(CtrHost_BottomMenuContent() == CTR_HOST_BOTTOM_ORIGINAL);
+    assert(CtrHost_PresentedBottomMenuContent() == CTR_HOST_BOTTOM_ORIGINAL);
+    CtrHost_SetBottomMenuContent(CTR_HOST_BOTTOM_FIELD);
+    CtrHost_SetLayout(&layout);
+    assert(!CtrHost_ExpandBottomMenus());
+    assert(CtrHost_BottomMenuContent() == CTR_HOST_BOTTOM_ORIGINAL);
+    CtrHost_SetWindowAt(0, &mainWindow);
+    assert(!CtrHost_ExpandBottomMenus());
+    CtrHost_SetWindowAt(1, &secondWindow);
+    assert(CtrHost_ExpandBottomMenus());
+    CtrHost_GetLayout(&observed);
+    assert(observed.expandBottomMenus);
+    assert(CtrHost_BottomMenuContent() == CTR_HOST_BOTTOM_FIELD);
+    /* Pending content may change during skipped frames; touch must continue
+     * using the old image until the GPU acknowledges an actual swap. */
+    CtrHost_SetPresentedBottomMenuContent(CtrHost_BottomMenuContent());
+    CtrHost_SetBottomMenuContent(CTR_HOST_BOTTOM_WHOLE);
+    assert(CtrHost_BottomMenuContent() == CTR_HOST_BOTTOM_WHOLE);
+    assert(CtrHost_PresentedBottomMenuContent() == CTR_HOST_BOTTOM_FIELD);
+    CtrHost_SetPresentedBottomMenuContent(CtrHost_BottomMenuContent());
+    assert(CtrHost_PresentedBottomMenuContent() == CTR_HOST_BOTTOM_WHOLE);
+
+    layout.topWindow = 1;
+    layout.bottomWindow = 0;
+    CtrHost_SetLayout(&layout);
+    assert(CtrHost_ExpandBottomMenus());
+    /* A disappearing surface disables expansion before the UI relayout. */
+    CtrHost_SetWindowAt(1, NULL);
+    assert(!CtrHost_ExpandBottomMenus());
+    CtrHost_GetLayout(&observed);
+    assert(!observed.expandBottomMenus);
+    assert(CtrHost_BottomMenuContent() == CTR_HOST_BOTTOM_ORIGINAL);
+    assert(CtrHost_PresentedBottomMenuContent() == CTR_HOST_BOTTOM_WHOLE);
+    CtrHost_SetWindowAt(1, &secondWindow);
+    assert(CtrHost_ExpandBottomMenus());
+
+    layout.expandBottomMenus = false; /* Fit, with both displays attached. */
+    CtrHost_SetLayout(&layout);
+    assert(!CtrHost_ExpandBottomMenus());
+    assert(CtrHost_BottomMenuContent() == CTR_HOST_BOTTOM_ORIGINAL);
+    CtrHost_SetPresentedBottomMenuContent(CtrHost_BottomMenuContent());
+    assert(CtrHost_PresentedBottomMenuContent() == CTR_HOST_BOTTOM_ORIGINAL);
+    layout.expandBottomMenus = true;
+    layout.topWindow = layout.bottomWindow = 0;
+    CtrHost_SetLayout(&layout);
+    assert(!CtrHost_ExpandBottomMenus());
+    layout.topWindow = -1;
+    layout.bottomWindow = CTR_HOST_MAX_WINDOWS;
+    CtrHost_SetLayout(&layout);
+    assert(!CtrHost_ExpandBottomMenus());
+    layout.topWindow = 0;
+    layout.bottomWindow = 1;
+    layout.bottom.h = 0;
+    CtrHost_SetLayout(&layout);
+    assert(!CtrHost_ExpandBottomMenus());
+
+    /* An older zero-initialised layout never enables menu expansion. */
+    layout = (CtrHostLayout){0};
+    CtrHost_SetLayout(&layout);
+    assert(!CtrHost_ExpandBottomMenus());
+    CtrHost_SetWindowAt(0, NULL);
+    CtrHost_SetWindowAt(1, NULL);
+    CtrHost_SetBottomMenuContent((CtrHostBottomMenuContent)99);
+    CtrHost_SetPresentedBottomMenuContent((CtrHostBottomMenuContent)-1);
+    assert(CtrHost_BottomMenuContent() == CTR_HOST_BOTTOM_ORIGINAL);
+    assert(CtrHost_PresentedBottomMenuContent() == CTR_HOST_BOTTOM_ORIGINAL);
+}
+
+static void TestVoxelAAConfiguration(void)
+{
+    CtrHostLayout layout = {0}, observed;
+    assert(CtrHost_VoxelAACapabilities() == -1);
+    CtrHost_GetLayout(&observed);
+    assert(observed.voxelAASamples == 0);
+    const int requests[] = {0, 2, 4, 1, 3, 8, -1, INT_MAX};
+    for (unsigned i = 0; i < sizeof(requests) / sizeof(*requests); ++i)
+    {
+        layout.voxelAASamples = requests[i];
+        CtrHost_SetLayout(&layout);
+        CtrHost_GetLayout(&observed);
+        assert(observed.voxelAASamples == (requests[i] == 2 || requests[i] == 4 ? requests[i] : 0));
+    }
+    layout.voxelAASamples = 4;
+    CtrHost_SetLayout(&layout);
+    CtrHost_SetVoxelAACapabilities(CTR_HOST_VOXEL_AA_2X | CTR_HOST_VOXEL_AA_4X);
+    assert(CtrHost_VoxelAACapabilities() == 3);
+    CtrHost_SetVoxelAACapabilities(CTR_HOST_VOXEL_AA_2X);
+    assert(CtrHost_VoxelAACapabilities() == 1);
+    CtrHost_GetLayout(&observed);
+    assert(observed.voxelAASamples == 4); /* Capability fallback never rewrites the request. */
+    CtrHost_SetVoxelAACapabilities(4);
+    assert(CtrHost_VoxelAACapabilities() == 0);
+    CtrHost_SetVoxelAACapabilities(-2);
+    assert(CtrHost_VoxelAACapabilities() == -1);
+    layout.voxelAASamples = 0;
+    CtrHost_SetLayout(&layout);
 }
 
 static void TestAcceptRefuseAndStaleRequests(void)
@@ -243,7 +353,7 @@ static void TestPauseCancelsPrompt(void)
 static void TestExitCancelsPrompt(void)
 {
     PromptCall call;
-    CtrHost_SetGameplayOptions(4, 1, false, false, true);
+    CtrHost_SetGameplayOptions(8, 1, false, false, true);
     unsigned previous = ConfigureUi(DEFERRED, false);
     StartPrompt(&call);
     uint32_t request = WaitForPrompt(previous);
@@ -261,11 +371,13 @@ static void TestExitCancelsPrompt(void)
 
 int main(void)
 {
+    TestBottomMenuExpansion();
+    TestVoxelAAConfiguration();
     TestDefaultsAndConfiguration();
     TestAcceptRefuseAndStaleRequests();
     TestMissingUiAndImmediateAnswers();
     TestPauseCancelsPrompt();
     TestExitCancelsPrompt();
-    puts("host: defaults, QoL normalization, paused speed, accept/refuse, stale IDs, missing UI, immediate/async replies, pause/exit cancellation passed");
+    puts("host: defaults, dual menu expansion, QoL normalization, paused speed, accept/refuse, stale IDs, missing UI, immediate/async replies, pause/exit cancellation passed");
     return 0;
 }

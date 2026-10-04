@@ -270,7 +270,8 @@ Java_com_emerald3ds_android_NativeBridge_nativeSetSurfaceAt(JNIEnv *env, jclass 
 JNIEXPORT void JNICALL
 Java_com_emerald3ds_android_NativeBridge_nativeSetLayout(JNIEnv *env, jclass cls, jintArray top,
                                                          jintArray bottom, jint filter, jint background,
-                                                         jint topWindow, jint bottomWindow)
+                                                         jint topWindow, jint bottomWindow, jboolean expandBottomMenus,
+                                                         jint voxelAASamples)
 {
     CtrHostLayout layout;
 
@@ -282,7 +283,17 @@ Java_com_emerald3ds_android_NativeBridge_nativeSetLayout(JNIEnv *env, jclass cls
     layout.background = (uint32_t)background & 0xFFFFFFu;
     layout.topWindow = topWindow;
     layout.bottomWindow = bottomWindow;
+    layout.expandBottomMenus = expandBottomMenus == JNI_TRUE;
+    layout.voxelAASamples = voxelAASamples;
     CtrHost_SetLayout(&layout);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeVoxelAACapabilities(JNIEnv *env, jclass cls)
+{
+    (void)env;
+    (void)cls;
+    return CtrHost_VoxelAACapabilities();
 }
 
 JNIEXPORT void JNICALL

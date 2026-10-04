@@ -14,6 +14,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.preference.Preference
+import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
 import androidx.lifecycle.ViewModelProvider
@@ -106,12 +107,20 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             click("restore_backup") { showBackups() }
             findPreference<Preference>("data_location")?.summary = files.dataDir.absolutePath
             findPreference<Preference>("about")?.summary = getString(R.string.pref_version, BuildConfig.VERSION_NAME)
+            findPreference<ListPreference>("voxel_aa")?.let(VoxelAntiAliasing::configure)
         }
 
         override fun onResume() {
             super.onResume()
             requireActivity().findViewById<MaterialToolbar>(R.id.toolbar).title =
                 preferenceScreen.title ?: getString(R.string.settings_title)
+            findPreference<ListPreference>("voxel_aa")?.let(VoxelAntiAliasing::configure)
+        }
+
+        override fun onDisplayPreferenceDialog(preference: Preference) {
+            if (preference.key == "voxel_aa" && preference is ListPreference)
+                VoxelAntiAliasing.configure(preference)
+            super.onDisplayPreferenceDialog(preference)
         }
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

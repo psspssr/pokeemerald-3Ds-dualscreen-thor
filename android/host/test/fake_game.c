@@ -51,10 +51,19 @@ JNIEXPORT jintArray JNICALL Java_com_emerald3ds_android_HostProbe_snapshot(JNIEn
         layout.top.x, layout.top.y, layout.top.w, layout.top.h,
         layout.bottom.x, layout.bottom.y, layout.bottom.w, layout.bottom.h,
         atomic_load(&sFrames[0]), atomic_load(&sFrames[1]),
+        CtrHost_ExpandBottomMenus(),
+        layout.voxelAASamples,
     };
     jintArray result = (*env)->NewIntArray(env, sizeof(values) / sizeof(values[0]));
     if (result) (*env)->SetIntArrayRegion(env, result, 0, sizeof(values) / sizeof(values[0]), values);
     return result;
+}
+
+JNIEXPORT void JNICALL Java_com_emerald3ds_android_HostProbe_setVoxelAACapabilities(JNIEnv *env, jclass cls, jint mask)
+{
+    (void)env;
+    (void)cls;
+    CtrHost_SetVoxelAACapabilities(mask);
 }
 
 static long long NowMs(void)

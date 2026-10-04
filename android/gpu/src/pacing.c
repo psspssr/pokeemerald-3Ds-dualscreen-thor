@@ -2,7 +2,7 @@
 
 bool gpuFrameDue(GpuFrameSchedule *schedule,unsigned speed)
 {
-    if(speed<1 || speed>4) speed=1;
+    if(speed<1 || speed>8) speed=1;
     if(schedule->speed!=speed) {
         schedule->speed=speed;
         schedule->remaining=0;

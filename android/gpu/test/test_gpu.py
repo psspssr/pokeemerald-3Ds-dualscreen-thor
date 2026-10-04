@@ -124,7 +124,7 @@ class CpuBackendTests(unittest.TestCase):
         self.assertLessEqual(self.lib.gpuPacingDeadline(resume + 0.080, resume, period), resume + 0.080)
 
     def test_speed_groups_simulation_ticks_without_extra_presentations(self):
-        for speed in (1, 2, 3, 4):
+        for speed in (1, 2, 3, 4, 8):
             with self.subTest(speed=speed):
                 schedule = FrameSchedule()
                 shown = [tick for tick in range(600 * speed)
@@ -138,7 +138,7 @@ class CpuBackendTests(unittest.TestCase):
 
     def test_speed_changes_and_resume_show_an_immediate_frame(self):
         schedule = FrameSchedule()
-        for speed in (4, 2, 3, 1, 4):
+        for speed in (4, 2, 8, 3, 1, 8, 4):
             self.assertTrue(self.lib.gpuFrameDue(ctypes.byref(schedule), speed))
             self.assertEqual(schedule.remaining, speed - 1)
         # Lifecycle clears the schedule; no pre-pause skip survives resumption.
@@ -148,7 +148,7 @@ class CpuBackendTests(unittest.TestCase):
 
     def test_invalid_speed_falls_back_to_normal_cadence(self):
         schedule = FrameSchedule()
-        for speed in (0, 5, 100):
+        for speed in (0, 9, 100):
             for _ in range(5):
                 self.assertTrue(self.lib.gpuFrameDue(ctypes.byref(schedule), speed))
                 self.assertEqual(schedule.speed, 1)

@@ -47,6 +47,8 @@ jobs:
         run: python3 android/host/test/run_host_tests.py
       - name: FPS defaults and persistent option
         run: python3 android/native/test/run_fps_settings_tests.py
+      - name: Expanded bottom-menu touch coordinates
+        run: python3 android/native/test/run_bottom_menu_tests.py
       - name: Texture and shader regressions
         run: python3 android/gpu/test/test_gpu.py
 

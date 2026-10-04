@@ -55,6 +55,8 @@ GLuint gpuUseProgram(bool citro2d);
 void gpuSetTextureParams(C3D_Tex *texture);
 void gpuC2DFlush(void);
 void gpuC2DResetFrame(void);
+void gpuVoxelAaInit(void);
+void gpuVoxelAaShutdown(void);
 double gpuNow(void);
 size_t gpuTextureSize(unsigned width,unsigned height,GPU_TEXCOLOR format);
 bool gpuDecodeTexture(const void *source,unsigned char *rgba,unsigned width,unsigned height,GPU_TEXCOLOR format);

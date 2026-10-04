@@ -31,6 +31,17 @@
         <item>linear</item>
     </string-array>
 
+    <string-array name="voxel_aa_entries">
+        <item>Off</item>
+        <item>2×</item>
+        <item>4×</item>
+    </string-array>
+    <string-array name="voxel_aa_values" translatable="false">
+        <item>0</item>
+        <item>2</item>
+        <item>4</item>
+    </string-array>
+
     <string-array name="controls_visibility_entries">
         <item>Automatic (hide while a gamepad or keyboard is used)</item>
         <item>Always</item>

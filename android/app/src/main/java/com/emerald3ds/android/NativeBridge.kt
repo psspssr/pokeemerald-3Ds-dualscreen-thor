@@ -48,7 +48,9 @@ object NativeBridge {
     @JvmStatic private external fun nativeSetSurfaceAt(index: Int, surface: Surface?)
     @JvmStatic private external fun nativeSetLayout(
         top: IntArray?, bottom: IntArray?, filter: Int, background: Int, topWindow: Int, bottomWindow: Int,
+        expandBottomMenus: Boolean, voxelAASamples: Int,
     )
+    @JvmStatic private external fun nativeVoxelAACapabilities(): Int
     @JvmStatic private external fun nativeSetInput(keys: Int, circleX: Int, circleY: Int, touchX: Int, touchY: Int)
     @JvmStatic private external fun nativeSetState(state: Int)
     @JvmStatic private external fun nativeAwaitPaused(timeoutMs: Int): Boolean
@@ -87,14 +89,20 @@ object NativeBridge {
         if (index == WINDOW_MAIN) nativeSetSurface(surface) else nativeSetSurfaceAt(index, surface)
     }
 
-    fun setLayout(layout: ScreenLayout.Result, linearFilter: Boolean, background: Int) {
+    fun setLayout(layout: ScreenLayout.Result, linearFilter: Boolean, background: Int, voxelAASamples: Int = 0) {
         if (!loaded) return
         nativeSetLayout(
             layout.top?.let { intArrayOf(it.left, it.top, it.width(), it.height()) },
             layout.bottom?.let { intArrayOf(it.left, it.top, it.width(), it.height()) },
             if (linearFilter) 1 else 0, background and 0xFFFFFF, layout.topWindow, layout.bottomWindow,
+            layout.expandBottomMenus, voxelAASamples,
         )
     }
+
+    /** Cached renderer capabilities only; this never queries GL on the UI thread. */
+    internal fun voxelAACapabilities(): Int = try {
+        if (loaded) nativeVoxelAACapabilities() else -1
+    } catch (_: UnsatisfiedLinkError) { -1 }
 
     fun setInput(keys: Int, circleX: Int, circleY: Int, touchX: Int, touchY: Int) {
         if (loaded) nativeSetInput(keys, circleX, circleY, touchX, touchY)

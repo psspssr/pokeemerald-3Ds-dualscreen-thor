@@ -138,23 +138,37 @@ class DualDisplayTest {
             val normal = ScreenLayout.dual(1920, 1080, Rect(), 1240, 1080, settings)
             assertEquals(Rect(0, 0, 1920, 1080), normal.top)
             assertEquals(Rect(0, 0, 1240, 1080), normal.bottom)
+            assertTrue(normal.expandBottomMenus)
             val swapped = ScreenLayout.dual(1920, 1080, Rect(), 1240, 1080,
                 settings.copy(topOnSecondDisplay = true))
             assertEquals(Rect(0, 0, 1240, 1080), swapped.top)
             assertEquals(Rect(0, 0, 1920, 1080), swapped.bottom)
             assertEquals(NativeBridge.WINDOW_SECOND, swapped.topWindow)
             assertEquals(NativeBridge.WINDOW_MAIN, swapped.bottomWindow)
+            assertTrue(swapped.expandBottomMenus)
         }
         prefs.edit().putString("dual_scaling", "fit").commit()
         val fit = AppSettings.load(context)
         val nativeAspect = ScreenLayout.dual(1920, 1080, Rect(), 1240, 1080, fit)
         assertEquals(Rect(60, 0, 1860, 1080), nativeAspect.top)
         assertEquals(Rect(0, 75, 1240, 1005), nativeAspect.bottom)
+        assertFalse(nativeAspect.expandBottomMenus)
         for ((width, height) in listOf(1080 to 1920, 1920 to 1080)) {
             val phoneFill = ScreenLayout.single(width, height, Rect(), fill, 250, true, false)
             val phoneFit = ScreenLayout.single(width, height, Rect(), fit, 250, true, false)
             assertEquals(phoneFit.top, phoneFill.top)
             assertEquals(phoneFit.bottom, phoneFill.bottom)
+            assertFalse(phoneFill.expandBottomMenus)
+            assertFalse(phoneFit.expandBottomMenus)
+        }
+    }
+
+    @Test fun fullPanelPreferenceKeepsSingleDisplayMenusAtOriginalSize() {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putString("dual_scaling", "fill").commit()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitUntil("single display was not rendered") { HostProbe.snapshot()[16] > 0 }
+            assertNull(presentation(scenario))
+            assertEquals(0, HostProbe.snapshot()[18])
         }
     }
 
@@ -166,6 +180,7 @@ class DualDisplayTest {
             val p = presentation(scenario)!!
             val state = HostProbe.snapshot()
             assertArrayEquals(intArrayOf(0, 0, 1240, 1080), state.sliceArray(12..15))
+            assertEquals(1, state[18])
             lateinit var main: SurfaceView
             scenario.onActivity { main = it.findViewById(R.id.game_surface) }
             waitUntil("system bars remained visible over a full-panel window") {
@@ -318,6 +333,7 @@ class DualDisplayTest {
         addDisplay()
         ActivityScenario.launch(GameActivity::class.java).use { scenario ->
             waitDual(scenario)
+            assertEquals(1, HostProbe.snapshot()[18])
             val down = SystemClock.uptimeMillis()
             touch(display!!.display.displayId, MotionEvent.ACTION_DOWN, 930f, 540f, down)
             assertEquals(CtrKeys.TOUCH, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
@@ -327,12 +343,14 @@ class DualDisplayTest {
             waitDual(scenario)
             assertEquals(0, HostProbe.snapshot()[1])
             assertArrayEquals(intArrayOf(0, 75, 1240, 930), HostProbe.snapshot().sliceArray(12..15))
+            assertEquals(0, HostProbe.snapshot()[18])
 
             scenario.moveToState(Lifecycle.State.CREATED)
             prefs.edit().putString("dual_scaling", "fill").putString("top_display", "second").commit()
             scenario.moveToState(Lifecycle.State.RESUMED)
             waitUntil("full-panel assignment did not swap") {
-                presentation(scenario)?.surfaceWidth == 1240 && HostProbe.snapshot()[6] == NativeBridge.WINDOW_SECOND
+                val state = HostProbe.snapshot()
+                presentation(scenario)?.surfaceWidth == 1240 && state[6] == NativeBridge.WINDOW_SECOND && state[18] == 1
             }
             lateinit var main: SurfaceView
             scenario.onActivity { main = it.findViewById(R.id.game_surface) }
@@ -356,6 +374,7 @@ class DualDisplayTest {
             waitUntil("main display did not rotate") { main.width != initialWidth }
             waitUntil("rotation retained a touch from old coordinates") { HostProbe.snapshot()[1] and CtrKeys.TOUCH == 0 }
             assertArrayEquals(intArrayOf(0, 0, main.width, main.height), HostProbe.snapshot().sliceArray(12..15))
+            waitUntil("rotated dual layout lost menu expansion") { HostProbe.snapshot()[18] == 1 }
             touch(0, MotionEvent.ACTION_UP, x, y, mainDown)
 
             inst.runOnMainSync { display!!.resize(1000, 1000, 240) }
@@ -363,13 +382,16 @@ class DualDisplayTest {
                 presentation(scenario)?.surfaceWidth == 1000 && presentation(scenario)?.surfaceHeight == 1000
             }
             assertArrayEquals(intArrayOf(0, 0, 1000, 1000), HostProbe.snapshot().sliceArray(8..11))
+            assertEquals(1, HostProbe.snapshot()[18])
             removeDisplay()
             waitUntil("full-panel display loss did not fall back") { presentation(scenario) == null && HostProbe.snapshot()[6] == 0 }
             assertEquals(0, HostProbe.snapshot()[1])
             assertTrue(HostProbe.snapshot()[15] < main.height)
+            assertEquals(0, HostProbe.snapshot()[18])
             addDisplay()
             waitUntil("full-panel display did not reattach") {
-                presentation(scenario)?.surfaceWidth == 1240 && HostProbe.snapshot()[6] == NativeBridge.WINDOW_SECOND
+                val state = HostProbe.snapshot()
+                presentation(scenario)?.surfaceWidth == 1240 && state[6] == NativeBridge.WINDOW_SECOND && state[18] == 1
             }
             assertArrayEquals(intArrayOf(0, 0, 1240, 1080), HostProbe.snapshot().sliceArray(8..11))
             assertArrayEquals(intArrayOf(0, 0, main.width, main.height), HostProbe.snapshot().sliceArray(12..15))

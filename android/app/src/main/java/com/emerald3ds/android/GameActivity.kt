@@ -509,7 +509,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             val reserve = if (controlsVisible) overlay.portraitReserve(settings.controlsScale) else 0
             ScreenLayout.single(w, h, safe, settings, reserve, controlsVisible, bottomToggled)
         }
-        NativeBridge.setLayout(layout, settings.linearFilter, BACKGROUND)
+        NativeBridge.setLayout(layout, settings.linearFilter, BACKGROUND, settings.voxelAASamples)
         val showToggle = !dual && w > h && settings.landscapeLayout == AppSettings.LANDSCAPE_TOP_ONLY
         overlay.configure(
             settings, layout.topIn(NativeBridge.WINDOW_MAIN), layout.bottomIn(NativeBridge.WINDOW_MAIN),

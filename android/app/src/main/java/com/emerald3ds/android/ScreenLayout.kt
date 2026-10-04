@@ -15,6 +15,8 @@ object ScreenLayout {
         val bottom: Rect?,
         val topWindow: Int = NativeBridge.WINDOW_MAIN,
         val bottomWindow: Int = NativeBridge.WINDOW_MAIN,
+        /** Native menu content uses its whole area only in an active dual Fill layout. */
+        val expandBottomMenus: Boolean = false,
     ) {
         fun topIn(window: Int): Rect? = if (topWindow == window) top else null
         fun bottomIn(window: Int): Rect? = if (bottomWindow == window) bottom else null
@@ -110,6 +112,8 @@ object ScreenLayout {
         val mainArea = Rect(mainSafe.left, mainSafe.top, mainWidth - mainSafe.right, mainHeight - mainSafe.bottom)
         val secondArea = Rect(0, 0, secondWidth, secondHeight)
         val integer = settings.integerScaling
+        val expandMenus = settings.dualScaling == DualScaling.FILL &&
+            mainArea.width() > 0 && mainArea.height() > 0 && secondWidth > 0 && secondHeight > 0
         fun screen(area: Rect, width: Float): Rect =
             if (settings.dualScaling == DualScaling.FILL) Rect(area)
             else fitCentered(area, width, H, integer)
@@ -117,11 +121,13 @@ object ScreenLayout {
             Result(
                 screen(secondArea, TW), screen(mainArea, BW),
                 NativeBridge.WINDOW_SECOND, NativeBridge.WINDOW_MAIN,
+                expandBottomMenus = expandMenus,
             )
         } else {
             Result(
                 screen(mainArea, TW), screen(secondArea, BW),
                 NativeBridge.WINDOW_MAIN, NativeBridge.WINDOW_SECOND,
+                expandBottomMenus = expandMenus,
             )
         }
     }

@@ -18,7 +18,7 @@ data class GameplayOptions(
             return GameplayOptions(
                 fastForwardEnabled = prefs.getBoolean("qol_fast_forward", false),
                 fastForwardSpeed = prefs.getString("qol_speed", "4")?.toIntOrNull()
-                    ?.takeIf { it == 2 || it == 4 } ?: 4,
+                    ?.takeIf { it == 2 || it == 4 || it == 8 } ?: 4,
                 shinyMultiplier = prefs.getString("qol_shiny", "1")?.toIntOrNull()
                     ?.takeIf { it in setOf(1, 2, 4, 8, 16, 32, 64) } ?: 1,
                 sharedExperience = prefs.getBoolean("qol_shared_exp", false),

@@ -59,7 +59,20 @@ typedef struct
     /* Which window (0 or 1) each screen is drawn into. Zero-initialised:
      * both screens share window 0. */
     int topWindow, bottomWindow;
+    /* Expand supported GBA menu content within the bottom canvas in dual
+     * Fill mode. Zero-initialised callers retain the original menu layout. */
+    bool expandBottomMenus;
+    /* Requested voxel-only MSAA samples: 0 (off), 2 or 4. The renderer may
+     * choose a lower supported count; the stored request stays unchanged. */
+    int voxelAASamples;
 } CtrHostLayout;
+
+typedef enum
+{
+    CTR_HOST_BOTTOM_ORIGINAL,
+    CTR_HOST_BOTTOM_FIELD,
+    CTR_HOST_BOTTOM_WHOLE,
+} CtrHostBottomMenuContent;
 
 /* ── Written by the JNI bridge ──────────────────────────────────────────── */
 void CtrHost_SetPaths(const char *romfsDir, const char *sdmcDir);
@@ -98,6 +111,21 @@ const char *CtrHost_RomfsDir(void);
 const char *CtrHost_SdmcDir(void);
 void CtrHost_GetInput(CtrHostInput *out);
 void CtrHost_GetLayout(CtrHostLayout *out);
+/* Effective only with two attached windows and visible screen rectangles. */
+bool CtrHost_ExpandBottomMenus(void);
+/* Game thread publishes the content currently held in the bottom LCD buffer.
+ * The GPU reads its effective mode, then acknowledges it only after a
+ * successful bottom-screen swap. Input uses that last-presented mode so a
+ * skipped fast-forward frame cannot move hit targets ahead of the picture. */
+void CtrHost_SetBottomMenuContent(CtrHostBottomMenuContent content);
+CtrHostBottomMenuContent CtrHost_BottomMenuContent(void);
+void CtrHost_SetPresentedBottomMenuContent(CtrHostBottomMenuContent content);
+CtrHostBottomMenuContent CtrHost_PresentedBottomMenuContent(void);
+enum { CTR_HOST_VOXEL_AA_2X = 1, CTR_HOST_VOXEL_AA_4X = 2 };
+/* Renderer publishes supported sample counts after querying its GL context.
+ * -1 means not known yet; 0 means neither optional level is supported. */
+void CtrHost_SetVoxelAACapabilities(int mask);
+int CtrHost_VoxelAACapabilities(void);
 CtrHostState CtrHost_GetState(void);
 /* Blocks while paused. Returns the state it leaves in (RUNNING or EXITING). */
 CtrHostState CtrHost_WaitWhilePaused(void);
