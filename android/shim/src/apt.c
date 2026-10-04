@@ -61,6 +61,15 @@ Result APT_CheckNew3DS(bool *out)
     return 0;
 }
 
+Result APT_SetAppCpuTimeLimit(u32 percent)
+{
+    /* Upstream requests a share of the 3DS system core before creating its
+     * asset-streaming worker. Android's scheduler already runs those pthreads
+     * across available cores; there is no separate reserved system core. */
+    (void)percent;
+    return 0;
+}
+
 void aptHook(aptHookCookie *cookie, aptHookFn callback, void *param)
 {
     if (cookie == NULL || callback == NULL)

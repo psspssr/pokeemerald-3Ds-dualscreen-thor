@@ -148,6 +148,8 @@ static void Worker(void *unused)
 }
 static void TestThreads(void)
 {
+    /* The voxel stream's new system-core hint must still allow workers. */
+    assert(APT_SetAppCpuTimeLimit(30) == 0);
     LightEvent_Init(&gate, RESET_STICKY);
     LightLock_Init(&counterLock);
     Thread a = threadCreate(Worker, NULL, 8192, 0x30, -1, false);

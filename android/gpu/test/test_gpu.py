@@ -188,5 +188,69 @@ class ShaderTests(unittest.TestCase):
         self.assertIn("p_position.w = (((v0).wwww)).w;", glsl)
 
 
+class VoxelUploadQueueTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory(prefix="emerald-upload-queue-")
+        cls.addClassCleanup(cls.temp.cleanup)
+        work = Path(cls.temp.name)
+        source = (ROOT / "origin/3ds_port/src/3ds_video.c").read_text()
+        begin = source.index("static gxCmdQueue_s *sFrameQueue;")
+        end = source.index("\n/* The voxel overworld", begin)
+        fixture = work / "queue.c"
+        fixture.write_text('#include "gx_queue.h"\n#include <stddef.h>\n' + source[begin:end] + r'''
+static gxCmdQueue_s queue;
+void reset(unsigned reserve)
+{
+    queue=(gxCmdQueue_s){.maxEntries=32}; sUploadCommands=0; sRenderReserve=reserve;
+    GX_BindQueue(&queue);
+}
+unsigned used(void) { return queue.numEntries; }
+void unbind(void) { GX_BindQueue(NULL); }
+''')
+        library = work / "queue.so"
+        subprocess.run(["cc", "-shared", "-fPIC", "-Wall", "-Wextra", "-Werror",
+                        "-I" + str(ROOT / "android/gpu/src"),
+                        "-I" + str(ROOT / "android/gpu/include"),
+                        "-I" + str(ROOT / "android/shim/include"),
+                        str(fixture), str(ROOT / "android/gpu/src/gx_queue.c"),
+                        "-Wl,--wrap=GX_BindQueue", "-o", str(library)], check=True)
+        cls.lib = ctypes.CDLL(str(library))
+        cls.lib.reset.argtypes = [ctypes.c_uint]
+        cls.lib.CtrVideo_TryVoxelUpload.restype = ctypes.c_bool
+        cls.lib.CtrVideo_VoxelUploadsLeft.restype = ctypes.c_uint
+        cls.lib.used.restype = ctypes.c_uint
+
+    def test_world_and_battle_allowances_use_upstream_reserve(self):
+        for reserve, allowance in ((24, 4), (28, 2)):
+            self.lib.reset(reserve)
+            self.assertEqual(self.lib.CtrVideo_VoxelUploadsLeft(), allowance)
+            for left in range(allowance - 1, -1, -1):
+                self.assertTrue(self.lib.CtrVideo_TryVoxelUpload())
+                self.lib.gpuGxRecordCommand()  # split
+                self.lib.gpuGxRecordCommand()  # texture copy
+                self.assertEqual(self.lib.CtrVideo_VoxelUploadsLeft(), left)
+            self.assertFalse(self.lib.CtrVideo_TryVoxelUpload())
+
+    def test_other_commands_reduce_capacity_and_counts_saturate(self):
+        self.lib.reset(24)
+        for _ in range(4):
+            self.lib.gpuGxRecordCommand()
+        self.assertEqual(self.lib.CtrVideo_VoxelUploadsLeft(), 2)
+        for _ in range(40):
+            self.lib.gpuGxRecordCommand()
+        self.assertEqual(self.lib.used(), 32)
+        self.assertFalse(self.lib.CtrVideo_TryVoxelUpload())
+        self.assertEqual(self.lib.CtrVideo_VoxelUploadsLeft(), 0)
+
+    def test_unbound_queue_never_claims_upload_capacity(self):
+        self.lib.reset(24)
+        self.lib.unbind()
+        self.lib.gpuGxRecordCommand()
+        self.assertEqual(self.lib.used(), 0)
+        self.assertFalse(self.lib.CtrVideo_TryVoxelUpload())
+        self.assertEqual(self.lib.CtrVideo_VoxelUploadsLeft(), 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

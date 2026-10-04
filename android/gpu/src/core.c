@@ -1,4 +1,5 @@
 #include "gpu_internal.h"
+#include "gx_queue.h"
 #include <stdio.h>
 
 /* Origin deliberately reads these two fields of Citro3D 1.7.1's context when
@@ -29,6 +30,7 @@ static C3D_AttrInfo drawAttributes;
 static C3D_BufInfo drawBufferLayout;
 static bool drawLayoutValid;
 static unsigned frameCount;
+static gxCmdQueue_s frameQueue;
 static double frameStart,drawingTime;
 static void (*endHook)(void *);
 static void *endHookParam;
@@ -38,6 +40,10 @@ bool C3D_Init(size_t size)
 {
     (void)size;
     if(!gpuInit()) return false;
+    /* Citro3D reserves 32 GX entries. Preserve that upload allowance even
+     * though GLES performs the transfers directly, without a PICA queue. */
+    frameQueue=(gxCmdQueue_s){.maxEntries=32};
+    GX_BindQueue(&frameQueue);
     for(int i=0;i<6;i++) C3D_TexEnvInit(&gpuEnvs[i]);
     if(!drawVao) { glGenVertexArrays(1,&drawVao); glGenBuffers(12,drawVbo); drawLayoutValid=false; }
     gpuApplyState(); return true;
@@ -45,6 +51,7 @@ bool C3D_Init(size_t size)
 void C3D_Fini(void)
 {
     gpuC2DFlush();
+    GX_BindQueue(NULL);
     while(gpuTargets) C3D_RenderTargetDelete(gpuTargets->target);
     while(gpuTextures) C3D_TexDelete(gpuTextures->tex);
     glDeleteVertexArrays(1,&drawVao); glDeleteBuffers(12,drawVbo); drawVao=0; drawLayoutValid=false;
@@ -188,13 +195,14 @@ bool C3D_FrameBegin(u8 flags)
     /* Logic, input, audio synthesis and VBlank have already advanced. Only
      * skip the picture; the next submitted frame keeps the 59.83 Hz clock. */
     if(!gpuShouldRender()) return false;
+    frameQueue.numEntries=frameQueue.curEntry=frameQueue.lastEntry=0;
     frameStart=gpuNow();
     for(GpuTarget *t=gpuTargets;t;t=t->next) t->target->used=false;
     gpuC2DResetFrame(); return true;
 }
 bool C3D_FrameDrawOn(C3D_RenderTarget *target)
 { if(!target) return false; C3D_SetFrameBuf(&target->frameBuf); target->used=true; return gpuTarget!=NULL; }
-void C3D_FrameSplit(u8 flags) { (void)flags; gpuC2DFlush(); glFlush(); }
+void C3D_FrameSplit(u8 flags) { (void)flags; gpuC2DFlush(); glFlush(); gpuGxRecordCommand(); }
 void C3D_FrameEnd(u8 flags)
 {
     (void)flags; gpuC2DFlush();
@@ -213,6 +221,7 @@ float C3D_GetProcessingTime(void) { return drawingTime; }
 
 void C3D_SyncTextureCopy(u32 *input,u32 inputDim,u32 *output,u32 outputDim,u32 size,u32 flags)
 {
+    gpuGxRecordCommand();
     (void)flags; gpuC2DFlush();
     if(!input || !output) return;
     /* TextureCopy dimensions describe 16-byte runs and gaps, not pixel dimensions. */
@@ -234,6 +243,7 @@ void C3D_SyncTextureCopy(u32 *input,u32 inputDim,u32 *output,u32 outputDim,u32 s
 }
 void C3D_SyncDisplayTransfer(u32 *input,u32 inDim,u32 *output,u32 outDim,u32 flags)
 {
+    gpuGxRecordCommand();
     gpuC2DFlush();
     for(GpuTarget *t=gpuTargets;t;t=t->next) if(t->target->frameBuf.colorBuf==input) {
         for(int i=0;i<2;i++) if((void *)gfxGetFramebuffer((gfxScreen_t)i,GFX_LEFT,NULL,NULL)==output) {
@@ -245,6 +255,7 @@ void C3D_SyncDisplayTransfer(u32 *input,u32 inDim,u32 *output,u32 outDim,u32 fla
 }
 void C3D_SyncMemoryFill(u32 *a,u32 av,u32 *ae,u16 ac,u32 *b,u32 bv,u32 *be,u16 bc)
 {
+    gpuGxRecordCommand();
     gpuC2DFlush(); u32 *starts[]={a,b},*ends[]={ae,be},values[]={av,bv}; u16 controls[]={ac,bc};
     for(int i=0;i<2;i++) {
         if(!starts[i] || !ends[i] || ends[i]<starts[i]) continue;

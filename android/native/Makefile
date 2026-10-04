@@ -131,6 +131,9 @@ $(OBJECTS) $(ANDROID_OBJS): $(ANDROID_NATIVE)/Makefile $(CC)
 LD_BFD := arm-linux-gnueabi-ld.bfd
 # libc file functions the shim redirects (romfs:/, sdmc:/), one per line.
 WRAP_SYMBOLS := $(strip $(shell cat "$(ANDROID_DIR)/shim/wrap.txt" 2>/dev/null | sed 's/\#.*//'))
+# Preserve upstream public SDK interception hooks as well as filesystem shims.
+ANDROID_COMMA := ,
+WRAP_SYMBOLS += $(patsubst -Wl$(ANDROID_COMMA)--wrap=%,%,$(filter -Wl$(ANDROID_COMMA)--wrap=%,$(LDFLAGS)))
 ANDROID_LIBS := -lc -lm -ldl -llog -landroid -lEGL -lGLESv3 -laaudio
 # -pie, not -shared: see elf_dyn.py. Only the JNI entry points are exported.
 ANDROID_LDFLAGS := -m armelf_linux_eabi -pie --no-dynamic-linker -e 0 -soname libemerald.so \

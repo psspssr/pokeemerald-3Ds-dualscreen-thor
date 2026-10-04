@@ -12,6 +12,10 @@ static unsigned gameSpeed=1;
 /* Link wrappers count actual backend/driver work without adding counters to
  * the production renderer. Pixel checks below still use the real GLES API. */
 static unsigned uniformCalls,uniformVectors,textureBinds,attributeCalls;
+static gxCmdQueue_s *observedQueue;
+void __real_GX_BindQueue(gxCmdQueue_s *queue);
+void __wrap_GX_BindQueue(gxCmdQueue_s *queue)
+{ observedQueue=queue; __real_GX_BindQueue(queue); }
 void __real_glUniform4fv(GLint location,GLsizei count,const GLfloat *value);
 void __wrap_glUniform4fv(GLint location,GLsizei count,const GLfloat *value)
 { uniformCalls++; uniformVectors+=(unsigned)count; __real_glUniform4fv(location,count,value); }
@@ -129,6 +133,17 @@ int main(int argc,char **argv)
 {
     assert(argc==2 || (argc==3 && !strcmp(argv[2],"--benchmark")));
     assert(C3D_Init(0)); assert(C2D_Init(128)); C2D_Prepare();
+    /* New upstream discovers upload allowance through this exact link hook. */
+    assert(observedQueue && observedQueue->maxEntries==32);
+    assert(C3D_FrameBegin(0)); assert(observedQueue->numEntries==0);
+    C3D_FrameSplit(0); assert(observedQueue->numEntries==1);
+    u32 queuedInput=0x12345678,queuedOutput=0;
+    C3D_SyncTextureCopy(&queuedInput,0,&queuedOutput,0,sizeof(queuedInput),0);
+    assert(queuedOutput==queuedInput && observedQueue->numEntries==2);
+    C3D_FrameEnd(0);
+    assert(C3D_FrameBegin(0)); assert(observedQueue->numEntries==0);
+    C3D_FrameEnd(0);
+    puts("PASS wrapped public GX queue binding, split/copy accounting and new-frame reset");
     /* A byte sentinel cannot represent "not uploaded": all-white CPU data
      * must initialize the LCD even if it equals that sentinel byte-for-byte. */
     u8 *topLcd=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,NULL,NULL);
@@ -453,5 +468,6 @@ int main(int argc,char **argv)
         }
         C3D_TexDelete(&atlas);
     }
-    C2D_Fini(); C3D_Fini(); shaderProgramFree(&program); DVLB_Free(binary); gfxExit(); return 0;
+    C2D_Fini(); C3D_Fini(); assert(observedQueue==NULL);
+    shaderProgramFree(&program); DVLB_Free(binary); gfxExit(); return 0;
 }
