@@ -1,0 +1,24 @@
+--- a/3ds_port/src/3ds_video.c
++++ b/3ds_port/src/3ds_video.c
+@@ -2,6 +2,9 @@
+  * into a texture atlas and submits geometry. All rasterization, transforms,
+  * transparency, priority composition and scaling happen on the GPU. */
+ #include <citro2d.h>
++#ifdef __ANDROID__
++#include <ctr_gpu_voxel.h>
++#endif
+ #include <math.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -5808,6 +5811,11 @@
+     if (!voxel && !blank) LayersRender();
+     PORT_PROF_END(layers, PORT_PROF_LAYERS);
+     PORT_PROF_BEGIN(draw);
++#ifdef __ANDROID__
++    /* Retain the held top image while a bottom-only menu uses the native
++     * compositor; otherwise enlarge only a frame containing voxel geometry. */
++    CtrGpu_ConfigureVoxelTargets(sLogical, sTop, !bottom && (voxel || sBattleWorld), bottom);
++#endif
+ 
+     if (bottom)
+     {

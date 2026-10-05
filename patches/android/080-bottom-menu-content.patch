@@ -1,6 +1,6 @@
 --- a/3ds_port/src/3ds_video.c
 +++ b/3ds_port/src/3ds_video.c
-@@ -9,6 +9,7 @@
+@@ -12,6 +12,7 @@
  #include "3ds_platform.h"
  #include "3ds_video.h"
  #include "3ds_data.h"
@@ -8,7 +8,7 @@
  #include "../compat/port_prof.h"
  
  /* Public queue passed by libctru, never a cast of Citro3D's private context.
-@@ -4214,6 +4215,10 @@
+@@ -4217,6 +4218,10 @@
      }
      C2D_Flush();
      C3D_FrameSplit(0);
@@ -19,7 +19,7 @@
  }
  
  #if CTR_VOXEL_ENABLED
-@@ -5590,6 +5595,7 @@
+@@ -5593,6 +5598,7 @@
      sBottomInUse = bottom;
      if (sHoldTop && !bottom)
      {
@@ -27,7 +27,7 @@
          gspWaitForVBlank();
          ++sStats.frames;
          return;
-@@ -5655,6 +5661,7 @@
+@@ -5658,6 +5664,7 @@
      ScenePrepare();
      uint64_t waitStart = svcGetSystemTick();
      if (!C3D_FrameBegin(C3D_FRAME_SYNCDRAW)) return;
