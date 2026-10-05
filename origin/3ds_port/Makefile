@@ -34,7 +34,7 @@ ROOT := ..
 SCRIPTS := ../tools/port_common
 EXESUFFIX := $(if $(filter Windows_NT,$(OS)),.exe,)
 SOURCES := src/main_3ds.c src/3ds_log.c src/3ds_platform.c src/3ds_input.c src/3ds_input_decode.c src/3ds_fs.c src/3ds_audio.c
-SOURCES += src/3ds_data.c src/3ds_pak.c src/3ds_settings.c
+SOURCES += src/3ds_data.c src/3ds_pak.c src/3ds_settings.c src/3ds_prof.c
 SOURCES += src/3ds_video.c src/3ds_video_decode.c src/3ds_bottom_screen.c
 LIBS := -lcitro2d -lcitro3d $(LIBS)
 OBJECTS := $(patsubst src/%.c,build/%.o,$(SOURCES))
@@ -121,7 +121,7 @@ build/$(TARGET)_3dsx.elf: $(TARGET).elf
 	$(DEVKITARM)/bin/arm-none-eabi-objcopy --remove-section=.rel.gamedata $< $@
 
 $(TARGET).smdh: Makefile
-	$(DEVKITPRO)/tools/bin/smdhtool --create "$(APP_TITLE)" "$(APP_DESCRIPTION)" "$(APP_AUTHOR)" $(CTRULIB)/default_icon.png $@
+	$(DEVKITPRO)/tools/bin/smdhtool --create "$(APP_TITLE)" "$(APP_DESCRIPTION)" "$(APP_AUTHOR)" assets/artwork/icon.png $@
 
 ROMFS_DATA_OUTS := $(ROMFS_ASSET_OUTS) $(ROMFS_MAP_OUT) $(ROMFS_SCRIPT_OUTS) $(ROMFS_SOUND_OUTS) \
 	$(ROMFS_SHADER_OUTS) $(ROMFS_GAMEDATA_OUTS)

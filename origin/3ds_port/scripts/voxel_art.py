@@ -67,15 +67,26 @@ class Graphics:
                 for c in struct.unpack("<16H", raw)])
 
 
+_GRAPHICS = {}
+
+
+def graphics(symbol):
+    """One Graphics per tileset per process: Pairs only read it."""
+    if symbol not in _GRAPHICS:
+        _GRAPHICS[symbol] = Graphics(symbol)
+    return _GRAPHICS[symbol]
+
+
 class Pair:
     """A primary/secondary tileset pair: what one map draws from."""
 
     def __init__(self, primary, secondary):
-        self.gfx = (Graphics(primary), Graphics(secondary))
+        self.gfx = (graphics(primary), graphics(secondary))
         self.meta = (read_u16(METATILES[primary]) if primary in METATILES else [],
                      read_u16(METATILES[secondary]) if secondary in METATILES else [])
         self.attr = (read_u16(ATTRIBUTES[primary]) if primary in ATTRIBUTES else [],
                      read_u16(ATTRIBUTES[secondary]) if secondary in ATTRIBUTES else [])
+        self._layers = {}     # (metatile, layer) -> layer_pixels, asked again and again
 
     def entries(self, metatile):
         which = 0 if metatile < TILES_PER_TILESET else 1
@@ -124,6 +135,12 @@ class Pair:
         the backdrop colour to get an opaque tile: here the question is what
         the artist DREW, and an index-0 pixel is where they drew nothing.
         """
+        key = (metatile, layer)
+        if key not in self._layers:
+            self._layers[key] = self._layer_pixels(metatile, layer)
+        return dict(self._layers[key])
+
+    def _layer_pixels(self, metatile, layer):
         entries = self.entries(metatile)
         out = {}
         if entries is None:

@@ -3353,7 +3353,7 @@ index 9d69337c0eea507d35cf27e4ba1b5898126076b2..c675eaecf6893937035f25d5c21a5a54
          return StartDoorAnimationTask(gfx, sDoorCloseAnimFrames, x, y);
  }
 diff --git a/src/field_effect.c b/src/field_effect.c
-index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557c1267586 100644
+index 5dcc4b3c080e2d787f66252ac2daaab00c741575..4951d5e72feb1bbe404b72b015b9b4b99b0e8489 100644
 --- a/src/field_effect.c
 +++ b/src/field_effect.c
 @@ -31,6 +31,12 @@
@@ -3464,7 +3464,27 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
  }
  
  u8 CreateMonSprite_PicBox(u16 species, s16 x, s16 y, u8 subpriority)
-@@ -2548,6 +2586,30 @@ static void TeleportWarpInFieldEffect_SpinGround(struct Task *task)
+@@ -1260,6 +1298,19 @@ static void SpriteCB_PokeballGlow(struct Sprite *sprite)
+     }
+ }
+ 
++#if defined(PLATFORM_3DS)
++// The healing machine's balls and monitors, and the Hall of Fame's, are placed
++// by hand on the 240x160 picture around the player rather than on the map: the
++// port moves them to where the machine is (3ds_video.c, DrawObjects).
++bool8 FieldEffect_IsMachineSprite(const struct Sprite *sprite)
++{
++    return sprite->template == &sSpriteTemplate_PokeballGlow
++        || sprite->template == &sSpriteTemplate_PokecenterMonitor
++        || sprite->template == &sSpriteTemplate_HofMonitorBig
++        || sprite->template == &sSpriteTemplate_HofMonitorSmall;
++}
++#endif
++
+ static u8 CreatePokecenterMonitorSprite(s16 x, s16 y)
+ {
+     u8 spriteId;
+@@ -2548,6 +2599,30 @@ static void TeleportWarpInFieldEffect_SpinGround(struct Task *task)
      }
  }
  
@@ -3495,7 +3515,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
  // Task data for Task_FieldMoveShowMonOutDoors
  #define tState       data[0]
  #define tWinHoriz    data[1]
-@@ -2615,8 +2677,9 @@ static void FieldMoveShowMonOutdoorsEffect_Init(struct Task *task)
+@@ -2615,8 +2690,9 @@ static void FieldMoveShowMonOutdoorsEffect_Init(struct Task *task)
      task->data[11] = REG_WININ;
      task->data[12] = REG_WINOUT;
      StoreWordInTwoHalfwords((u16*) &task->data[13], (u32)gMain.vblankCallback);
@@ -3506,7 +3526,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
      task->tWinIn = WININ_WIN0_BG_ALL | WININ_WIN0_OBJ | WININ_WIN0_CLR;
      task->tWinOut = WINOUT_WIN01_BG1 | WINOUT_WIN01_BG2 | WINOUT_WIN01_BG3 | WINOUT_WIN01_OBJ | WINOUT_WIN01_CLR;
      SetGpuReg(REG_OFFSET_WIN0H, task->tWinHoriz);
-@@ -2624,6 +2687,9 @@ static void FieldMoveShowMonOutdoorsEffect_Init(struct Task *task)
+@@ -2624,6 +2700,9 @@ static void FieldMoveShowMonOutdoorsEffect_Init(struct Task *task)
      SetGpuReg(REG_OFFSET_WININ, task->tWinIn);
      SetGpuReg(REG_OFFSET_WINOUT, task->tWinOut);
      SetVBlankCallback(VBlankCB_FieldMoveShowMonOutdoors);
@@ -3516,7 +3536,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
      task->tState++;
  }
  
-@@ -2654,15 +2720,15 @@ static void FieldMoveShowMonOutdoorsEffect_CreateBanner(struct Task *task)
+@@ -2654,15 +2733,15 @@ static void FieldMoveShowMonOutdoorsEffect_CreateBanner(struct Task *task)
      if (horiz < 0)
          horiz = 0;
  
@@ -3537,7 +3557,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
      {
          gSprites[task->tMonSpriteId].callback = SpriteCB_FieldMoveMonSlideOnscreen;
          task->tState++;
-@@ -2703,7 +2769,7 @@ static void FieldMoveShowMonOutdoorsEffect_RestoreBg(struct Task *task)
+@@ -2703,7 +2782,7 @@ static void FieldMoveShowMonOutdoorsEffect_RestoreBg(struct Task *task)
  {
      u16 bg0cnt = (REG_BG0CNT >> 8) << 11;
      CpuFill32(0, (void *)VRAM + bg0cnt, 0x800);
@@ -3546,7 +3566,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
      task->tWinVert = DISPLAY_HEIGHT + 1;
      task->tWinIn = task->data[11];
      task->tWinOut = task->data[12];
-@@ -2716,6 +2782,9 @@ static void FieldMoveShowMonOutdoorsEffect_End(struct Task *task)
+@@ -2716,6 +2795,9 @@ static void FieldMoveShowMonOutdoorsEffect_End(struct Task *task)
      LoadWordFromTwoHalfwords((u16 *)&task->data[13], (u32 *)&callback);
      SetVBlankCallback(callback);
      InitTextBoxGfxAndPrinters();
@@ -3556,7 +3576,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
      FreeResourcesAndDestroySprite(&gSprites[task->tMonSpriteId], task->tMonSpriteId);
      FieldEffectActiveListRemove(FLDEFF_FIELD_MOVE_SHOW_MON);
      DestroyTask(FindTaskIdByFunc(Task_FieldMoveShowMonOutdoors));
-@@ -2739,10 +2808,16 @@ static void LoadFieldMoveOutdoorStreaksTilemap(u16 offs)
+@@ -2739,10 +2821,16 @@ static void LoadFieldMoveOutdoorStreaksTilemap(u16 offs)
  {
      u16 i;
      u16 *dest;
@@ -3574,7 +3594,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
      }
  }
  
-@@ -2780,10 +2855,16 @@ static void Task_FieldMoveShowMonIndoors(u8 taskId)
+@@ -2780,10 +2868,16 @@ static void Task_FieldMoveShowMonIndoors(u8 taskId)
  
  static void FieldMoveShowMonIndoorsEffect_Init(struct Task *task)
  {
@@ -3591,7 +3611,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
      task->tState++;
  }
  
-@@ -2804,8 +2885,8 @@ static void FieldMoveShowMonIndoorsEffect_SlideBannerOn(struct Task *task)
+@@ -2804,8 +2898,8 @@ static void FieldMoveShowMonIndoorsEffect_SlideBannerOn(struct Task *task)
  {
      if (SlideIndoorBannerOnscreen(task))
      {
@@ -3602,7 +3622,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
          gSprites[task->tMonSpriteId].callback = SpriteCB_FieldMoveMonSlideOnscreen;
          task->tState++;
      }
-@@ -2845,6 +2926,9 @@ static void FieldMoveShowMonIndoorsEffect_End(struct Task *task)
+@@ -2845,6 +2939,9 @@ static void FieldMoveShowMonIndoorsEffect_End(struct Task *task)
      LoadWordFromTwoHalfwords((u16 *)&task->data[13], (u32 *)&intrCallback);
      SetVBlankCallback(intrCallback);
      InitTextBoxGfxAndPrinters();
@@ -3612,7 +3632,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
      FreeResourcesAndDestroySprite(&gSprites[task->tMonSpriteId], task->tMonSpriteId);
      FieldEffectActiveListRemove(FLDEFF_FIELD_MOVE_SHOW_MON);
      DestroyTask(FindTaskIdByFunc(Task_FieldMoveShowMonIndoors));
-@@ -2873,6 +2957,11 @@ static bool8 SlideIndoorBannerOnscreen(struct Task *task)
+@@ -2873,6 +2970,11 @@ static bool8 SlideIndoorBannerOnscreen(struct Task *task)
      u16 srcOffs;
      u16 dstOffs;
      u16 *dest;
@@ -3624,7 +3644,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
  
      if (task->tBgOffset >= 32)
          return TRUE;
-@@ -2885,10 +2974,10 @@ static bool8 SlideIndoorBannerOnscreen(struct Task *task)
+@@ -2885,10 +2987,10 @@ static bool8 SlideIndoorBannerOnscreen(struct Task *task)
          dest = (u16 *)(VRAM + 0x140 + (u16)task->data[12]);
          for (i = 0; i < 10; i++)
          {
@@ -3637,7 +3657,7 @@ index 5dcc4b3c080e2d787f66252ac2daaab00c741575..957481777ff2e986db577f44e093d557
              dest[((dstOffs + 1) & 0x1f) + i * 32] |= 0xf000;
          }
          task->tBgOffset += 2;
-@@ -2934,7 +3023,7 @@ static u8 InitFieldMoveMonSprite(u32 species, u32 otId, u32 personality)
+@@ -2934,7 +3036,7 @@ static u8 InitFieldMoveMonSprite(u32 species, u32 otId, u32 personality)
      struct Sprite *sprite;
      noDucking = (species & SHOW_MON_CRY_NO_DUCKING) >> 16;
      species &= ~SHOW_MON_CRY_NO_DUCKING;
@@ -6920,10 +6940,87 @@ index 8573611bb99bad437b27aa49a17852d3791a1be4..cf70a6a58bf95a05cd59abffeb783c1e
 +}
 +#endif
 diff --git a/src/map_name_popup.c b/src/map_name_popup.c
-index 665cccec3cbc145722424b75b73a4c526b565b25..4b30068f3c040de95e69248691d1008823c981b4 100644
+index 665cccec3cbc145722424b75b73a4c526b565b25..c26cf8948842cdc48efec61fc6013fabb999b9ee 100644
 --- a/src/map_name_popup.c
 +++ b/src/map_name_popup.c
-@@ -404,7 +404,7 @@ static void LoadMapNamePopUpWindowBg(void)
+@@ -228,6 +228,47 @@ enum {
+ #define tIncomingPopUp data[3]
+ #define tPrintTimer    data[4]
+ 
++#ifdef PLATFORM_3DS
++// The pop up slides by scrolling BG0, whose map is 256 pixels tall. On the GBA
++// the 96 rows below the screen hide the window as it scrolls off the top; the
++// 3DS screen is 240 tall, so past 16 pixels the window wraps round into the
++// bottom of the screen. While it slides, the tile rows of the window (frame
++// included) that have wrapped that far are blanked, and put back as it slides
++// in again.
++#define POPUP_TILE_ROWS 5  // window rows 1-3 and the frame above and below
++#define POPUP_TILE_COLS 12 // window columns 1-10 and the frame on each side
++#define BG_MAP_WIDTH    32
++
++static EWRAM_DATA u16 sPopUpTilemap[POPUP_TILE_ROWS][POPUP_TILE_COLS] = {0};
++
++static void SavePopUpTilemap(void)
++{
++    u16 *map = GetBgTilemapBuffer(0);
++    s32 row, col;
++
++    for (row = 0; row < POPUP_TILE_ROWS; row++)
++        for (col = 0; col < POPUP_TILE_COLS; col++)
++            sPopUpTilemap[row][col] = map[row * BG_MAP_WIDTH + col];
++}
++
++static void ClipPopUpTilemap(s16 yOffset)
++{
++    u16 *map = GetBgTilemapBuffer(0);
++    s32 row, col;
++
++    if (GetMapNamePopUpWindowId() == WINDOW_NONE)
++        return;
++    for (row = 0; row < POPUP_TILE_ROWS; row++)
++    {
++        bool32 wrapped = row * TILE_HEIGHT < yOffset - (256 - DISPLAY_HEIGHT);
++
++        for (col = 0; col < POPUP_TILE_COLS; col++)
++            map[row * BG_MAP_WIDTH + col] = wrapped ? 0 : sPopUpTilemap[row][col];
++    }
++    CopyBgTilemapBufferToVram(0);
++}
++#endif
++
+ void ShowMapNamePopup(void)
+ {
+     if (FlagGet(FLAG_HIDE_MAP_NAME_POPUP) != TRUE)
+@@ -264,11 +305,18 @@ static void Task_MapNamePopUpWindow(u8 taskId)
+             task->tState = STATE_SLIDE_IN;
+             task->tPrintTimer = 0;
+             ShowMapNamePopUpWindow();
++        #ifdef PLATFORM_3DS
++            SavePopUpTilemap();
++            ClipPopUpTilemap(task->tYOffset);
++        #endif
+         }
+         break;
+     case STATE_SLIDE_IN:
+         // Slide the window onscreen.
+         task->tYOffset -= POPUP_SLIDE_SPEED;
++    #ifdef PLATFORM_3DS
++        ClipPopUpTilemap(task->tYOffset);
++    #endif
+         if (task->tYOffset <= 0 )
+         {
+             task->tYOffset = 0;
+@@ -287,6 +335,9 @@ static void Task_MapNamePopUpWindow(u8 taskId)
+     case STATE_SLIDE_OUT:
+         // Slide the window offscreen.
+         task->tYOffset += POPUP_SLIDE_SPEED;
++    #ifdef PLATFORM_3DS
++        ClipPopUpTilemap(task->tYOffset);
++    #endif
+         if (task->tYOffset >= POPUP_OFFSCREEN_Y)
+         {
+             task->tYOffset = POPUP_OFFSCREEN_Y;
+@@ -404,7 +455,7 @@ static void LoadMapNamePopUpWindowBg(void)
  {
      u8 popUpThemeId;
      u8 popupWindowId = GetMapNamePopUpWindowId();
@@ -14034,17 +14131,18 @@ index 171678cddbf9ef41a725fc8b4c7f4cdc3be1fa18..9d8c85d5cd8c3b47465ee3e6498be9cd
      ClearPokemonCrySongs();
  }
 diff --git a/src/sprite.c b/src/sprite.c
-index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950af8e2b445 100644
+index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..0944c577eb892dc4b6cbf6a20602d2c6e6f15ad3 100644
 --- a/src/sprite.c
 +++ b/src/sprite.c
-@@ -2,6 +2,16 @@
+@@ -2,6 +2,17 @@
  #include "sprite.h"
  #include "main.h"
  #include "palette.h"
 +#if defined(PLATFORM_3DS)
 +#include "3ds_video.h"
++bool8 FieldEffect_IsMachineSprite(const struct Sprite *sprite);   /* field_effect.c */
 +#endif
-+#if defined(PLATFORM_3DS) && CTR_VOXEL_ENABLED
++#if defined(PLATFORM_3DS)
 +#include "field_weather.h"
 +#include "constants/weather.h"
 +#endif
@@ -14054,7 +14152,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
  
  #define MAX_SPRITE_COPY_REQUESTS 64
  
-@@ -291,6 +301,22 @@ EWRAM_DATA s16 gSpriteCoordOffsetY = 0;
+@@ -291,6 +302,22 @@ EWRAM_DATA s16 gSpriteCoordOffsetY = 0;
  EWRAM_DATA struct OamMatrix gOamMatrices[OAM_MATRIX_COUNT] = {0};
  EWRAM_DATA bool8 gAffineAnimsDisabled = FALSE;
  
@@ -14077,10 +14175,26 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
  void ResetSpriteData(void)
  {
      ResetOamRange(0, 128);
-@@ -479,16 +505,96 @@ void CopyMatricesToOamBuffer(void)
+@@ -479,16 +506,119 @@ void CopyMatricesToOamBuffer(void)
      }
  }
  
++#if defined(PLATFORM_3DS)
++/*
++ * The fog's sprites: one 64x64 picture laid on a 64-pixel lattice, scrolled.
++ * Twenty of them cover a GBA screen, with OAM's own wrap-around closing the
++ * gaps; the compositor lays the same picture over the whole wide view
++ * instead (CtrVideo_MarkFogOam), or the voxel world draws a fog of its own.
++ */
++static bool8 IsFogSprite(const struct Sprite *sprite)
++{
++    // By the sheet, not by the weather's sprite pointers: those outlive the
++    // field (a battle reuses the slots) while the tags are the fog's alone.
++    return sprite->template != NULL
++        && (sprite->template->tileTag == GFXTAG_FOG_H || sprite->template->tileTag == GFXTAG_FOG_D);
++}
++#endif
++
 +#if defined(PLATFORM_3DS) && CTR_VOXEL_ENABLED
 +/* OAM is sorted by subpriority, so weather cannot be identified by a fixed
 + * index. Tag the entries as the original sprite sorter writes them. */
@@ -14144,6 +14258,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
 +#if defined(PLATFORM_3DS)
 +    CtrVideo_ClearOamAnchors();
 +    CtrVideo_ClearScreenOam();
++    CtrVideo_ClearFogOam();
 +#endif
 +#if defined(PLATFORM_3DS) && CTR_VOXEL_ENABLED
 +    CtrVideo_ClearVoxelWeatherOam();
@@ -14163,7 +14278,13 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
 +            // Placed on the screen, not on the map: a battle transition's
 +            // sprites, which the compositor draws with the transition.
 +            if (!sprite->coordOffsetEnabled)
++            {
 +                CtrVideo_MarkScreenOam(first, oamIndex);
++                if (FieldEffect_IsMachineSprite(sprite))
++                    CtrVideo_MarkMachineOam(first, oamIndex);
++            }
++            if (IsFogSprite(sprite))
++                CtrVideo_MarkFogOam(first, oamIndex);
 +#endif
 +#if defined(PLATFORM_3DS) && CTR_VOXEL_ENABLED
 +            if (IsVoxelWeatherSprite(sprite))
@@ -14176,7 +14297,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
          i++;
      }
  
-@@ -562,8 +668,19 @@ u8 CreateSpriteAt(u8 index, const struct SpriteTemplate *template, s16 x, s16 y,
+@@ -562,8 +692,19 @@ u8 CreateSpriteAt(u8 index, const struct SpriteTemplate *template, s16 x, s16 y,
      if (template->tileTag == TAG_NONE)
      {
          s16 tileNum;
@@ -14197,7 +14318,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
          if (tileNum == -1)
          {
              ResetSprite(sprite);
-@@ -622,7 +739,13 @@ void DestroySprite(struct Sprite *sprite)
+@@ -622,7 +763,13 @@ void DestroySprite(struct Sprite *sprite)
          if (!sprite->usingSheet)
          {
              u16 i;
@@ -14212,7 +14333,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
              for (i = sprite->oam.tileNum; i < tileEnd; i++)
                  FREE_SPRITE_TILE(i);
          }
-@@ -791,6 +914,10 @@ void ProcessSpriteCopyRequests(void)
+@@ -791,6 +938,10 @@ void ProcessSpriteCopyRequests(void)
          while (sSpriteCopyRequestCount > 0)
          {
              CpuCopy16(sSpriteCopyRequests[i].src, sSpriteCopyRequests[i].dest, sSpriteCopyRequests[i].size);
@@ -14223,7 +14344,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
              sSpriteCopyRequestCount--;
              i++;
          }
-@@ -803,9 +930,17 @@ void RequestSpriteFrameImageCopy(u16 index, u16 tileNum, const struct SpriteFram
+@@ -803,9 +954,17 @@ void RequestSpriteFrameImageCopy(u16 index, u16 tileNum, const struct SpriteFram
  {
      if (sSpriteCopyRequestCount < MAX_SPRITE_COPY_REQUESTS)
      {
@@ -14243,7 +14364,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
          sSpriteCopyRequestCount++;
      }
  }
-@@ -814,6 +949,9 @@ void RequestSpriteCopy(const u8 *src, u8 *dest, u16 size)
+@@ -814,6 +973,9 @@ void RequestSpriteCopy(const u8 *src, u8 *dest, u16 size)
  {
      if (sSpriteCopyRequestCount < MAX_SPRITE_COPY_REQUESTS)
      {
@@ -14253,7 +14374,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
          sSpriteCopyRequests[sSpriteCopyRequestCount].src = src;
          sSpriteCopyRequests[sSpriteCopyRequestCount].dest = dest;
          sSpriteCopyRequests[sSpriteCopyRequestCount].size = size;
-@@ -1485,7 +1623,11 @@ void SetOamMatrixRotationScaling(u8 matrixNum, s16 xScale, s16 yScale, u16 rotat
+@@ -1485,7 +1647,11 @@ void SetOamMatrixRotationScaling(u8 matrixNum, s16 xScale, s16 yScale, u16 rotat
  
  u16 LoadSpriteSheet(const struct SpriteSheet *sheet)
  {
@@ -14266,7 +14387,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
  
      if (tileStart < 0)
      {
-@@ -1493,8 +1635,12 @@ u16 LoadSpriteSheet(const struct SpriteSheet *sheet)
+@@ -1493,8 +1659,12 @@ u16 LoadSpriteSheet(const struct SpriteSheet *sheet)
      }
      else
      {
@@ -14281,7 +14402,7 @@ index 708a3e7fdf5fe77dff62d0e2d908b9e9e089f39a..e2878035393ade045151396d0f34950a
          return (u16)tileStart;
      }
  }
-@@ -1617,6 +1763,9 @@ void LoadSpritePalettes(const struct SpritePalette *palettes)
+@@ -1617,6 +1787,9 @@ void LoadSpritePalettes(const struct SpritePalette *palettes)
  
  void DoLoadSpritePalette(const u16 *src, u16 paletteOffset)
  {

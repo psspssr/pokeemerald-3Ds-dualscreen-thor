@@ -23,6 +23,7 @@
 #include "constants/party_menu.h"
 #include "port_platform.h"
 #include "port_log.h"
+#include "port_prof.h"
 
 #include "3ds_platform.h"
 #include "3ds_video.h"
@@ -372,14 +373,8 @@ static void CaptureLineScroll(void)
 
 void CtrGame_VBlank(void)
 {
-    /* Where the VBlank handler's ~5 ms a frame go (it is the largest fixed
-     * cost of the frame): averaged, logged every 600 frames. */
-    static uint64_t sSum[6];
-    static unsigned sCount;
-    uint64_t t0 = CtrPlatform_Ticks(), t1, t2, t3, t4, t5;
-
+    PORT_PROF_BEGIN(vblank);
     CtrEmu_BeginVBlank();
-    t1 = CtrPlatform_Ticks();
     /*
      * The GBA VBlank handler is the game's own VBlankIntr: it runs the vblank
      * callback, applies buffered GPU registers and services DMA3 requests. It
@@ -387,28 +382,16 @@ void CtrGame_VBlank(void)
      */
     if (REG_IME && (REG_IE & INTR_FLAG_VBLANK) && gIntrTable[INTR_INDEX_VBLANK])
         gIntrTable[INTR_INDEX_VBLANK]();
-    t2 = CtrPlatform_Ticks();
     CtrEmu_EndVBlank();
-    t3 = CtrPlatform_Ticks();
+    PORT_PROF_END(vblank, PORT_PROF_VBLANK);
     UpdateStage();
+    PORT_PROF_BEGIN(lines);
     CaptureLineScroll();
     CaptureLineRegisters();
-    t4 = CtrPlatform_Ticks();
+    PORT_PROF_END(lines, PORT_PROF_LINES);
     CheckAudioRate();
     SampleAudioStats();
-    t5 = CtrPlatform_Ticks();
     ++sFrames;
-    sSum[0] += t1 - t0; sSum[1] += t2 - t1; sSum[2] += t3 - t2;
-    sSum[3] += t4 - t3; sSum[4] += t5 - t4;
-    if (++sCount == 600)
-    {
-        PORT_LOG("PROF vblank avg ms: begin=%.2f intr=%.2f end=%.2f stage+lines=%.2f audio=%.2f\n",
-                 sSum[0] * 1000.0 / 268111856.0 / sCount, sSum[1] * 1000.0 / 268111856.0 / sCount,
-                 sSum[2] * 1000.0 / 268111856.0 / sCount, sSum[3] * 1000.0 / 268111856.0 / sCount,
-                 sSum[4] * 1000.0 / 268111856.0 / sCount);
-        memset(sSum, 0, sizeof(sSum));
-        sCount = 0;
-    }
 }
 
 uint32_t CtrGame_Frames(void) { return sFrames; }
@@ -450,6 +433,7 @@ void CtrGame_Init(void)
     /* Fail loudly here rather than letting the game read stub bytes as tiles,
      * or zeroes as script opcodes. */
     Port_AssetPreload();
+    CtrAssets_StartWarmup();
     if (!CtrScripts_Init())
         CtrAssets_Fatal("the script bundle is required before AgbMain");
     if (!CtrMaps_Init())
@@ -526,6 +510,7 @@ void CtrGame_WaitFrame(void)
      * logged frame, so the first frames are traced step by step. */
     if (sFrames < 4)
         CtrLog_Write(CTR_LOG_GAME, "frame %lu: game reached VBlank wait", (unsigned long)sFrames);
+    Port_ProfScene((const void *)gMain.callback2);
     CtrPlatform_EndFrame();
     if (sFrames < 4)
     {

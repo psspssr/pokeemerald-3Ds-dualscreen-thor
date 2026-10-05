@@ -199,7 +199,22 @@ void CtrLog_Init(void)
     LightEvent_Init(&sWake, RESET_ONESHOT);
     sHead = sTail = sDropped = 0;
     sQuit = false;
-    sFile = fopen("sdmc:/3ds/emerald3ds/port.log", "a");
+    /* One session per file: the last one is kept as port-prev.log, so the log
+     * never grows without bound and a crash is still readable after relaunch. */
+    /* No log file unless sdmc:/3ds/emerald3ds/debug.txt exists: players never
+     * pay for SD writes; to diagnose, create that file (any content). */
+    sFile = NULL;
+    {
+        FILE *marker = fopen("sdmc:/3ds/emerald3ds/debug.txt", "r");
+
+        if (marker != NULL)
+        {
+            fclose(marker);
+            remove("sdmc:/3ds/emerald3ds/port-prev.log");
+            rename("sdmc:/3ds/emerald3ds/port.log", "sdmc:/3ds/emerald3ds/port-prev.log");
+            sFile = fopen("sdmc:/3ds/emerald3ds/port.log", "w");
+        }
+    }
     if (sFile)
     {
         /* The ring already batches; a second buffer would only copy twice. */
@@ -209,7 +224,7 @@ void CtrLog_Init(void)
                                priority + 2 <= 0x3F ? priority + 2 : 0x3F, -2, false);
     }
     CtrLog_Write(CTR_LOG_BOOT, "--- new session ---");
-    CtrLog_Write(CTR_LOG_FS, "SD log %s", sFile == NULL ? "unavailable; console/debug active"
+    CtrLog_Write(CTR_LOG_FS, "SD log %s", sFile == NULL ? "disabled (no debug.txt) or unavailable"
                                          : sWriter != NULL ? "ready" : "ready, written inline");
 }
 
@@ -239,9 +254,23 @@ void CtrLog_Write(CtrLogCategory category, const char *format, ...)
     RingPut(line, (unsigned)length);
     LightLock_Unlock(&sLock);
     if (sWriter == NULL)
-        Drain(); /* no thread: the old, blocking behaviour */
+    {
+        /* No thread: write inline, but in batches, not one SD write per line. */
+        if (tag == CTR_LOG_BOOT || tag == CTR_LOG_ERROR || RingUsed() > LOG_RING / 2)
+            Drain();
+    }
     else if (tag == CTR_LOG_BOOT || tag == CTR_LOG_ERROR)
-        LightEvent_Signal(&sWake);
+    {
+        /* Prompt, but an error logged every frame must not keep the card busy. */
+        static uint64_t sLastWake;
+        uint64_t now = svcGetSystemTick();
+
+        if (tag == CTR_LOG_BOOT || now - sLastWake > SYSCLOCK_ARM11 / 4)
+        {
+            sLastWake = now;
+            LightEvent_Signal(&sWake);
+        }
+    }
 }
 
 void CtrLog_Close(void)
@@ -289,7 +318,7 @@ void CtrLog_ShowFatal(const char *reason)
     consoleSetWindow(&sConsole, 0, 0, 40, 30);
     consoleClear();
     printf("\x1b[1;1HFATAL: %.32s", reason);
-    printf("\x1b[3;1HLog: sdmc:/3ds/emerald3ds/port.log");
+    printf("\x1b[3;1HLog (if debug.txt exists): port.log");
     printf("\x1b[5;1HSTART: exit");
     LightLock_Unlock(&sConsoleLock);
 }

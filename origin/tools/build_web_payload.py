@@ -70,6 +70,8 @@ def collect(payload: Path, package: Path = PACKAGE, licenses_root: Path = ROOT) 
             files["python/emerald3ds_builder/" + path.name] = path.read_bytes()
     for src, dst in LICENSES:
         path = licenses_root / src
+        if not path.is_file():
+            path = licenses_root / "public" / src  # the private workspace keeps them in public/
         if path.is_file():
             files["licenses/" + dst] = path.read_bytes()
     return files

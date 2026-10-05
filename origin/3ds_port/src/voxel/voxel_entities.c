@@ -387,6 +387,47 @@ static int VisibleRows(const VoxelSpriteSlot *slot)
 }
 
 /*
+ * How far a card standing on (cx, cz) must come towards the camera so the
+ * relief behind it stays behind it. A point of the drawing north of the feet,
+ * dv tiles up the card, lands at depth v + h: on a flight of stairs (h rising
+ * one pixel per pixel) that is exactly the card's own plane, and anything
+ * steeper stands in front of it, so the ground drew over the walker. The card
+ * is then moved along the line of sight (as far up as forward), which leaves
+ * it where it was on screen and only changes what hides what. Flat ground and
+ * walls (a south face lands behind the feet) give nothing.
+ */
+#define VOXEL_CARD_CLEAR (1.0f / VOXEL_PIXELS_PER_TILE)
+
+static float CardPush(float cx, float cz, float halfW, float height)
+{
+    const VoxelMapInstance *inst = VoxelWorld_GetInstanceAt((int)floorf(cx), (int)floorf(cz));
+    float feet, worst = -1.0f;
+    int x0 = (int)floorf(cx - halfW), x1 = (int)floorf(cx + halfW);
+    int y0 = (int)floorf(cz - height), y1 = (int)floorf(cz);
+    bool relief = false;
+
+    for (int y = y0; y <= y1 && !relief; ++y)
+        for (int x = x0; x <= x1 && !relief; ++x)
+            relief = VoxelRelief_IsSlope(VoxelRelief_Cell(VoxelWorld_GetInstanceAt(x, y), x, y));
+    if (inst == NULL || !relief)
+        return 0.0f;
+    feet = VoxelRelief_LiftAt(cx, cz);
+    for (int i = -1; i <= 1; ++i)
+    {
+        float x = cx + i * halfW * 0.75f;
+
+        for (float dv = VOXEL_CARD_CLEAR; dv <= height; dv += 2.0f * VOXEL_CARD_CLEAR)
+        {
+            float over = VoxelRelief_LiftAt(x, cz - dv) - feet - dv;
+
+            if (over > worst)
+                worst = over;
+        }
+    }
+    return worst > -VOXEL_CARD_CLEAR ? worst + VOXEL_CARD_CLEAR : 0.0f;
+}
+
+/*
  * A card standing on the ground at (cx, cz), moved (offX, offZ) from there
  * and raised by `rise`: an object stands on the centre of its tile, feet on
  * the ground; a field effect that belongs to an object is drawn in that
@@ -409,7 +450,12 @@ static void EmitBillboard(VoxelBuilder *builder, const VoxelSpriteSlot *slot, un
     /* On relief the sprite stands where its cell was lifted to, and rides
      * the lattice between cells, so a flight of stairs is climbed. */
     float lift = VoxelRelief_LiftAt(cx, cz) + rise, shift = VoxelRelief_ShiftAt(cx, cz);
-    float px = cx + offX, pz = cz + offZ + shift;
+    float push = CardPush(cx, cz, halfW, height);
+    /* Towards the camera: the right vector turned a quarter, unit length. */
+    float along = push > 0.0f ? push / sqrtf(rightX * rightX + rightZ * rightZ) : 0.0f;
+    float px = cx + offX - rightZ * along, pz = cz + offZ + shift + rightX * along;
+
+    lift += push;
     float ax = px - rightX * halfW, az = pz - rightZ * halfW;
     float bx = px + rightX * halfW, bz = pz + rightZ * halfW;
 

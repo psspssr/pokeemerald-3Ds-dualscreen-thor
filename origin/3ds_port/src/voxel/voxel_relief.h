@@ -86,9 +86,13 @@ float VoxelRelief_DrawnTop(const VoxelMapInstance *inst);
  *
  * VOXEL_RELIEF_NO_VARIANT is no cut: a cell under which the ground behind a
  * terrace's rim (`ground`) runs on, flat at `foot`, where the step down to
- * it leaves the view open from above.
+ * it leaves the view open from above. With VOXEL_RELIEF_GOES_ON in `sides`,
+ * the rock of the cell north of it - a flank ending against this top's back
+ * - goes on under it instead, one row on: what the camera finds past the
+ * back when it looks down more steeply than the drawing.
  */
 #define VOXEL_RELIEF_NO_VARIANT 0xFFFF
+#define VOXEL_RELIEF_GOES_ON (2u << 8)
 /*
  * `wall` (-1: none) says the cell has cliffs: wherever its west, east or
  * south edge stands over its neighbour's - a tile of rock reaching its own
@@ -99,7 +103,7 @@ float VoxelRelief_DrawnTop(const VoxelMapInstance *inst);
  */
 #define VOXEL_RELIEF_NO_FACE 0xFFFE
 int VoxelRelief_Cut(const VoxelMapInstance *inst, int x, int y, float *foot, int *ground,
-                    int *wall);
+                    int *wall, unsigned *sides);
 unsigned VoxelRelief_CutCount(void);
 bool VoxelRelief_CutVariant(unsigned i, unsigned *layout, unsigned *metatile,
                             const uint8_t **rows);
