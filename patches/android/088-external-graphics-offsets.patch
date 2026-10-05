@@ -1,0 +1,133 @@
+--- a/src/evolution_scene.c
++++ b/src/evolution_scene.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "malloc.h"
+ #include "battle.h"
+ #include "battle_message.h"
+@@ -1589,12 +1592,16 @@
+ static void InitMovingBgPalette(u16 *palette)
+ {
+     s32 i, j;
++    const u16 *colors = sBgAnim_Pal;
++#ifdef PORT_BRIDGE
++    colors = Port_ResolveAssetPointer(colors);
++#endif
+ 
+     for (i = 0; i < (int)ARRAY_COUNT(sBgAnim_PalIndexes); i++)
+     {
+         for (j = 0; j < 16; j++)
+         {
+-            palette[i * 16 + j] = sBgAnim_Pal[sBgAnim_PalIndexes[i][j]];
++            palette[i * 16 + j] = colors[sBgAnim_PalIndexes[i][j]];
+         }
+     }
+ }
+--- a/src/field_effect.c
++++ b/src/field_effect.c
+@@ -3183,6 +3183,10 @@
+ u8 FldEff_RayquazaSpotlight(void)
+ {
+     u8 i, j, k;
++    const u8 *gfx = sSpotlight_Gfx;
++#ifdef PORT_BRIDGE
++    gfx = Port_ResolveAssetPointer(gfx);
++#endif
+     u8 spriteId = CreateSprite(gFieldEffectObjectTemplatePointers[FLDEFFOBJ_RAYQUAZA], 120, -24, 1);
+     struct Sprite *sprite = &gSprites[spriteId];
+ 
+@@ -3210,8 +3214,8 @@
+     {
+         for (i = 0; i < 8; i++)
+         {
+-            *(u16 *)(BG_CHAR_ADDR(2) + (k + 1) * 32 + i * 4) = (sSpotlight_Gfx[k * 32 + i * 4 + 1] << 8) + sSpotlight_Gfx[k * 32 + i * 4];
+-            *(u16 *)(BG_CHAR_ADDR(2) + (k + 1) * 32 + i * 4 + 2) = (sSpotlight_Gfx[k * 32 + i * 4 + 3] << 8) + sSpotlight_Gfx[k * 32 + i * 4 + 2];
++            *(u16 *)(BG_CHAR_ADDR(2) + (k + 1) * 32 + i * 4) = (gfx[k * 32 + i * 4 + 1] << 8) + gfx[k * 32 + i * 4];
++            *(u16 *)(BG_CHAR_ADDR(2) + (k + 1) * 32 + i * 4 + 2) = (gfx[k * 32 + i * 4 + 3] << 8) + gfx[k * 32 + i * 4 + 2];
+         }
+     }
+     return spriteId;
+--- a/src/battle_transition.c
++++ b/src/battle_transition.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "battle.h"
+ #include "battle_transition.h"
+ #include "battle_transition_frontier.h"
+@@ -3199,10 +3202,14 @@
+ static bool8 RectangularSpiral_Init(struct Task *task)
+ {
+     u16 *tilemap, *tileset;
++    const u32 *gfx = sShrinkingBoxTileset;
++#ifdef PORT_BRIDGE
++    gfx = Port_ResolveAssetPointer(gfx);
++#endif
+ 
+     GetBg0TilesDst(&tilemap, &tileset);
+-    CpuCopy16(sShrinkingBoxTileset, tileset, 0x20);
+-    CpuCopy16(&sShrinkingBoxTileset[0x70], &tileset[0x20], 0x20);
++    CpuCopy16(gfx, tileset, 0x20);
++    CpuCopy16(&gfx[0x70], &tileset[0x20], 0x20);
+     CpuFill16(0xF0 << 8, tilemap, BG_SCREEN_SIZE);
+     LoadPalette(sFieldEffectPal_Pokeball, BG_PLTT_ID(15), sizeof(sFieldEffectPal_Pokeball));
+ 
+@@ -3799,7 +3806,11 @@
+         GetBg0TilemapDst(&tileset);
+         task->tDelay = 3;
+         task->tShrinkStage++;
+-        CpuSet(&sShrinkingBoxTileset[task->tShrinkStage * 8], tileset, 16);
++        const u32 *gfx = sShrinkingBoxTileset;
++#ifdef PORT_BRIDGE
++        gfx = Port_ResolveAssetPointer(gfx);
++#endif
++        CpuSet(&gfx[task->tShrinkStage * 8], tileset, 16);
+         if (task->tShrinkStage > 13)
+         {
+             task->tState++;
+--- a/src/slot_machine.c
++++ b/src/slot_machine.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "overworld.h"
+ #include "field_effect.h"
+ #include "random.h"
+@@ -3868,8 +3871,12 @@
+ static void LoadReelTimeWindowTilemap(s16 a0, s16 a1)
+ {
+     s16 i;
++    const u16 *tilemap = sReelTimeWindow_Tilemap;
++#ifdef PORT_BRIDGE
++    tilemap = Port_ResolveAssetPointer(tilemap);
++#endif
+     for (i = 4; i < 15; i++)
+-        LoadBgTilemap(1, &sReelTimeWindow_Tilemap[a1 + (i - 4) * 20], 2, 32 * i + a0);
++        LoadBgTilemap(1, &tilemap[a1 + (i - 4) * 20], 2, 32 * i + a0);
+ }
+ 
+ static void ClearReelTimeWindowTilemap(s16 a0)
+--- a/src/contest.c
++++ b/src/contest.c
+@@ -5043,7 +5043,13 @@
+     if (eContestantStatus[contestant].turnOrderMod != 1)
+         return gContestNextTurnRandomGfx;
+     else
+-        return gContestNextTurnNumbersGfx + eContestantStatus[contestant].nextTurnOrder * 32;
++    {
++        const u8 *gfx = gContestNextTurnNumbersGfx;
++#ifdef PORT_BRIDGE
++        gfx = Port_ResolveAssetPointer(gfx);
++#endif
++        return gfx + eContestantStatus[contestant].nextTurnOrder * 32;
++    }
+ }
+ 
+ static void DrawUnnervedSymbols(void)

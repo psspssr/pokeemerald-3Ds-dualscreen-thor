@@ -92,6 +92,10 @@ jobs:
         run: python3 android/native/test/run_shop_tests.py
       - name: Contest graphics and Pokeblock viewport
         run: python3 android/native/test/run_contest_graphics_tests.py
+      - name: Berry and Pokeblock feeding geometry
+        run: python3 android/native/test/run_item_menu_geometry_tests.py
+      - name: External graphics offsets and direct asset reads
+        run: python3 android/native/test/run_asset_offset_tests.py
       - name: Bottom-screen naming keyboard
         run: python3 android/native/test/run_naming_tests.py
       - name: Unsupported transfer exit path

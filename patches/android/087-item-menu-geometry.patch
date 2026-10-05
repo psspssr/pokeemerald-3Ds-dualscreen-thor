@@ -1,0 +1,12 @@
+--- a/3ds_port/full.mk
++++ b/3ds_port/full.mk
+@@ -141,7 +141,8 @@
+ # (compat/ctr_gba_centred.h).
+ CTR_GBA_CENTRED_SRCS := region_map field_region_map main_menu naming_screen wallclock \
+ 	pokemon_summary_screen starter_choose evolution_scene evolution_graphics shop \
+-	pokeblock contest contest_util
++	pokeblock contest contest_util \
++	berry_tag_screen use_pokeblock pokeblock_feed
+ CTR_GBA_CENTRED_OBJS := $(patsubst %,build/root/src/%.o,$(CTR_GBA_CENTRED_SRCS))
+ $(CTR_GBA_CENTRED_OBJS): FULLCFLAGS += -DCTR_GBA_STAGE -include $(abspath compat/ctr_gba_centred.h)
+ $(CTR_GBA_CENTRED_OBJS): compat/ctr_gba_centred.h $(ROOT)/include/gba/defines.h
