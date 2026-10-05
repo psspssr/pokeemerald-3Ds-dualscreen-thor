@@ -1,7 +1,7 @@
 # First Thor test and performance capture
 
-Use the signed beta.1 APK and record its checksum from the release. Keep an
-exported save before comparing with alpha.8. CI runs on pushes to both `dev`
+Use the latest signed beta APK and record its checksum from the release. Keep an
+exported save before comparing builds. CI runs on pushes to both `dev`
 and `main`, and on pull requests.
 Development pushes do not publish APK releases.
 
@@ -10,7 +10,9 @@ Development pushes do not publish APK releases.
 Record the Thor model, firmware, app version and selected power mode. Use the
 same saved location when comparing builds. Check:
 
-1. Continue, movement, A/B, individual L1/R1, and L1+R1 pause/Resume.
+1. Continue, movement, A/B, individual L1/R1, and L1+R1 pause/Resume. Navigate
+   Pause and Settings using the D-pad and left stick; verify confirm/back,
+   choice dialogs, sliders and focus after returning from a subpage.
 2. Both panels fill; Map/Party/Bag touch reaches the intended control.
 3. Close the lid during gameplay, wait, reopen, and verify that the game did
    not advance. Repeat after opening the app pause menu: it must remain paused.
@@ -34,7 +36,7 @@ consumption. The [lid signal boundary](../AYN_THOR.md#lid-and-sleep) still appli
 
 ## Optional diagnostics
 
-Open **Settings → About → Export diagnostics** to save a JSON report through
+Open **Settings → About & diagnostics → Export diagnostics** to save a JSON report through
 Android's document picker. Choose a new document in Downloads. The report
 includes app/device/display information, the renderer and a memory snapshot.
 It excludes saves, game data, document paths and persistent device identifiers.

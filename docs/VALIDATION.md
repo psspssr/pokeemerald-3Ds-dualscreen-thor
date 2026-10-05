@@ -4,7 +4,78 @@ The repository's [history cleanup](HISTORY.md) changed older commit IDs while
 keeping retained source snapshots identical. The source mapping covers releases
 from before that cleanup; beta.2 and later use the current history.
 
-## Latest beta: 0.1.0-beta.3
+## Latest beta: 0.1.0-beta.4
+
+The [signed beta.4 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.4)
+passed the [release workflow](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37352802563).
+[Normal CI](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37350292184)
+also passed on the tagged source. Downloaded asset hashes, signing identity,
+alignment, package and native/data checks passed.
+
+| Release identity | Value |
+|---|---|
+| Source | `31e9c92ef277d4acfb326b9322c99ef41084c96c` |
+| Version / Android code | `0.1.0-beta.4` / **12** |
+| APK | `emerald-thor-0.1.0-beta.4-armeabi-v7a.apk` |
+| Size | 27,477,518 bytes |
+| SHA-256 | `55dda9a4c455e3eda8600b69a80f8eff6eb207e32a75f3f4e8880eb2ae179fbc` |
+| Engine/data ABI | `a198e6bc` |
+
+Settings now starts with five groups: Display, Controls, Gameplay, Saves & data,
+and About & diagnostics. All 32 existing preference keys, choices and defaults
+remain intact. Save work and pending results survive movement between pages.
+Pause, settings pages and app-owned dialogs accept the D-pad, left stick,
+keyboard arrows and the selected face-button mapping. Confirm and Back use
+normal release behavior, including canceled presses; fast window transitions
+no longer lose the next confirm. Focus restoration skips disabled rows and
+keeps fresh directions responsive after Back. Android system file pickers
+retain their own controls.
+
+Overlay 101 restores voxel preparation before Android's frame-pacing wait.
+It limits optional work to the actual time left, including fast-forward,
+resume and overdue frames. Overlay 102 frees offscreen object slots before
+spawning incoming NPCs on the same camera update, avoiding a one-update delay
+when the 16-slot pool is full. It preserves view distances, hide flags, player,
+link and retained trainer state. Both classic and voxel modes use this path.
+
+CI also exposed a rapid resume/pause race: the sleeping game could miss the
+intermediate Running state and leave its pause acknowledgement unset.
+The pause loop now acknowledges each renewed wait. A controlled real-thread
+test reproduces the old timeout and passes after the fix; renderer-release
+ordering and paused Mystery-event work remain covered.
+
+**154 app instrumentation tests**, harness/release lint, **109 tooling tests**,
+**21 GPU host tests**, native sanitizer regressions and the complete ARM build
+passed. The voxel timing test exercises actual code on a controlled clock;
+NPC tests use the actual allocator, spawning and retention functions in both
+compile modes. Imported `origin/` remains unchanged.
+
+Production candidates passed controller menus and classic/voxel walking
+between Littleroot and Route 101 at 1920×1080 and 1240×1080. Captures were
+inspected and the sampled voxel walks had no missing chunks. Android sleep/wake
+also stopped frames and preserved manual Pause. Fixed-duration
+key pulses produced differing per-step positions, so these are bounded visual
+and gameplay checks, not an FPS benchmark. The full-size software emulator
+had no spare frame budget during those sampled walks. A separate runtime
+probe at lower output resolution with single-display fallback confirmed
+preparation uses available time before pacing.
+No quantitative pop-in reduction or complete removal of distance limits is
+claimed.
+
+The exact published APK then passed Continue with the original save, both
+panel captures, L1+R1 Pause, controller Settings navigation, a 20 ms first
+confirm across the Activity handoff, fast Back/stick navigation and slider
+adjustment/restoration. It returned to the same field position without writing
+a save. Its native library differs from the tested candidate only in the GNU
+build ID; the bootstrap library is identical. The new
+[Settings screenshot](images/settings-home-beta4.png) is an unmodified capture
+from that released APK.
+
+The original save and both settings files were restored byte-for-byte with
+original ownership and modes. Physical Thor performance, visual quality,
+audible audio and lid sensing still need the [hardware pass](testing/HARDWARE_TEST.md).
+
+## Previous beta: 0.1.0-beta.3
 
 The [signed beta.3 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.3)
 passed all seven jobs in the

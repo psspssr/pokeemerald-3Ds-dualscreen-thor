@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.3">Download Android beta</a> ·
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.4">Download Android beta</a> ·
   <a href="https://psspssr.github.io/emerald-dual-screen-site/">Website</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#controls">Controls</a> ·
@@ -36,11 +36,11 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 
 ## Get started
 
-Download the signed **[0.1.0-beta.3 Android beta](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.3)** and install its ARMv7 APK. Matching game data is included.
+Download the signed **[0.1.0-beta.4 Android beta](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.4)** and install its ARMv7 APK. Matching game data is included.
 
 **Press L1 + R1 together** or keyboard **Escape** for Pause and Settings. Both Thor panels fill by default; choose **Fit** to preserve the original proportions. Phone layouts include on-screen controls. [Thor setup](docs/AYN_THOR.md).
 
-Bring your progress through **Settings → Import save / Export save**. Standard Emerald GBA and emulator `.sav` files are supported; save states are not. Restart after importing and save normally in-game. Export your save before replacing a development APK, which uses a different signing key. [Save details](docs/BUILDING.md#engine-only-build-and-data-packs).
+Bring your progress through **Settings → Saves & data → Import save / Export save**. Standard Emerald GBA and emulator `.sav` files are supported; save states are not. Restart after importing and save normally in-game. Export your save before replacing a development APK, which uses a different signing key. [Save details](docs/BUILDING.md#engine-only-build-and-data-packs).
 
 **Sharp pixels are the default**, including Pokémon sprites and battle text. Settings → Display offers **1×–4× voxel resolution**, starting at **2× Sharp** for new settings. Choose 1× for lighter rendering or 3×/4× for more detail; optional anti-aliasing smooths voxel edges. Existing quality choices are preserved. Enable voxel scenery and battles in **OPTION**; set **3D BLUR → OFF** if an older setup still looks soft. **SHOW FPS** starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
 
@@ -64,14 +64,19 @@ Face buttons use Nintendo positions by default, regardless of their printed labe
 
 Fast-forward requires enabling it and choosing **2×, 4× or 8×** in Settings. Touch the bottom screen for game menus. [Full controls sheet, display swapping and optional controls](docs/AYN_THOR.md#controls-and-shortcuts).
 
+Navigate Pause and Settings with the **D-pad, left stick or arrow keys**. Use the right face button / **Enter** to select and the bottom face button / **Escape** to go back. Choosing label mapping also changes menu confirm/back buttons.
+
 ## Optional extras
 
-**Settings → Gameplay → Quality of life** offers fast-forward, shared party EXP, five rotating save backups and shiny-escape confirmation. Five shiny-odds choices range from **Original (1 in 8,192)** to **1 in 128**. All extras start off. [Options and odds details](docs/QUALITY_OF_LIFE.md).
+**Settings → Gameplay → Quality of life** offers fast-forward, shared party EXP and shiny-escape confirmation. Five shiny-odds choices range from **Original (1 in 8,192)** to **1 in 128**. Optional rotating save backups are under **Saves & data**. All extras start off. [Options and odds details](docs/QUALITY_OF_LIFE.md).
 
 **Settings → Gameplay → Mystery events** offers event-island tickets, offline Jirachi/Celebi gifts and missing Regi dolls. Activate each separately, then save in-game; normal story requirements remain. [Events and prerequisites](docs/MYSTERY_EVENTS.md).
 
 <details>
-  <summary>See the optional settings</summary>
+  <summary>See Settings and optional extras</summary>
+  <p align="center">
+    <a href="docs/images/settings-home-beta4.png"><img src="docs/images/settings-home-beta4.png" width="640" alt="The five Settings categories, with Display highlighted for controller navigation"></a>
+  </p>
   <p align="center">
     <a href="docs/images/shiny-odds.png"><img src="docs/images/shiny-odds.png" width="320" alt="Shiny odds picker with five choices from the original 1 in 8,192 to about 1 in 128"></a>
     <a href="docs/images/mystery-events.png"><img src="docs/images/mystery-events.png" width="320" alt="Mystery events menu with seven individual optional actions"></a>

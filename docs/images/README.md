@@ -5,6 +5,13 @@ running in an emulator. The device view is an illustrative mockup. Full physical
 Thor validation and sustained performance testing remain open; see
 [test results and limits](../VALIDATION.md).
 
+## Settings in beta.4
+
+[Settings home](settings-home-beta4.png) shows the five categories and controller
+focus on Display. It is an unmodified 1920×1080 capture from the exact published
+beta.4 APK (`31e9c92`, engine/data ABI `a198e6bc`). Image SHA-256:
+`fa07c2e7e865722cfe32e7ce7cc98e47bad58fabd0bd106cdc5ace387d02a744`.
+
 ## Display and speed settings
 
 [Voxel anti-aliasing](voxel-antialiasing.png) and

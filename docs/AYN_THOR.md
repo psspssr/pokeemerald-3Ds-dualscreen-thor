@@ -71,9 +71,9 @@ It does not treat a secondary-panel disconnect as proof that the lid closed.
 
 ## Controls and shortcuts
 
-The default face-button layout follows Nintendo positions. The Settings
-**Face button mapping → By label** option follows the controller's reported
-A/B/X/Y labels instead.
+The default face-button layout follows Nintendo positions. **Settings → Controls
+→ Face button mapping → By label** follows the controller's reported A/B/X/Y
+labels instead, in both the game and app menus.
 
 | Game input / action | Thor or gamepad | Keyboard |
 |---|---|---|
@@ -88,6 +88,17 @@ A/B/X/Y labels instead.
 | App pause menu / Settings | **L1 + R1 together**; Android Back also works | Escape |
 | Toggle fast-forward | R2 | Pause-menu action |
 | Hold fast-forward | L2 | Tab |
+
+Pause and Settings accept the **D-pad, left stick and keyboard arrows**.
+With the default mapping, the **right face button** confirms and the **bottom
+face button** goes back. **Enter** selects; **Escape** goes back. Use Left/Right
+to adjust a focused slider. Touch remains available.
+Android's system import/export picker uses the system's controller mapping.
+
+Settings starts with five groups: **Display**, **Controls**, **Gameplay**,
+**Saves & data**, and **About & diagnostics**. Display puts two-screen settings
+first; Gameplay contains Quality of life and Mystery events. Save imports,
+exports and optional backups live together under Saves & data.
 
 Release the shortcut buttons before pressing them again. If you released a
 button while another app had focus, one extra press-and-release may be needed
@@ -172,7 +183,7 @@ column. Touch targets expand with the visible content. Map, battle commands
 and other menus that already fill their area keep their layout. Fit and
 single-display layouts retain the original framing.
 
-**Settings → Dual display → Screen scaling** offers two choices:
+**Settings → Display → Screen scaling** offers two choices:
 
 | Choice | Top panel picture | Bottom panel picture |
 |---|---|---|
@@ -191,7 +202,7 @@ scaling and control placement.
 ## Other dual-display handhelds
 
 Some devices report their displays in the opposite order. Use
-**Settings → Dual display → Top screen on** to choose the main or second
+**Settings → Display → Top screen on** to choose the main or second
 display for the top game screen.
 
 ## Testing

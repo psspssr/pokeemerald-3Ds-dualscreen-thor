@@ -20,8 +20,15 @@ The beta.3 polish pass fixes controller releases inside Settings dialogs, PC
 initialization/cleanup failures and recovery of unfinished Pokémon or item
 moves. It passed 136 app tests, native sanitizer/conservation checks and
 ordinary plus deliberately failed PC reopening in the ARM emulator.
-[Validation](../VALIDATION.md#latest-beta-010-beta3) separates the published
+[Validation](../VALIDATION.md#previous-beta-010-beta3) separates the published
 release from the unpublished build used to trigger those failure paths.
+
+Beta.4 groups Settings into five sections and adds consistent controller,
+stick and keyboard navigation. Voxel work now uses spare time before frame
+pacing; NPCs reuse newly freed slots in the same camera update. A rapid
+pause/resume acknowledgement race was also fixed. All 154 app tests and the
+release workflow passed; [validation](../VALIDATION.md#latest-beta-010-beta4)
+records the exact APK check and emulator performance limits.
 
 ## Work order
 

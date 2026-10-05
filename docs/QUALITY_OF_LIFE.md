@@ -68,8 +68,9 @@ Settings during a reward sequence does not split that sequence between rules.
 
 ## Save backups
 
-Enable **Keep save backups** to retain the last five completed manual in-game
-saves, including the first save that overwrites an older game. This is not an
+In **Settings → Saves & data**, enable **Keep save backups** to retain the last
+five completed manual in-game saves, including the first save that overwrites
+an older game. This is not an
 autosave or an emulator save state.
 
 The port verifies the freshly written slot's signatures, sections, counter and

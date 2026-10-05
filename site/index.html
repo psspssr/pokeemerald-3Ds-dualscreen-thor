@@ -70,7 +70,7 @@
               <div><p class="eyebrow">{{RELEASE_KIND}}</p><h2 id="play-title">{{RELEASE_VERSION}}</h2><p class="release-date">{{RELEASE_DATE}} · {{APK_SIZE}} · ARMv7</p></div>
             </div>
             <p>Install the signed Android APK on a compatible Thor. Matching game data is included.</p>
-            <p>Includes controller fixes for Settings dialogs and recovery of unfinished PC moves when a memory error prevents reopening.</p>
+            <p>Clearer settings categories, controller navigation throughout app menus, and fixes for scenery pop-in.</p>
             <a class="button button-primary download-button" href="{{APK_URL}}"><span aria-hidden="true">↓</span> Download Android APK</a>
             <div class="access-notice"><strong>{{ACCESS_LABEL}}</strong><p>{{ACCESS_NOTE}}</p></div>
             <div class="release-links"><a href="{{RELEASE_URL}}">Release notes</a><a href="{{CHECKSUMS_URL}}">Checksums</a><a href="{{MANIFEST_URL}}">Build details</a></div>
@@ -81,7 +81,7 @@
           <h2>Set up.<br>Head to Hoenn.</h2>
           <ol class="setup-list">
             <li><span class="step-number">01</span><div><h3>Check your Thor’s firmware</h3><p>Android 9 or newer, OpenGL ES 3.0, and <strong>32-bit ARM app support</strong>. Firmware that only runs 64-bit apps cannot run this preview.</p></div></li>
-            <li><span class="step-number">02</span><div><h3>Bring your save</h3><p>Import an Emerald <code>.sav</code> in Settings, then restart. Export it to continue in a GBA emulator. Save normally in-game; save states are not supported.</p></div></li>
+            <li><span class="step-number">02</span><div><h3>Bring your save</h3><p>Open Settings → Saves &amp; data to import an Emerald <code>.sav</code>, then restart. Export it to continue in a GBA emulator. Save normally in-game; save states are not supported.</p></div></li>
             <li><span class="step-number">03</span><div><h3>Set your screen layout</h3><p>Both Thor panels fill by default, with the adventure above and touch menus below. Choose <strong>Fit</strong> to preserve the original proportions.</p></div></li>
           </ol>
           <p class="tested-note">Compatible Android phones and other handhelds are supported too. Tested in emulators; full Thor hardware validation and sustained performance testing remain open. <a href="{{REPOSITORY_URL}}/blob/main/docs/VALIDATION.md">Test results and limits ↗</a></p>
@@ -138,7 +138,7 @@
           <h2 id="controls-title">Pick up.<br>Press play.</h2>
           <p>Use your Thor’s built-in D-pad, sticks and shoulder buttons. Face buttons follow Nintendo positions by default; choose label mapping in Settings if you prefer.</p>
           <div class="controller-diagram" aria-hidden="true"><span class="diagram-dpad">✚</span><div class="face-buttons"><span class="face x">X</span><span class="face y">Y</span><span class="face a">A</span><span class="face b">B</span></div></div>
-          <div class="pause-callout"><span>OPEN THE APP MENU</span><strong><kbd>L1</kbd> + <kbd>R1</kbd></strong><p>Press together for Pause and Settings. Choose Resume to continue.</p></div>
+          <div class="pause-callout"><span>OPEN THE APP MENU</span><strong><kbd>L1</kbd> + <kbd>R1</kbd></strong><p>D-pad or left stick to navigate. Right selects; bottom goes back with the default mapping.</p></div>
         </div>
         <div class="controls-card menu-panel">
           <div class="panel-heading"><span class="selection-arrow" aria-hidden="true">▶</span> CONTROLS</div>
@@ -156,14 +156,14 @@
           <p class="control-tip">Enable fast-forward first and choose 2×, 4× or 8× in Settings. Audio is muted while accelerating.</p>
           <details class="keyboard-guide">
             <summary>Playing with a keyboard?</summary>
-            <dl><div><dt>Move</dt><dd>Arrow keys</dd></div><div><dt>A / B · X / Y</dt><dd><kbd>X</kbd> / <kbd>Z</kbd> · <kbd>S</kbd> / <kbd>A</kbd></dd></div><div><dt>L / R</dt><dd><kbd>Q</kbd> / <kbd>W</kbd></dd></div><div><dt>Start / Select</dt><dd>Enter / Backspace or Shift</dd></div><div><dt>App menu / speed hold</dt><dd>Escape / Tab</dd></div></dl>
+            <dl><div><dt>Move</dt><dd>Arrow keys</dd></div><div><dt>A / B · X / Y</dt><dd><kbd>X</kbd> / <kbd>Z</kbd> · <kbd>S</kbd> / <kbd>A</kbd></dd></div><div><dt>L / R</dt><dd><kbd>Q</kbd> / <kbd>W</kbd></dd></div><div><dt>Start / Select</dt><dd>Enter / Backspace or Shift</dd></div><div><dt>App menu / speed hold</dt><dd>Escape / Tab</dd></div><div><dt>Menu select / back</dt><dd>Enter / Escape</dd></div></dl>
           </details>
         </div>
       </div>
     </section>
 
     <section id="extras" class="section-wrap extras-section" aria-labelledby="extras-title">
-      <div class="section-heading"><div><p class="section-kicker">OPTIONAL EXTRAS</p><h2 id="extras-title">Your adventure.<br>Your options.</h2></div><p>Quality-of-life options start off. Turn on what you want in Settings → Gameplay.</p></div>
+      <div class="section-heading"><div><p class="section-kicker">OPTIONAL EXTRAS</p><h2 id="extras-title">Your adventure.<br>Your options.</h2></div><p>Quality-of-life options start off. Find game options in Settings → Gameplay and backups under Saves &amp; data.</p></div>
       <div class="extras-grid">
         <article class="extra-card"><span class="item-symbol" aria-hidden="true">»</span><h3>Set your pace</h3><p>Optional 2×, 4× or 8× fast-forward and shared experience for eligible benched Pokémon.</p></article>
         <article class="extra-card"><span class="item-symbol sparkle-symbol" aria-hidden="true">✦</span><h3>Shiny encounters</h3><p>Five shiny-odds choices, from the original rate to about 1 in 128. Optional confirmation before fleeing a shiny.</p></article>
