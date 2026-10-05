@@ -1,0 +1,16 @@
+--- a/src/title_screen.c
++++ b/src/title_screen.c
+@@ -921,7 +921,13 @@
+     if (!UpdatePaletteFade())
+     {
+         m4aMPlayAllStop();
++#ifdef __ANDROID__
++        /* No GBA link transport exists here. Its compatibility entry is a
++         * no-op, so keep the hidden B+Select chord on a responsive screen. */
++        SetMainCallback2(CB2_InitMainMenu);
++#else
+         SetMainCallback2(CB2_InitBerryFixProgram);
++#endif
+     }
+ }
+ 
