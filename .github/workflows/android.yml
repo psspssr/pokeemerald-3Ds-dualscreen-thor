@@ -88,6 +88,8 @@ jobs:
         run: python3 android/native/test/run_starter_tests.py
       - name: Bag grid to vertical menu touch transitions
         run: python3 android/native/test/run_menu_state_tests.py
+      - name: PC storage initialization and allocation-failure cleanup
+        run: python3 android/native/test/run_storage_init_tests.py
       - name: Shop assets and viewport
         run: python3 android/native/test/run_shop_tests.py
       - name: Contest graphics and Pokeblock viewport

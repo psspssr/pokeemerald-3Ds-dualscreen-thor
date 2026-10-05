@@ -1,0 +1,30 @@
+diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
+--- a/src/pokemon_storage_system.c
++++ b/src/pokemon_storage_system.c
+@@ -2059,7 +2059,7 @@
+ {
+     ResetTasks();
+     sCurrentBoxOption = boxOption;
+-    sStorage = Alloc(sizeof(*sStorage));
++    sStorage = AllocZeroed(sizeof(*sStorage));
+     if (sStorage == NULL)
+     {
+         SetMainCallback2(CB2_ExitPokeStorage);
+@@ -2079,7 +2079,7 @@
+ static void CB2_ReturnToPokeStorage(void)
+ {
+     ResetTasks();
+-    sStorage = Alloc(sizeof(*sStorage));
++    sStorage = AllocZeroed(sizeof(*sStorage));
+     if (sStorage == NULL)
+     {
+         SetMainCallback2(CB2_ExitPokeStorage);
+@@ -8582,7 +8582,7 @@
+ static void MultiMove_Free(void)
+ {
+     if (sMultiMove != NULL)
+-        Free(sMultiMove);
++        FREE_AND_SET_NULL(sMultiMove);
+ }
+ 
+ static void MultiMove_SetFunction(u8 id)
