@@ -148,8 +148,27 @@ static void Worker(void *unused)
 }
 static void TestThreads(void)
 {
+    Result unsupported = MAKERESULT(RL_PERMANENT, RS_NOTSUPPORTED, RM_KERNEL, RD_NOT_IMPLEMENTED);
+    assert(R_FAILED(unsupported));
+    assert(R_FAILED(MAKERESULT(RL_USAGE, RS_INVALIDARG, RM_APT, RD_INVALID_POINTER)));
+    assert(R_LEVEL(unsupported) == RL_PERMANENT && R_SUMMARY(unsupported) == RS_NOTSUPPORTED);
+    assert(R_MODULE(unsupported) == RM_KERNEL && R_DESCRIPTION(unsupported) == RD_NOT_IMPLEMENTED);
     /* The voxel stream's new system-core hint must still allow workers. */
+    u32 percent = 123;
+    assert(APT_GetAppCpuTimeLimit(&percent) == 0 && percent == 0);
+    assert(APT_SetAppCpuTimeLimit(50) == 0);
+    assert(APT_GetAppCpuTimeLimit(&percent) == 0 && percent == 50);
+    assert(R_FAILED(APT_SetAppCpuTimeLimit(101)));
+    assert(APT_GetAppCpuTimeLimit(&percent) == 0 && percent == 50);
+    assert(R_FAILED(APT_GetAppCpuTimeLimit(NULL)));
     assert(APT_SetAppCpuTimeLimit(30) == 0);
+    assert(APT_GetAppCpuTimeLimit(&percent) == 0 && percent == 30);
+    s64 luma = 123;
+    assert(R_FAILED(svcGetSystemInfo(&luma, 0x10000, 0)) && luma == 0);
+    assert(R_FAILED(svcGetSystemInfo(NULL, 0x10000, 0)));
+    extern int __system_argc;
+    extern char **__system_argv;
+    assert(__system_argc == 0 && __system_argv == NULL);
     LightEvent_Init(&gate, RESET_STICKY);
     LightLock_Init(&counterLock);
     Thread a = threadCreate(Worker, NULL, 8192, 0x30, -1, false);

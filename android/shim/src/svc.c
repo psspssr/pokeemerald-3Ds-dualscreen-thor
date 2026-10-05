@@ -22,6 +22,9 @@ char *fake_heap_start, *fake_heap_end;
 u32 __ctru_heap, __ctru_heap_size, __ctru_linear_heap;
 /* 0 means libctru's default (32 MiB); origin defines it as 8 MiB. */
 u32 __ctru_linear_heap_size __attribute__((weak)) = 0;
+/* JNI starts main() directly, without hb:ldr/forwarder command-line data. */
+int __system_argc;
+char **__system_argv;
 
 #define RESOURCE_LIMIT_HANDLE 0x0000C0DEu
 /* What a New 3DS application with the default memory mode has to commit. */
@@ -49,6 +52,18 @@ u64 svcGetSystemTick(void)
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (u64)ts.tv_sec * SYSCLOCK_ARM11 + (u64)ts.tv_nsec * SYSCLOCK_ARM11 / 1000000000ull;
+}
+
+Result svcGetSystemInfo(s64 *out, u32 type, s32 param)
+{
+    (void)type;
+    (void)param;
+    if (!out)
+        return MAKERESULT(RL_USAGE, RS_INVALIDARG, RM_KERNEL, RD_INVALID_POINTER);
+    *out = 0;
+    /* In particular, Luma's type 0x10000 probe must fail. Returning success
+     * would permit upstream to write a console-only fixed shared-page address. */
+    return MAKERESULT(RL_PERMANENT, RS_NOTSUPPORTED, RM_KERNEL, RD_NOT_IMPLEMENTED);
 }
 
 void svcSleepThread(s64 ns)

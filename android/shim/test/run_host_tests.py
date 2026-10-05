@@ -22,5 +22,6 @@ with tempfile.TemporaryDirectory(prefix="emerald-shim-build-") as tmp:
                str(SHIM / "test" / "test_shim.c"), *(str(path) for path in sources),
                *("-Wl,--wrap=" + name for name in wraps), "-lm", "-o", str(executable)]
     subprocess.run(command, check=True)
-    subprocess.run([str(executable)], check=True, timeout=15)
+    subprocess.run([str(executable)], check=True, timeout=15,
+                   env={**os.environ, "UBSAN_OPTIONS": "halt_on_error=1"})
 subprocess.run([sys.executable, str(SHIM / "test/run_aaudio_tests.py")], check=True)

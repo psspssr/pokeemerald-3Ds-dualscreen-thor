@@ -91,6 +91,8 @@ typedef enum
  * CLOCK_MONOTONIC: monotonic, and the same unit origin's millisecond maths uses.
  */
 u64 svcGetSystemTick(void);
+/* No 3DS kernel/custom-firmware extensions are exposed on Android. */
+Result svcGetSystemInfo(s64 *out, u32 type, s32 param);
 void svcSleepThread(s64 ns);
 /* To logcat, tag "Emerald3DS". */
 Result svcOutputDebugString(const char *str, s32 length);
