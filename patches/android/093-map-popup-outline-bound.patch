@@ -1,0 +1,11 @@
+--- a/src/map_name_popup.c
++++ b/src/map_name_popup.c
+@@ -466,7 +466,7 @@
+     }
+     popUpThemeId = sMapSectionToThemeId[regionMapSectionId];
+ 
+-    LoadBgTiles(GetWindowAttribute(popupWindowId, WINDOW_BG), sMapPopUp_OutlineTable[popUpThemeId], 0x400, 0x21D);
++    LoadBgTiles(GetWindowAttribute(popupWindowId, WINDOW_BG), sMapPopUp_OutlineTable[popUpThemeId], sizeof(sMapPopUp_OutlineTable[0]), 0x21D);
+     CallWindowFunction(popupWindowId, DrawMapNamePopUpFrame);
+     PutWindowTilemap(popupWindowId);
+     if (gMapHeader.weather == WEATHER_UNDERWATER_BUBBLES)

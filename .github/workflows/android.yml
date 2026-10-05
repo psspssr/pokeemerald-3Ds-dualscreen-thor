@@ -96,6 +96,8 @@ jobs:
         run: python3 android/native/test/run_item_menu_geometry_tests.py
       - name: External graphics offsets and direct asset reads
         run: python3 android/native/test/run_asset_offset_tests.py
+      - name: Condition palettes and map banner bounds
+        run: python3 android/native/test/run_menu_asset_tests.py
       - name: Bottom-screen naming keyboard
         run: python3 android/native/test/run_naming_tests.py
       - name: Unsupported transfer exit path

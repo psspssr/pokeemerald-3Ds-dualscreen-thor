@@ -1,0 +1,32 @@
+--- a/src/menu_specialized.c
++++ b/src/menu_specialized.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "malloc.h"
+ #include "battle_main.h"
+ #include "contest_effect.h"
+@@ -1197,6 +1200,10 @@
+ void LoadConditionSelectionIcons(struct SpriteSheet *sheets, struct SpriteTemplate *template, struct SpritePalette *pals)
+ {
+     u8 i;
++    const u16 *selectionPal = gPokenavConditionCancel_Pal;
++#ifdef PORT_BRIDGE
++    selectionPal = Port_ResolveAssetPointer(selectionPal);
++#endif
+ 
+     struct SpriteSheet dataSheets[] =
+     {
+@@ -1208,8 +1215,8 @@
+ 
+     struct SpritePalette dataPals[] =
+     {
+-        {gPokenavConditionCancel_Pal, TAG_CONDITION_BALL},
+-        {gPokenavConditionCancel_Pal + 16, TAG_CONDITION_CANCEL},
++        {selectionPal, TAG_CONDITION_BALL},
++        {selectionPal + 16, TAG_CONDITION_CANCEL},
+         {},
+     };
+ 
