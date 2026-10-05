@@ -23,7 +23,7 @@ class BattleStatPanelTests(unittest.TestCase):
         source = tree / "3ds_port/src/3ds_video.c"
         source.parent.mkdir(parents=True)
         source.write_bytes((ROOT / "origin/3ds_port/src/3ds_video.c").read_bytes())
-        for patch in ("010-field-ui-wrap.patch", "025-battle-stat-panel.patch"):
+        for patch in ("025-battle-stat-panel.patch",):
             subprocess.run(["git", "apply", str(ROOT / "patches/android" / patch)], cwd=tree, check=True)
         cls.patched = source.read_text()
         classifier = function(cls.patched, "BattleStatLayer(void)")

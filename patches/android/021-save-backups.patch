@@ -1,4 +1,3 @@
-diff --git a/src/save.c b/src/save.c
 --- a/src/save.c
 +++ b/src/save.c
 @@ -4,6 +4,7 @@

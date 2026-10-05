@@ -1,6 +1,7 @@
-"""Apply the tracked overlay and exercise its actual field-window geometry."""
+"""Exercise upstream's actual popup tile clipping after retiring Android010."""
 import ctypes
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -8,83 +9,110 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def function(text, signature):
+    match = re.search(re.escape(signature) + r"\s*\{", text)
+    if not match:
+        raise ValueError("missing upstream definition: " + signature)
+    brace = text.index("{", match.start())
+    depth, end = 1, brace + 1
+    while depth:
+        depth += (text[end] == "{") - (text[end] == "}")
+        end += 1
+    return text[match.start():end]
+
+
 class FieldUiWrapTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="emerald-field-ui-")
         tree = Path(cls.temp.name)
-        source = tree / "3ds_port/src/3ds_video.c"
-        source.parent.mkdir(parents=True)
-        source.write_bytes((ROOT / "origin/3ds_port/src/3ds_video.c").read_bytes())
-        subprocess.run(["git", "apply", str(ROOT / "patches/android/010-field-ui-wrap.patch")],
-                       cwd=tree, check=True)
-        patched = source.read_text()
-        start = patched.index("static int FieldUiBottom(")
-        end = patched.index("\n}\n", start) + 3
-        helper = patched[start:end]
+        patch = (ROOT / "origin/patches/pokeemerald/0005-port-hooks.patch").read_text()
+        # Both complete functions are additions in upstream's immutable patch.
+        additions = "\n".join(line[1:] for line in patch.splitlines()
+                              if line.startswith("+") and not line.startswith("+++"))
+        cls.additions = additions
+        actual = function(additions, "static void SavePopUpTilemap(void)") + "\n"
+        actual += function(additions, "static void ClipPopUpTilemap(s16 yOffset)")
         probe = tree / "field_ui.c"
         probe.write_text("""
-#include <stdbool.h>
-static bool sFieldUi, sFieldBanner;
-enum { VOXEL_OBJ_NONE, VOXEL_OBJ_WEATHER };
-static unsigned sVoxelObjPass, control, scroll;
-static unsigned Reg(unsigned reg) { return reg == 8 ? control : scroll; }
-""" + helper + """
-int extent(unsigned bg, int bottom, unsigned mode, unsigned size, unsigned offset)
-{
-    sFieldUi = (mode & 1) != 0;
-    sVoxelObjPass = (mode & 2) ? VOXEL_OBJ_WEATHER : VOXEL_OBJ_NONE;
-    sFieldBanner = (mode & 4) != 0;
-    control = size;
-    scroll = offset;
-    return FieldUiBottom(bg, bottom);
+#include <stdint.h>
+typedef uint16_t u16;
+typedef int16_t s16;
+typedef int32_t s32;
+typedef uint32_t bool32;
+#define WINDOW_NONE 255
+#define POPUP_TILE_ROWS 5
+#define POPUP_TILE_COLS 12
+#define BG_MAP_WIDTH 32
+#define TILE_HEIGHT 8
+#define DISPLAY_HEIGHT 240
+static u16 map[32 * 32], sPopUpTilemap[5][12];
+static unsigned uploads, window;
+static u16 *GetBgTilemapBuffer(unsigned bg) { (void)bg; return map; }
+static unsigned GetMapNamePopUpWindowId(void) { return window; }
+static void CopyBgTilemapBufferToVram(unsigned bg) { (void)bg; ++uploads; }
+""" + actual + """
+void reset(void) {
+    for (unsigned i = 0; i < 32 * 32; ++i) map[i] = i + 1;
+    uploads = 0; window = 0; SavePopUpTilemap();
 }
+void clip(int offset) { ClipPopUpTilemap(offset); }
+void no_window(void) { window = WINDOW_NONE; }
+unsigned cell(unsigned row, unsigned col) { return map[row * 32 + col]; }
+unsigned copies(void) { return uploads; }
 """)
         library = tree / "field_ui.so"
         subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-shared", "-fPIC",
                         str(probe), "-o", str(library)], check=True)
         cls.lib = ctypes.CDLL(str(library))
-        cls.lib.extent.argtypes = [ctypes.c_uint, ctypes.c_int, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
-        cls.lib.extent.restype = ctypes.c_int
-        cls.patched = patched
+        cls.lib.clip.argtypes = [ctypes.c_int]
+        cls.lib.cell.argtypes = [ctypes.c_uint, ctypes.c_uint]
+        cls.lib.cell.restype = cls.lib.copies.restype = ctypes.c_uint
 
     @classmethod
     def tearDownClass(cls):
         cls.temp.cleanup()
 
-    def test_popup_slide_has_no_second_copy_on_either_field_path(self):
-        for mode in (1, 2):  # cached 2D field / voxel overlay tile walk
-            for scroll in range(0, 41, 2):
-                with self.subTest(mode=mode, scroll=scroll):
-                    bottom = self.lib.extent(0, 240, mode, 0, scroll)
-                    self.assertEqual(bottom, min(240, 256 - scroll))
-                    # Every shown row addresses the original window map, never
-                    # a wrapped copy whose source row starts again at zero.
-                    self.assertLessEqual(bottom + scroll, 256)
+    def setUp(self):
+        self.lib.reset()
 
-    def test_normal_dialogue_keeps_all_240_rows(self):
-        self.assertEqual(self.lib.extent(0, 240, 1, 0, 0), 240)
-        self.assertEqual(self.lib.extent(0, 240, 2, 0, 0), 240)
+    def test_visible_wrapped_pixels_are_blank_at_every_slide_offset(self):
+        for offset in range(41):
+            self.lib.clip(offset)
+            for y in range(240):
+                source_y = (y + offset) % 256
+                if source_y < 40:
+                    for col in range(12):
+                        cell = self.lib.cell(source_y // 8, col)
+                        if source_y < offset:
+                            self.assertEqual(cell, 0, (offset, y, col))
+                        else:
+                            self.assertEqual(cell, (source_y // 8) * 32 + col + 1)
 
-    def test_terrain_field_move_banner_and_other_screens_keep_wrap(self):
-        for mode in (1, 2):
-            for bg in (1, 2, 3):
-                self.assertEqual(self.lib.extent(bg, 240, mode, 0, 40), 240)
-            self.assertEqual(self.lib.extent(0, 240, mode | 4, 0, 40), 240)
-        self.assertEqual(self.lib.extent(0, 240, 0, 0, 40), 240)
+    def test_slide_back_in_restores_the_saved_window(self):
+        self.lib.clip(40)
+        self.lib.clip(0)
+        for row in range(5):
+            for col in range(12):
+                self.assertEqual(self.lib.cell(row, col), row * 32 + col + 1)
 
-    def test_existing_clips_and_larger_maps_are_preserved(self):
-        self.assertEqual(self.lib.extent(0, 160, 1, 0, 40), 160)
-        self.assertEqual(self.lib.extent(0, 240, 1, 0x8000, 40), 240)
-        # BG0's register spans512 even when its actual map is256 rows high.
-        self.assertEqual(self.lib.extent(0, 240, 1, 0, 256 + 40), 216)
+    def test_surrounding_field_tiles_are_untouched(self):
+        self.lib.clip(40)
+        for row in range(32):
+            for col in range(32):
+                if row >= 5 or col >= 12:
+                    self.assertEqual(self.lib.cell(row, col), row * 32 + col + 1)
 
-    def test_patch_reaches_cached_and_tile_fallback_draws(self):
-        for name, invocation in (("DrawTextBg", "bottom = FieldUiBottom(bg, bottom);"),
-                                 ("DrawFieldBgTex", "y1 = FieldUiBottom(bg, y1);")):
-            start = self.patched.index(f"{name}(unsigned bg)\n")
-            end = self.patched.index("\n}\n", start)
-            self.assertIn(invocation, self.patched[start:end])
+    def test_no_window_does_not_modify_or_upload_the_map(self):
+        self.lib.no_window()
+        self.lib.clip(40)
+        self.assertEqual(self.lib.copies(), 0)
+        self.assertEqual(self.lib.cell(0, 0), 1)
+
+    def test_upstream_task_installs_and_updates_its_clipping(self):
+        self.assertEqual(self.additions.count("SavePopUpTilemap();"), 1)
+        self.assertEqual(self.additions.count("ClipPopUpTilemap(task->tYOffset);"), 3)
+        self.assertFalse((ROOT / "patches/android/010-field-ui-wrap.patch").exists())
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 --- a/3ds_port/src/3ds_game_full.c
 +++ b/3ds_port/src/3ds_game_full.c
-@@ -217,6 +217,7 @@
+@@ -218,6 +218,7 @@
  /* The Pokédex's own callback. The page it shows for a mon just caught puts
   * back the battle's, which stays the battle's. */
  IntrCallback CtrPokedex_VBlankCallback(void);
@@ -8,7 +8,7 @@
  
  void CtrCentredPokedex_SetVBlankCallback(IntrCallback callback)
  {
-@@ -267,8 +268,15 @@
+@@ -268,8 +269,15 @@
          UpdateSet(&sBattle, callback);
          UpdateSet(&sTransition, callback);
      }

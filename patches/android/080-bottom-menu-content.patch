@@ -5,10 +5,10 @@
  #include "3ds_video.h"
  #include "3ds_data.h"
 +#include "android_bottom_menus.h"
+ #include "../compat/port_prof.h"
  
  /* Public queue passed by libctru, never a cast of Citro3D's private context.
-  * Uploads reserve worst-case split+copy entries and leave the compositor's
-@@ -3832,6 +3833,10 @@
+@@ -4214,6 +4215,10 @@
      }
      C2D_Flush();
      C3D_FrameSplit(0);
@@ -19,7 +19,7 @@
  }
  
  #if CTR_VOXEL_ENABLED
-@@ -5182,6 +5187,7 @@
+@@ -5590,6 +5595,7 @@
      sBottomInUse = bottom;
      if (sHoldTop && !bottom)
      {
@@ -27,7 +27,7 @@
          gspWaitForVBlank();
          ++sStats.frames;
          return;
-@@ -5247,6 +5253,7 @@
+@@ -5655,6 +5661,7 @@
      ScenePrepare();
      uint64_t waitStart = svcGetSystemTick();
      if (!C3D_FrameBegin(C3D_FRAME_SYNCDRAW)) return;

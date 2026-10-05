@@ -1,6 +1,6 @@
 --- a/3ds_port/full.mk
 +++ b/3ds_port/full.mk
-@@ -123,7 +123,7 @@
+@@ -140,7 +140,7 @@
  # GBA screens shown centred, margins only from layers that wrap on the GBA
  # (compat/ctr_gba_centred.h).
  CTR_GBA_CENTRED_SRCS := region_map field_region_map main_menu naming_screen wallclock \

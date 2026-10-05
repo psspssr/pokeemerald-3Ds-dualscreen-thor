@@ -1,6 +1,6 @@
 --- a/3ds_port/src/3ds_video.c
 +++ b/3ds_port/src/3ds_video.c
-@@ -86,7 +86,7 @@
+@@ -87,7 +87,7 @@
  /*
   * Magnification of the frame being composed: a screen point is
   * (gba + view) * zoom + offset. The battle scene is composed at
@@ -9,7 +9,7 @@
   */
  static float sZoom = 1.0f, sOffX, sOffY;
  /* Size of the surface being composed: the screen, or the battle scene's. */
-@@ -1429,7 +1429,16 @@
+@@ -1529,7 +1529,16 @@
   * composed is carried from the scene's coordinates to the box's through the
   * screen, drawn there, and put back.
   */
@@ -27,7 +27,7 @@
  {
      int viewX = sViewX, viewY = sViewY;
      float zoom = sZoom, offX = sOffX, offY = sOffY;
-@@ -1440,13 +1449,17 @@
+@@ -1540,13 +1549,17 @@
      sZoom = 1.0f;
      sOffX = sOffY = 0.0f;
      sLayerShift = shift * sShiftZoom;
@@ -48,7 +48,7 @@
      C2D_Flush();
      sZoom = zoom;
      sOffX = offX;
-@@ -3045,7 +3058,7 @@
+@@ -3425,7 +3438,7 @@
              if (sFieldUi && bg == 0 && !sFieldBanner) sLayerShift += CTR_FIELD_UI_SHIFT / sShiftZoom;
              if (((mode == 1 && bg == 2) || mode == 2) && sNavBand && !lines) DrawNavBackmostAffine(bg);
              else if ((mode == 1 && bg == 2) || mode == 2) DrawAffineBg(bg);
@@ -57,7 +57,7 @@
              else if (!DrawLineBg(bg) && !DrawFieldBgTex(bg) && !DrawStageBgTex(bg) && !DrawBandBgTex(bg))
                  DrawTextBg(bg);
              sLayerShift = shift;
-@@ -3531,7 +3544,7 @@
+@@ -3913,7 +3926,7 @@
      C2D_TargetClear(sScene, 0);
      C2D_SceneBegin(sScene);
      Blend(5, false, false);
@@ -66,7 +66,7 @@
      if (!(Reg(0) & 128)) Compose();
      sLayerExclude = 0;
      C2D_Flush();
-@@ -3778,8 +3791,8 @@
+@@ -4160,8 +4173,8 @@
      C2D_SceneBegin(sLogical);
      Blend(5, false, false);
      StageUnderlay();
@@ -77,7 +77,7 @@
      if (!(Reg(0) & 128))
      {
          if (target != sBottom) Compose();
-@@ -4167,7 +4180,8 @@
+@@ -4575,7 +4588,8 @@
      Blend(5, false, false);
      /* After a scene composed on its own only the text box is left; without
       * its surface, everything but what the world stands in for. */
