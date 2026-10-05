@@ -13,6 +13,7 @@ static inline CtrHostBottomMenuContent AndroidBottomMenu_Content(unsigned screen
     case CTR_CENTRED_SUMMARY:
     case CTR_CENTRED_BAG_WHOLE:
     case CTR_CENTRED_PARTY_WHOLE:
+    case CTR_CENTRED_NAMING:
         return CTR_HOST_BOTTOM_WHOLE;
     case CTR_CENTRED_BAG:
     case CTR_CENTRED_POKEDEX:

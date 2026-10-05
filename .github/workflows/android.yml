@@ -88,6 +88,12 @@ jobs:
         run: python3 android/native/test/run_starter_tests.py
       - name: Bag grid to vertical menu touch transitions
         run: python3 android/native/test/run_menu_state_tests.py
+      - name: Shop assets and viewport
+        run: python3 android/native/test/run_shop_tests.py
+      - name: Bottom-screen naming keyboard
+        run: python3 android/native/test/run_naming_tests.py
+      - name: Unsupported transfer exit path
+        run: python3 android/native/test/run_unsupported_entry_tests.py
       - name: Evolution sparkle coordinates and animation callbacks
         run: python3 android/native/test/run_evolution_tests.py
       - name: Build engine-only release APK

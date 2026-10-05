@@ -21,7 +21,7 @@ static struct { u8 mode,bagView; } sShown;
 static int sScreen,sOptionScroll,sOptionScrollStart;
 static CtrInput input;
 static CtrHostBottomMenuContent presented;
-static bool storageOpen, navOpen, dexOpen, partyTaskActive, bottomWhole;
+static bool storageOpen, navOpen, dexOpen, namingOpen, partyTaskActive, bottomWhole;
 static bool sInGame;
 static void *gSaveBlock1Ptr, *gSaveBlock2Ptr, *gBagMenu;
 static void CB2_Overworld(void) {}
@@ -38,6 +38,7 @@ static struct { int kind; } sAsked;
 enum { ASK_NONE, ASK_ACTION, ASK_MOVE, ASK_TARGET };
 static bool CtrPokenav_IsOpen(void) { return navOpen; }
 static bool CtrPokedex_IsOpen(void) { return dexOpen; }
+static bool CtrNaming_IsOpen(void) { return namingOpen; }
 bool CtrVideo_BottomWhole(void) { return bottomWhole; }
 static bool FuncIsActiveTask(void (*fn)(u8))
 { return partyTaskActive && fn==Task_HandleChooseMonInput; }
@@ -55,6 +56,7 @@ static void CtrMenu_PostTap(s16 x,s16 y) { record(3,0,x,y); }
 static bool8 CtrStorage_IsOpen(void) { return storageOpen; }
 static void CtrStorage_Tap(s16 x,s16 y) { record(4,0,x,y); }
 static void CtrSummary_Tap(s16 x,s16 y) { record(5,0,x,y); }
+static void CtrNaming_Tap(s16 x,s16 y) { record(10,0,x,y); }
 int CtrVideo_BottomPictureY(int y) { return y+9; }
 static void NavTap(int x,int y) { record(6,0,x,y); }
 static void NavSwipe(int dy) { record(7,0,0,dy); }
@@ -68,6 +70,7 @@ static void reset(u8 mode,bool whole,CtrHostBottomMenuContent content)
 {
     memset(&sTouch,0,sizeof(sTouch)); input=(CtrInput){0};
     sShown.mode=mode; sShown.bagView=whole?BAG_VIEW_WHOLE:0;
+    namingOpen=false;
     presented=content; ProcessTouch(mode); count=reads=0;
     sScreen=0; storageOpen=false;
 }
@@ -148,7 +151,7 @@ int main(void)
     testClassifiedMenus();
     for(unsigned scene=0;scene<=CTR_CENTRED_SCREENS+2;scene++) {
         CtrHostBottomMenuContent expected=CTR_HOST_BOTTOM_ORIGINAL;
-        if(scene==CTR_CENTRED_STORAGE || scene==CTR_CENTRED_SUMMARY || scene==CTR_CENTRED_BAG_WHOLE || scene==CTR_CENTRED_PARTY_WHOLE)
+        if(scene==CTR_CENTRED_STORAGE || scene==CTR_CENTRED_SUMMARY || scene==CTR_CENTRED_BAG_WHOLE || scene==CTR_CENTRED_PARTY_WHOLE || scene==CTR_CENTRED_NAMING)
             expected=CTR_HOST_BOTTOM_WHOLE;
         if(scene==CTR_CENTRED_BAG || scene==CTR_CENTRED_POKEDEX || scene==CTR_CENTRED_PARTY)
             expected=CTR_HOST_BOTTOM_FIELD;
@@ -200,6 +203,23 @@ int main(void)
         reset(MODE_STORAGE,true,CTR_HOST_BOTTOM_WHOLE); storageOpen=storage;
         event(BAG_TOUCH_DOWN,319,239); event(BAG_TOUCH_UP,319,239);
         assert(count==1); expect(0,storage?4:5,0,239,159);
+    }
+    // Naming works before Continue/NewGame has any field/save navigation.
+    for(int expanded=0;expanded<2;expanded++) {
+        reset(MODE_STORAGE,true,expanded?CTR_HOST_BOTTOM_WHOLE:CTR_HOST_BOTTOM_ORIGINAL);
+        sInGame=false; gSaveBlock1Ptr=gSaveBlock2Ptr=NULL; namingOpen=true;
+        assert(CurrentMode()==MODE_STORAGE);
+        ProcessTouch(MODE_STORAGE); // publish the new keyboard identity
+        event(BAG_TOUCH_DOWN,200,120); event(BAG_TOUCH_UP,200,120);
+        assert(count==1); expect(0,10,0,expanded?150:160,80);
+        // A held gesture cannot carry between Summary and Naming even when
+        // both share MODE_STORAGE and the same presented-content geometry.
+        event(BAG_TOUCH_DOWN,200,120); namingOpen=false;
+        event(BAG_TOUCH_UP,200,120); assert(count==1);
+        event(BAG_TOUCH_DOWN,200,120); namingOpen=true;
+        event(BAG_TOUCH_UP,200,120); assert(count==1);
+        event(BAG_TOUCH_DOWN,200,120); event(BAG_TOUCH_UP,200,120);
+        assert(count==2); expect(1,10,0,expanded?150:160,80);
     }
     /* Field navigation never enters the content inverse. An existing bag
      * drag can leave the content, and must remain out of bounds there. */

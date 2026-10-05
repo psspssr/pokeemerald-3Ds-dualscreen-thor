@@ -1,0 +1,226 @@
+--- a/src/naming_screen.c
++++ b/src/naming_screen.c
+@@ -392,8 +392,109 @@
+ static void NamingScreen_ShowBgs(void);
+ static bool8 IsWideLetter(u8);
+ 
++#ifdef PLATFORM_3DS
++static void Task_HandleInput(u8);
++static u8 CurrentPageToKeyboardId(void);
++static struct {
++    bool8 pending;
++    s16 x, y;
++    u8 page, state;
++    u32 frame;
++} sCtrNamingTap;
++
++bool8 CtrNaming_IsOpen(void)
++{
++    return gMain.callback2 == CB2_NamingScreen && sNamingScreen != NULL;
++}
++
++static bool8 CtrNaming_AcceptsTap(void)
++{
++    u8 taskId;
++
++    if (!CtrNaming_IsOpen() || gPaletteFade.active)
++        return FALSE;
++    if (sNamingScreen->state == STATE_WAIT_SENT_TO_PC_MESSAGE)
++        return !IsTextPrinterActive(0);
++    taskId = FindTaskIdByFunc(Task_HandleInput);
++    return taskId != TASK_NONE && sNamingScreen->state == STATE_HANDLE_INPUT
++        && gTasks[taskId].data[0] == INPUT_STATE_ENABLED;
++}
++
++void CtrNaming_Tap(s16 x, s16 y)
++{
++    sCtrNamingTap.pending = FALSE;
++    if (!CtrNaming_AcceptsTap() || x < 0 || x >= DISPLAY_WIDTH || y < 0 || y >= DISPLAY_HEIGHT)
++        return;
++    sCtrNamingTap.pending = TRUE;
++    sCtrNamingTap.x = x;
++    sCtrNamingTap.y = y;
++    sCtrNamingTap.page = sNamingScreen->currentPage;
++    sCtrNamingTap.state = sNamingScreen->state;
++    sCtrNamingTap.frame = gMain.vblankCounter1;
++}
++
++static bool8 CtrNaming_TakeTap(s16 *x, s16 *y)
++{
++    if (!sCtrNamingTap.pending)
++        return FALSE;
++    sCtrNamingTap.pending = FALSE;
++    if (!CtrNaming_AcceptsTap() || sCtrNamingTap.page != sNamingScreen->currentPage
++        || sCtrNamingTap.state != sNamingScreen->state
++        || gMain.vblankCounter1 - sCtrNamingTap.frame > 30)
++        return FALSE;
++    *x = sCtrNamingTap.x;
++    *y = sCtrNamingTap.y;
++    return TRUE;
++}
++
++static bool8 CtrNaming_Acknowledge(void)
++{
++    s16 x, y;
++    return CtrNaming_TakeTap(&x, &y);
++}
++
++// Select the displayed key, then let the unchanged native keyboard handler
++// perform its normal character, page, backspace or OK action.
++static bool8 CtrNaming_TouchInput(struct Task *task)
++{
++    s16 x, y, column, row;
++    u8 page;
++
++    if (!CtrNaming_TakeTap(&x, &y))
++        return FALSE;
++    if (x >= 184 && x < 224 && y >= 72 && y < 152)
++    {
++        column = GetCurrentPageColumnCount();
++        row = y < 104 ? BUTTON_PAGE : y < 128 ? BUTTON_BACK : BUTTON_OK;
++    }
++    else
++    {
++        if (y < 80 || y >= 144)
++            return FALSE;
++        page = CurrentPageToKeyboardId();
++        for (column = 0; column < GetCurrentPageColumnCount(); ++column)
++        {
++            s16 center = 38 + sPageColumnXPos[page][column];
++            s16 radius = page == KEYBOARD_SYMBOLS ? 10 : 6;
++            if (x >= center - radius && x < center + radius)
++                break;
++        }
++        if (column == GetCurrentPageColumnCount())
++            return FALSE; // decorative gaps between the letter groups
++        row = (y - 80) / 16;
++        task->data[2] = row; // preserve D-pad return from the button column
++    }
++    SetCursorPos(column, row);
++    task->data[1] = INPUT_A_BUTTON;
++    return TRUE;
++}
++#endif
++
+ void DoNamingScreen(u8 templateNum, u8 *destBuffer, u16 monSpecies, u16 monGender, u32 monPersonality, MainCallback returnCallback)
+ {
++#ifdef PLATFORM_3DS
++    sCtrNamingTap.pending = FALSE;
++#endif
+     sNamingScreen = Alloc(sizeof(struct NamingScreenData));
+     if (!sNamingScreen)
+     {
+@@ -744,7 +845,11 @@
+ static bool8 MainState_WaitSentToPCMessage(void)
+ {
+     RunTextPrinters();
+-    if (!IsTextPrinterActive(0) && JOY_NEW(A_BUTTON))
++    if (!IsTextPrinterActive(0) && (JOY_NEW(A_BUTTON)
++#ifdef PLATFORM_3DS
++        || CtrNaming_Acknowledge()
++#endif
++        ))
+         sNamingScreen->state = STATE_FADE_OUT;
+ 
+     return FALSE;
+@@ -1573,6 +1678,9 @@
+     u8 taskId = FindTaskIdByFunc(Task_HandleInput);
+ 
+     gTasks[taskId].tState = state;
++#ifdef PLATFORM_3DS
++    sCtrNamingTap.pending = FALSE;
++#endif
+ }
+ 
+ static void Task_HandleInput(u8 taskId)
+@@ -1588,6 +1696,10 @@
+ static void Input_Enabled(struct Task *task)
+ {
+     task->tKeyboardEvent = INPUT_NONE;
++#ifdef PLATFORM_3DS
++    if (CtrNaming_TouchInput(task))
++        return;
++#endif
+ 
+     if (JOY_NEW(A_BUTTON))
+         task->tKeyboardEvent = INPUT_A_BUTTON;
+--- a/3ds_port/src/3ds_video.c
++++ b/3ds_port/src/3ds_video.c
+@@ -4032,7 +4032,7 @@
+ static bool BottomWhole(unsigned screen)
+ {
+     return screen == CTR_CENTRED_STORAGE || screen == CTR_CENTRED_SUMMARY || screen == CTR_CENTRED_BAG_WHOLE
+-        || screen == CTR_CENTRED_PARTY_WHOLE;
++        || screen == CTR_CENTRED_PARTY_WHOLE || screen == CTR_CENTRED_NAMING;
+ }
+ 
+ /* The screens drawn on the bottom screen at all. */
+--- a/3ds_port/src/3ds_bottom_ui.c
++++ b/3ds_port/src/3ds_bottom_ui.c
+@@ -99,6 +99,10 @@
+ #include "3ds_video.h"
+ #include "android_bottom_menus.h"
+ 
++/* naming_screen.c: keyboard input is available before New Game starts. */
++bool8 CtrNaming_IsOpen(void);
++void CtrNaming_Tap(s16 x, s16 y);
++
+ /* Exported by the game under PLATFORM_3DS, or not exported by its headers. */
+ void CB2_BagMenuRun(void);
+ /* party_menu.c: the column's buttons close the game's party menu. */
+@@ -1377,6 +1381,8 @@
+ 
+ static u8 CurrentMode(void)
+ {
++    if (CtrNaming_IsOpen())
++        return MODE_STORAGE; // the same whole-screen GBA touch space as Summary
+     if (gMain.callback2 == CB2_Overworld)
+         sInGame = TRUE;
+     if (!sInGame || !gSaveBlock1Ptr || !gSaveBlock2Ptr)
+@@ -1932,6 +1938,14 @@
+     s->pickMapsec = MAPSEC_NONE;
+     if (s->mode == MODE_OFF)
+         return;
++    if (CtrNaming_IsOpen())
++    {
++        // New-player naming can precede a loaded game/save. The keyboard
++        // owns the whole canvas and needs no field navigation snapshot.
++        s->screen = SCR_COUNT;
++        s->bagView = BAG_VIEW_WHOLE;
++        return;
++    }
+     s->gender = gSaveBlock2Ptr->playerGender ? FEMALE : MALE;
+     s->inBattle = gMain.inBattle;
+     s->enabled = EnabledScreens();
+@@ -4128,12 +4142,15 @@
+     /* Only a successfully presented frame changes the inverse. Skipped
+      * fast-forward frames cannot remap a gesture before its picture changes. */
+     static CtrHostBottomMenuContent previousContent;
++    static bool8 previousNaming;
+     CtrHostBottomMenuContent content = CtrHost_PresentedBottomMenuContent();
+-
+-    if (content != previousContent)
++    bool8 naming = CtrNaming_IsOpen();
++
++    if (content != previousContent || naming != previousNaming)
+     {
+         bool8 wasActive = sTouch.active || sTouch.bag;
+         previousContent = content;
++        previousNaming = naming;
+         if (sTouch.bag)
+         {
+             CtrBag_Touch(BAG_TOUCH_CANCEL, 0, 0);
+@@ -4246,8 +4263,11 @@
+             x -= (W - 240) / 2;
+             y -= (H - 160) / 2;
+ 
+-            /* Or a summary opened from them, the same way. */
+-            if (!sTouch.dragged && CtrStorage_IsOpen())
++            /* Naming shares this canvas, including before New Game. */
++            if (!sTouch.dragged && naming)
++                CtrNaming_Tap(x, y);
++            /* Or a summary opened from the boxes, the same way. */
++            else if (!sTouch.dragged && CtrStorage_IsOpen())
+                 CtrStorage_Tap(x, y);
+             else if (!sTouch.dragged)
+                 CtrSummary_Tap(x, y);
