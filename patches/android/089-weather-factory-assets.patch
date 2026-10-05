@@ -1,0 +1,181 @@
+--- a/src/field_weather.c
++++ b/src/field_weather.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "constants/songs.h"
+ #include "constants/weather.h"
+ #include "constants/rgb.h"
+@@ -504,6 +507,10 @@
+     }
+     else if (colorMapIndex < 0)
+     {
++        const u16 (*colors)[0x1000] = sDroughtWeatherColors;
++#ifdef PORT_BRIDGE
++        colors = Port_ResolveAssetPointer(colors);
++#endif
+         // A negative gammIndex value means that the blending will come from the special Drought weather's palette tables.
+         colorMapIndex = -colorMapIndex - 1;
+         palOffset = PLTT_ID(startPalIndex);
+@@ -522,7 +529,7 @@
+             {
+                 for (i = 0; i < 16; i++)
+                 {
+-                    gPlttBufferFaded[palOffset] = sDroughtWeatherColors[colorMapIndex][DROUGHT_COLOR_INDEX(gPlttBufferUnfaded[palOffset])];
++                    gPlttBufferFaded[palOffset] = colors[colorMapIndex][DROUGHT_COLOR_INDEX(gPlttBufferUnfaded[palOffset])];
+                     palOffset++;
+                 }
+             }
+@@ -597,6 +604,10 @@
+     u16 curPalIndex;
+     u16 palOffset;
+     u16 i;
++    const u16 (*colors)[0x1000] = sDroughtWeatherColors;
++#ifdef PORT_BRIDGE
++    colors = Port_ResolveAssetPointer(colors);
++#endif
+ 
+     colorMapIndex = -colorMapIndex - 1;
+     color = *(struct RGBColor *)&blendColor;
+@@ -628,7 +639,7 @@
+                 b1 = color1.b;
+ 
+                 offset = ((b1 & 0x1E) << 7) | ((g1 & 0x1E) << 3) | ((r1 & 0x1E) >> 1);
+-                color2 = *(struct RGBColor *)&sDroughtWeatherColors[colorMapIndex][offset];
++                color2 = *(struct RGBColor *)&colors[colorMapIndex][offset];
+                 r2 = color2.r;
+                 g2 = color2.g;
+                 b2 = color2.b;
+--- a/src/battle_factory_screen.c
++++ b/src/battle_factory_screen.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "battle.h"
+ #include "battle_factory_screen.h"
+ #include "battle_factory.h"
+@@ -289,6 +292,32 @@
+     {gPokeballSelection_Gfx, 0x800, GFXTAG_BALL},
+     {},
+ };
++
++/* The original read at gray[37] crossed its 16-color palette and the next
++ * 16-color palette into interface[5]. Address the actual asset explicitly. */
++static u16 FactorySwapFadeColor(void)
++{
++    const u16 *colors = sInterface_Pal;
++#ifdef PORT_BRIDGE
++    colors = Port_ResolveAssetPointer(colors);
++#endif
++    return colors[5];
++}
++
++/* INCBIN stubs do not describe the tileset's allocation or copy extent. */
++static u32 FactoryAssetSize(const void *asset, u32 embeddedSize)
++{
++#ifdef PORT_BRIDGE
++    u32 bytes = Port_GetAssetSizeExact(asset);
++    if (bytes != 0)
++        return bytes;
++#else
++    (void)asset;
++#endif
++    return embeddedSize;
++}
++
++#define FACTORY_ASSET_SIZE(asset) FactoryAssetSize(asset, sizeof(asset))
+ 
+ static const struct SpritePalette sSelect_SpritePalettes[] =
+ {
+@@ -1150,11 +1179,11 @@
+         gMain.state++;
+         break;
+     case 1:
+-        sSelectMenuTilesetBuffer = Alloc(sizeof(gFrontierFactoryMenu_Gfx));
+-#ifdef BUGFIX
+-        sSelectMonPicBgTilesetBuffer = AllocZeroed(sizeof(sMonPicBg_Gfx));
++        sSelectMenuTilesetBuffer = Alloc(FACTORY_ASSET_SIZE(gFrontierFactoryMenu_Gfx));
++#if defined(BUGFIX) || defined(PORT_BRIDGE)
++        sSelectMonPicBgTilesetBuffer = AllocZeroed(FACTORY_ASSET_SIZE(sMonPicBg_Gfx));
+ #else
+-        sSelectMonPicBgTilesetBuffer = AllocZeroed(sizeof(gFrontierFactoryMenu_Gfx)); // Incorrect size
++        sSelectMonPicBgTilesetBuffer = AllocZeroed(FACTORY_ASSET_SIZE(gFrontierFactoryMenu_Gfx)); // Incorrect size
+ #endif
+         sSelectMenuTilemapBuffer = Alloc(BG_SCREEN_SIZE);
+         sSelectMonPicBgTilemapBuffer = AllocZeroed(BG_SCREEN_SIZE);
+@@ -1181,10 +1210,10 @@
+         ResetSpriteData();
+         ResetTasks();
+         FreeAllSpritePalettes();
+-        CpuCopy16(gFrontierFactoryMenu_Gfx, sSelectMenuTilesetBuffer, sizeof(gFrontierFactoryMenu_Gfx));
+-        CpuCopy16(sMonPicBg_Gfx, sSelectMonPicBgTilesetBuffer, sizeof(sMonPicBg_Gfx));
+-        LoadBgTiles(1, sSelectMenuTilesetBuffer, sizeof(gFrontierFactoryMenu_Gfx), 0);
+-        LoadBgTiles(3, sSelectMonPicBgTilesetBuffer, sizeof(sMonPicBg_Gfx), 0);
++        CpuCopy16(gFrontierFactoryMenu_Gfx, sSelectMenuTilesetBuffer, FACTORY_ASSET_SIZE(gFrontierFactoryMenu_Gfx));
++        CpuCopy16(sMonPicBg_Gfx, sSelectMonPicBgTilesetBuffer, FACTORY_ASSET_SIZE(sMonPicBg_Gfx));
++        LoadBgTiles(1, sSelectMenuTilesetBuffer, FACTORY_ASSET_SIZE(gFrontierFactoryMenu_Gfx), 0);
++        LoadBgTiles(3, sSelectMonPicBgTilesetBuffer, FACTORY_ASSET_SIZE(sMonPicBg_Gfx), 0);
+         CpuCopy16(gFrontierFactoryMenu_Tilemap, sSelectMenuTilemapBuffer, BG_SCREEN_SIZE);
+         LoadBgTilemap(1, sSelectMenuTilemapBuffer, BG_SCREEN_SIZE, 0);
+         LoadPalette(gFrontierFactoryMenu_Pal, 0, 2 * PLTT_SIZE_4BPP);
+@@ -3028,7 +3057,7 @@
+         gTasks[taskId].tState++;
+         break;
+     case 2:
+-        BeginNormalPaletteFade(1 << PALNUM_FADE_TEXT, 0, 0, 16, sPokeballGray_Pal[37]);
++        BeginNormalPaletteFade(1 << PALNUM_FADE_TEXT, 0, 0, 16, FactorySwapFadeColor());
+         gTasks[taskId].tState++;
+         break;
+     case 3:
+@@ -3153,14 +3182,14 @@
+         if (gTasks[taskId].tSlideFinishedPkmn == TRUE
+          && gTasks[taskId].tSlideFinishedCancel == TRUE)
+         {
+-            gPlttBufferFaded[BG_PLTT_ID(PALNUM_FADE_TEXT) + 2] = sPokeballGray_Pal[37];
++            gPlttBufferFaded[BG_PLTT_ID(PALNUM_FADE_TEXT) + 2] = FactorySwapFadeColor();
+             Swap_PrintActionStrings();
+             PutWindowTilemap(SWAP_WIN_ACTION_FADE);
+             gTasks[taskId].tState++;
+         }
+         break;
+     case 3:
+-        BeginNormalPaletteFade(1 << PALNUM_FADE_TEXT, 0, 16, 0, sPokeballGray_Pal[37]);
++        BeginNormalPaletteFade(1 << PALNUM_FADE_TEXT, 0, 16, 0, FactorySwapFadeColor());
+         gTasks[taskId].tState++;
+         break;
+     case 4:
+@@ -3307,11 +3336,11 @@
+         gMain.state++;
+         break;
+     case 1:
+-        sSwapMenuTilesetBuffer = Alloc(sizeof(gFrontierFactoryMenu_Gfx));
+-#ifdef BUGFIX
+-        sSwapMonPicBgTilesetBuffer = AllocZeroed(sizeof(sMonPicBg_Gfx));
++        sSwapMenuTilesetBuffer = Alloc(FACTORY_ASSET_SIZE(gFrontierFactoryMenu_Gfx));
++#if defined(BUGFIX) || defined(PORT_BRIDGE)
++        sSwapMonPicBgTilesetBuffer = AllocZeroed(FACTORY_ASSET_SIZE(sMonPicBg_Gfx));
+ #else
+-        sSwapMonPicBgTilesetBuffer = AllocZeroed(sizeof(gFrontierFactoryMenu_Gfx)); // Incorrect size
++        sSwapMonPicBgTilesetBuffer = AllocZeroed(FACTORY_ASSET_SIZE(gFrontierFactoryMenu_Gfx)); // Incorrect size
+ #endif
+         sSwapMenuTilemapBuffer = Alloc(BG_SCREEN_SIZE);
+         sSwapMonPicBgTilemapBuffer = AllocZeroed(BG_SCREEN_SIZE);
+@@ -3339,10 +3368,10 @@
+         ResetTasks();
+         FreeAllSpritePalettes();
+         ResetAllPicSprites();
+-        CpuCopy16(gFrontierFactoryMenu_Gfx, sSwapMenuTilesetBuffer, sizeof(gFrontierFactoryMenu_Gfx));
+-        CpuCopy16(sMonPicBg_Gfx, sSwapMonPicBgTilesetBuffer, sizeof(sMonPicBg_Gfx));
+-        LoadBgTiles(1, sSwapMenuTilesetBuffer, sizeof(gFrontierFactoryMenu_Gfx), 0);
+-        LoadBgTiles(3, sSwapMonPicBgTilesetBuffer, sizeof(sMonPicBg_Gfx), 0);
++        CpuCopy16(gFrontierFactoryMenu_Gfx, sSwapMenuTilesetBuffer, FACTORY_ASSET_SIZE(gFrontierFactoryMenu_Gfx));
++        CpuCopy16(sMonPicBg_Gfx, sSwapMonPicBgTilesetBuffer, FACTORY_ASSET_SIZE(sMonPicBg_Gfx));
++        LoadBgTiles(1, sSwapMenuTilesetBuffer, FACTORY_ASSET_SIZE(gFrontierFactoryMenu_Gfx), 0);
++        LoadBgTiles(3, sSwapMonPicBgTilesetBuffer, FACTORY_ASSET_SIZE(sMonPicBg_Gfx), 0);
+         CpuCopy16(gFrontierFactoryMenu_Tilemap, sSwapMenuTilemapBuffer, BG_SCREEN_SIZE);
+         LoadBgTilemap(1, sSwapMenuTilemapBuffer, BG_SCREEN_SIZE, 0);
+         LoadPalette(gFrontierFactoryMenu_Pal, 0, 2 * PLTT_SIZE_4BPP);
