@@ -285,6 +285,7 @@ internal object MenuNavigation {
                 }
                 return true
             }
+            val firstControllerInput = !usingController
             usingController = true
             activate()
             if (held != null) return if (held.owner == owner && !held.blocked && held.action == TEXT && action(event) == TEXT)
@@ -295,7 +296,7 @@ internal object MenuNavigation {
             if (press.blocked) return true
             if (selected == TEXT) return previous.dispatchKeyEvent(event)
             val focused = ensureFocus()
-            if (isDirection(selected)) updateDirection(skipFirst = focused)
+            if (isDirection(selected)) updateDirection(skipFirst = focused && firstControllerInput)
             else {
                 stopRepeating()
                 // A confirm/back may replace a page inside this same Window.
@@ -327,6 +328,7 @@ internal object MenuNavigation {
                 // Trigger-only neutral samples still reach focused children.
                 return if (hasNavigationAxis(event)) true else previous.dispatchGenericMotionEvent(event)
             }
+            val firstControllerInput = !usingController
             usingController = true
             activate()
             if (held != null && (held.owner != owner || held.blocked)) return true
@@ -334,7 +336,7 @@ internal object MenuNavigation {
             if (held == null || next != held.action)
                 axes[event.deviceId] = Press(owner, next, ++nextOrder)
             val focused = ensureFocus()
-            updateDirection(skipFirst = focused)
+            updateDirection(skipFirst = focused && firstControllerInput)
             return true
         }
 

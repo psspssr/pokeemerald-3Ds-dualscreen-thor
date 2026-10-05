@@ -12,6 +12,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.preference.Preference
+import androidx.core.view.doOnNextLayout
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceManager
@@ -205,6 +206,34 @@ class SettingsHierarchyTest {
             scenario.recreate(); ready(scenario, "qol"); focus(scenario, "qol_shiny")
             back(scenario, "gameplay"); focus(scenario, "qol")
             back(scenario, null); focus(scenario, "gameplay")
+        }
+    }
+
+    @Test fun firstControllerDirectionDuringPageReturnAdvancesTheRestoredRow() {
+        ActivityScenario.launch(SettingsActivity::class.java).use { scenario ->
+            ready(scenario, null); touchToolbar(scenario)
+            key(scenario, KeyEvent.KEYCODE_DPAD_DOWN); focus(scenario, "display")
+            key(scenario, KeyEvent.KEYCODE_DPAD_DOWN); focus(scenario, "controls")
+            key(scenario, KeyEvent.KEYCODE_ENTER); ready(scenario, "controls")
+            val sent = CountDownLatch(1)
+            scenario.onActivity { activity ->
+                activity.onBackPressedDispatcher.onBackPressed()
+                activity.supportFragmentManager.executePendingTransactions()
+                val list = fragment(activity).listView
+                // A fresh direction can arrive with the returning page's
+                // first layout, before its posted focus restoration runs.
+                list.doOnNextLayout {
+                    val now = SystemClock.uptimeMillis()
+                    for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP))
+                        activity.window.callback.dispatchKeyEvent(KeyEvent(now, now + action, action,
+                            KeyEvent.KEYCODE_DPAD_DOWN, 0, 0, 445, 0,
+                            KeyEvent.FLAG_FROM_SYSTEM, InputDevice.SOURCE_KEYBOARD))
+                    sent.countDown()
+                }
+                list.requestLayout()
+            }
+            assertTrue("returning page did not lay out", sent.await(5, TimeUnit.SECONDS))
+            focus(scenario, "gameplay")
         }
     }
 
