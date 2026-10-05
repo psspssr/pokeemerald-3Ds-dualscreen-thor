@@ -3,9 +3,10 @@
  * @brief libctru's VRAM allocator (zlib licence, devkitPro), emulated.
  *
  * Blocks are ordinary zeroed CPU memory, recorded in ctrshim_mem.h. Space is
- * accounted exactly like libctru: two 3 MiB banks (A and B), first fit
+ * accounted like libctru, with Android's two 8 MiB banks (A and B): first fit
  * within a bank, VRAM_ALLOC_ANY trying the emptier bank first. A block never
- * spans the banks, so the largest possible allocation is 3 MiB.
+ * spans the banks, so the largest possible allocation is 8 MiB. The 16 MiB
+ * quota is backed on demand; real heap allocation failure still returns NULL.
  */
 #pragma once
 

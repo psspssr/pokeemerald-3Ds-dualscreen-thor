@@ -1,6 +1,7 @@
 /* Behavioral tests for the real system shim, with only Android I/O replaced. */
 #include <3ds/allocator/linear.h>
 #include <3ds/allocator/vram.h>
+#include <3ds/os.h>
 #include <3ds/ndsp/channel.h>
 #include <3ds/services/apt.h>
 #include <3ds/services/hid.h>
@@ -23,6 +24,19 @@
 
 static char romfs[512], sdmc[512];
 static CtrHostInput input;
+static bool failNextMemoryBacking;
+static unsigned memoryBackingCalls;
+int __real_posix_memalign(void **memory, size_t alignment, size_t size);
+int __wrap_posix_memalign(void **memory, size_t alignment, size_t size)
+{
+    ++memoryBackingCalls;
+    if (failNextMemoryBacking)
+    {
+        failNextMemoryBacking = false;
+        return ENOMEM;
+    }
+    return __real_posix_memalign(memory, alignment, size);
+}
 static pthread_mutex_t hostLock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t hostCond = PTHREAD_COND_INITIALIZER;
 static CtrHostState hostState = CTR_HOST_RUNNING;
@@ -114,6 +128,77 @@ static void TestMemory(void)
     vramFree(a); vramFree(b);
     assert(vramSpaceFree() == before);
     assert(linearMemAlign(1, 17) == NULL);
+}
+
+static void TestVramBudget(void)
+{
+    /* Model the observed 513024-byte free budget split between the original
+     * console banks: a new 512x256 layer cannot coexist with those live
+     * allocations. Android must retain room for that layer and battle copy. */
+    const size_t live = (6u * 1024u * 1024u - 513024u) / 2;
+    const u32 total = vramSpaceFree();
+    unsigned calls = memoryBackingCalls;
+    assert(vramSpaceFree() == total && memoryBackingCalls == calls);
+    assert(CtrMem_Used(CTR_MEM_VRAM) == 0); /* Budget is not eager backing. */
+    for (unsigned cycle = 0; cycle < 16; ++cycle)
+    {
+        void *a = vramAllocAt(live, VRAM_ALLOC_A);
+        void *b = vramAllocAt(live, VRAM_ALLOC_B);
+        void *layer = vramAlloc(512u * 256u * 2u);
+        void *battle = vramAlloc(1024u * 256u * 2u);
+        if (!layer || !battle)
+            fprintf(stderr, "VRAM graphics coexistence failed: layer=%d battle=%d free=%u\n",
+                    layer != NULL, battle != NULL, vramSpaceFree());
+        assert(a && b && layer && battle);
+        assert(((u8 *)layer)[0] == 0 && ((u8 *)layer)[512u * 256u * 2u - 1] == 0);
+        memset(layer, 0x71, 512u * 256u * 2u);
+        memset(battle, 0x29, 1024u * 256u * 2u);
+        vramFree(b); vramFree(layer); vramFree(a); vramFree(battle);
+        assert(vramSpaceFree() == total && CtrMem_Used(CTR_MEM_VRAM) == 0);
+    }
+    assert(total == 16u * 1024u * 1024u && total == OS_VRAM_SIZE && total == CTR_MEM_VRAM_POOL);
+    assert(OS_VRAM_VADDR >= OS_OLD_FCRAM_VADDR + OS_OLD_FCRAM_SIZE);
+    assert(OS_VRAM_VADDR + OS_VRAM_SIZE <= OS_DSPRAM_VADDR);
+    assert(OS_VRAM_PADDR + OS_VRAM_SIZE <= OS_FCRAM_PADDR);
+    const size_t bank = total / 2;
+    void *a = vramAllocAt(bank, VRAM_ALLOC_A), *b = vramAllocAt(bank, VRAM_ALLOC_B);
+    assert(a && b && vramSpaceFree() == 0);
+    assert(((uintptr_t)a & 0x7f) == 0 && ((uintptr_t)b & 0x7f) == 0);
+    assert(vramGetSize(a) == bank && vramGetSize(b) == bank);
+    assert(osConvertVirtToPhys(a) == OS_VRAM_PADDR);
+    assert(osConvertVirtToPhys(b) == OS_VRAM_PADDR + bank);
+    assert(osConvertVirtToPhys((u8 *)a + bank - 1) == OS_VRAM_PADDR + bank - 1);
+    assert(osConvertVirtToPhys((u8 *)b + bank - 1) == OS_VRAM_PADDR + total - 1);
+    CtrMemBlock block;
+    assert(CtrMem_Find((u8 *)a + bank - 1, &block) && block.kind == CTR_MEM_VRAM && block.size == bank);
+    ((u8 *)a)[bank - 1] = 0x42; ((u8 *)b)[bank - 1] = 0x24;
+    assert(!vramAlloc(128) && !vramAllocAt(bank + 128, VRAM_ALLOC_A));
+    vramFree(a);
+    assert(!vramAllocAt(128, VRAM_ALLOC_B)); /* Free A never spills a B-only request. */
+    a = vramAllocAt(bank, VRAM_ALLOC_ANY);
+    assert(a && osConvertVirtToPhys(a) == OS_VRAM_PADDR);
+    vramFree(a); vramFree(b);
+    assert(vramSpaceFree() == total);
+
+    /* Real heap failure must roll the synthetic reservation back, including
+     * its physical offset; a larger quota never turns ENOMEM into success. */
+    failNextMemoryBacking = true;
+    assert(!vramAllocAt(512u * 1024u, VRAM_ALLOC_A));
+    assert(!failNextMemoryBacking && vramSpaceFree() == total && CtrMem_Used(CTR_MEM_VRAM) == 0);
+    a = vramAllocAt(512u * 1024u, VRAM_ALLOC_A);
+    assert(a && osConvertVirtToPhys(a) == OS_VRAM_PADDR);
+    vramFree(a);
+
+    void *pieces[4];
+    for (unsigned i = 0; i < 4; ++i) { pieces[i] = vramAllocAt(bank / 4, VRAM_ALLOC_A); assert(pieces[i]); }
+    vramFree(pieces[0]); vramFree(pieces[2]);
+    assert(!vramAllocAt(bank / 4 + 128, VRAM_ALLOC_A)); /* Fragmentation still matters. */
+    b = vramAllocAt(bank / 4 + 128, VRAM_ALLOC_ANY);
+    assert(b && osConvertVirtToPhys(b) == OS_VRAM_PADDR + bank);
+    vramFree(pieces[3]); vramFree(pieces[1]); vramFree(b);
+    a = vramAllocAt(bank, VRAM_ALLOC_A); assert(a); vramFree(a);
+    assert(vramSpaceFree() == total && CtrMem_Used(CTR_MEM_VRAM) == 0);
+    puts("shim: bounded 16 MiB VRAM, bank/physical offsets, repeated scene allocations, fragmentation and real backing-failure rollback passed");
 }
 
 static void TestInput(void)
@@ -281,7 +366,7 @@ int main(void)
 {
     char root[] = "/tmp/emerald-shim-XXXXXX";
     assert(mkdtemp(root));
-    TestFilesystem(root); TestMemory(); TestInput(); TestThreads(); TestAudioAndLifecycle(); TestExit();
+    TestFilesystem(root); TestMemory(); TestVramBudget(); TestInput(); TestThreads(); TestAudioAndLifecycle(); TestExit();
     assert(rmdir(root) == 0);
     puts("shim: filesystem, memory, input, synchronization, threads, PCM/fast-forward mute/recovery, lifecycle and exit passed");
     return 0;

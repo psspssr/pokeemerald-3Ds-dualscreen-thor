@@ -36,7 +36,7 @@ typedef struct
 
 /* Emulated pool sizes reported by linearSpaceFree/vramSpaceFree. */
 #define CTR_MEM_LINEAR_POOL (8u * 1024u * 1024u)
-#define CTR_MEM_VRAM_POOL (6u * 1024u * 1024u)
+#define CTR_MEM_VRAM_POOL (16u * 1024u * 1024u)
 
 /*
  * Blocks never overlap. Registering a range that starts at an existing

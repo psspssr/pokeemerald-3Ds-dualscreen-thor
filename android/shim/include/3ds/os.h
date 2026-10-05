@@ -35,9 +35,12 @@ extern "C" {
 #define OS_OLD_FCRAM_PADDR 0x20000000
 #define OS_OLD_FCRAM_SIZE 0x8000000
 
-#define OS_VRAM_VADDR 0x1F000000
+/* Android's bounded graphics-backing quota is larger than the console's.
+ * This is an accounting address only, never a fixed Android mapping. Keep
+ * its 16 MiB range separate from old FCRAM, DSP and shared configuration. */
+#define OS_VRAM_VADDR 0x1E000000
 #define OS_VRAM_PADDR 0x18000000
-#define OS_VRAM_SIZE 0x600000
+#define OS_VRAM_SIZE 0x1000000
 
 #define OS_DSPRAM_VADDR 0x1FF00000
 #define OS_DSPRAM_PADDR 0x1FF00000

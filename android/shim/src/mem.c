@@ -3,11 +3,12 @@
  *
  * Space is accounted with libctru's MemPool (allocator/mem_pool.cpp, zlib
  * licence, devkitPro), ported to C, over the virtual address ranges the
- * console uses: first fit, sizes padded to the alignment, coalescing on free,
- * VRAM as two 3 MiB banks. That is what decides whether an allocation
- * succeeds and what *SpaceFree reports, so origin sees the same failures and
- * fragmentation as on hardware. The memory itself is an ordinary aligned
- * heap block per allocation.
+ * shim declares: first fit, sizes padded to the alignment, coalescing on free,
+ * VRAM as two 8 MiB banks. The bounded Android quota lets voxel atlases and
+ * temporary menu/battle surfaces coexist without a console-only 6 MiB limit.
+ * Bank constraints, fragmentation and real allocation failures still apply.
+ * This accounts CPU backing separately from the GLES resolution budget;
+ * memory is an ordinary aligned heap block allocated only on demand.
  */
 #include <3ds/allocator/linear.h>
 #include <3ds/allocator/mappable.h>

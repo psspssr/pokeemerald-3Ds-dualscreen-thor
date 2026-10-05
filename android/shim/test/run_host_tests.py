@@ -20,6 +20,7 @@ with tempfile.TemporaryDirectory(prefix="emerald-shim-build-") as tmp:
                "-I" + str(SHIM / "test" / "host"), "-I" + str(SHIM / "src"),
                "-I" + str(ROOT / "android" / "host" / "include"),
                str(SHIM / "test" / "test_shim.c"), *(str(path) for path in sources),
+               "-Wl,--wrap=posix_memalign",
                *("-Wl,--wrap=" + name for name in wraps), "-lm", "-o", str(executable)]
     subprocess.run(command, check=True)
     subprocess.run([str(executable)], check=True, timeout=15,
