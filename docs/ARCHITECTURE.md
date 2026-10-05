@@ -116,6 +116,8 @@ and read at runtime from `voxel/*.bin`.
 ## Saves and logs
 
 The 128 KiB flash image is mirrored in RAM and written range by range to
-`sdmc:/3ds/emerald3ds/emerald3ds.sav`. The log goes to
-`sdmc:/3ds/emerald3ds/port.log` from a background thread, because SD writes on
-the render thread cost 50–500 ms on hardware.
+`sdmc:/3ds/emerald3ds/emerald3ds.sav`. The log is off by default; if
+`sdmc:/3ds/emerald3ds/debug.txt` exists, it goes to
+`sdmc:/3ds/emerald3ds/port.log` (the previous session is kept as
+`port-prev.log`) from a background thread, because SD writes on the render
+thread cost 50–500 ms on hardware.

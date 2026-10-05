@@ -57,7 +57,9 @@ shared header, delete the affected `build/root/src/*.o`.
 - **Exactly the release**: `make release pak`, copy `dist/Emerald3DS.3dsx`
   and `build/emerald3ds.pak`.
 
-The log is `/3ds/emerald3ds/port.log`. Emulator runs (Azahar) are useful for
+The log is `/3ds/emerald3ds/port.log`, written only if an empty file named
+`/3ds/emerald3ds/debug.txt` exists on the SD card (create it for development
+builds); the previous session is kept as `port-prev.log`. Emulator runs (Azahar) are useful for
 diagnosis; acceptance is on hardware — the SD card's latency, the linear heap
 and VRAM behave differently there.
 

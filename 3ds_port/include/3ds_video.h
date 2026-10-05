@@ -40,6 +40,8 @@ typedef struct
 typedef struct
 {
     uint32_t frames, tiles, uploads, sprites, errors, stereo;
+    /* Layer cells drawn through the compositor's own program (FastCells). */
+    uint32_t cells;
     uint16_t display;
     float fps, cpuMs, gpuMs, waitMs;
 } CtrVideoStats;
@@ -60,6 +62,10 @@ void CtrVideo_ClearOamAnchors(void);
 void CtrVideo_SetOamAnchor(unsigned first, unsigned end, int y);
 void CtrVideo_ClearVoxelWeatherOam(void);
 void CtrVideo_MarkVoxelWeatherOam(unsigned first, unsigned end);
+/* OAM entries of the fog's sprites, one picture on a 64-pixel lattice: the
+ * compositor repeats it over the whole view (src/sprite.c). */
+void CtrVideo_ClearFogOam(void);
+void CtrVideo_MarkFogOam(unsigned first, unsigned end);
 void CtrVideo_NotifyTilesetAnimWrite(const void *dest, unsigned bytes);
 const uint8_t *CtrVideo_GetBgVram(void);
 /* Frees the 2D compositor's 3D depth planes before the next frame, for the
@@ -178,6 +184,10 @@ void CtrVideo_SetLineRegisters(const uint16_t *regs, unsigned lines);
  * transition's, drawn with it (src/sprite.c). */
 void CtrVideo_ClearScreenOam(void);
 void CtrVideo_MarkScreenOam(unsigned first, unsigned end);
+/* Among those, the ones placed by hand on the 240x160 picture around the
+ * player (the healing machine's balls and monitors): drawn where the map has
+ * the machine rather than where the window layer has its text. */
+void CtrVideo_MarkMachineOam(unsigned first, unsigned end);
 const CtrVideoStats *CtrVideo_GetStats(void);
 void CtrScene_Init(void);
 void CtrScene_Update(void);

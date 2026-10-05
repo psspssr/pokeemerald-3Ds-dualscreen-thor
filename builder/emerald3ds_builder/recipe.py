@@ -101,8 +101,12 @@ def lz77_decompress(src: bytes, offset: int) -> bytes:
                 pos += 2
                 length = (a >> 4) + 3
                 back = ((a & 0xF) << 8 | b) + 1
-                for _ in range(length):
-                    out.append(out[-back])
+                if length <= back <= len(out):      # no overlap: one slice
+                    start = len(out) - back
+                    out += out[start:start + length]
+                else:
+                    for _ in range(length):
+                        out.append(out[-back])
             else:
                 out.append(src[pos])
                 pos += 1

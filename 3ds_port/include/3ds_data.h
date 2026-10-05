@@ -64,5 +64,9 @@ bool CtrData_Size(const char *path, uint32_t *outSize);
 /* The whole file in a malloc'd buffer (one extra zero byte past the end), or
  * NULL. The caller frees it. */
 void *CtrData_Load(const char *path, uint32_t *outSize);
+/* Where a file lies in the data pack, so that neighbouring files can be read
+ * in one go with CtrData_ReadRange. False under any other backend. */
+bool CtrData_Locate(const char *path, uint64_t *outOffset, uint32_t *outSize);
+bool CtrData_ReadRange(uint64_t offset, void *dest, uint32_t size);
 
 #endif

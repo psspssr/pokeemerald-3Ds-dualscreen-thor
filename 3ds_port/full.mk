@@ -68,6 +68,23 @@ FULL_DATA_OBJS += build/root/3ds_song_blob.o
 BACKEND_SRCS := src/3ds_assets.c src/3ds_map_loader.c src/3ds_compat.c
 BACKEND_SRCS += src/3ds_game_full.c src/3ds_game_bridge.c src/3ds_script_loader.c
 BACKEND_SRCS += src/3ds_bottom_ui.c
+# The frame profiler times the engine's own routines through linker wrappers.
+BACKEND_SRCS += src/3ds_prof_wrap.c
+PROF_WRAPPED := RunTasks AnimateSprites BuildOamBuffer ProcessDma3Requests \
+	LZ77UnCompWram LZ77UnCompVram RLUnCompWram RLUnCompVram CpuSet CpuFastSet DmaSet UpdatePaletteFade
+# The sound engine runs on a worker core; its entry points take the worker's
+# lock (src/3ds_sound.c).
+BACKEND_SRCS += src/3ds_sound.c
+SOUND_WRAPPED := m4aSoundVSync m4aSoundMain m4aSoundInit m4aSoundMode m4aSoundVSyncOn m4aSoundVSyncOff \
+	m4aSongNumStart m4aSongNumStartOrChange m4aSongNumStartOrContinue m4aSongNumStop m4aSongNumContinue \
+	m4aMPlayAllStop m4aMPlayAllContinue m4aMPlayStop m4aMPlayContinue m4aMPlayFadeOut \
+	m4aMPlayFadeOutTemporarily m4aMPlayFadeIn m4aMPlayImmInit m4aMPlayTempoControl \
+	m4aMPlayVolumeControl m4aMPlayPitchControl m4aMPlayPanpotControl m4aMPlayModDepthSet \
+	m4aMPlayLFOSpeedSet MPlayStart MPlayContinue MPlayFadeOut SetPokemonCryVolume \
+	SetPokemonCryPanpot SetPokemonCryPitch SetPokemonCryLength SetPokemonCryRelease \
+	SetPokemonCryProgress SetPokemonCryChorus SetPokemonCryStereo SetPokemonCryPriority \
+	SetPokemonCryTone IsPokemonCryPlaying
+LDFLAGS += $(foreach f,$(PROF_WRAPPED) $(SOUND_WRAPPED),-Wl,--wrap=$(f))
 BACKEND_OBJS := $(patsubst src/%.c,build/bridge/%.o,$(BACKEND_SRCS))
 
 # The voxel overworld is split along the same SDK boundary as the rest of the

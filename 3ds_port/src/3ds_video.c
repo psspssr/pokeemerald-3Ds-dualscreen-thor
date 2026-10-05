@@ -9,6 +9,7 @@
 #include "3ds_platform.h"
 #include "3ds_video.h"
 #include "3ds_data.h"
+#include "../compat/port_prof.h"
 
 /* Public queue passed by libctru, never a cast of Citro3D's private context.
  * Uploads reserve worst-case split+copy entries and leave the compositor's
@@ -149,7 +150,9 @@ static unsigned sLineMask, sLineCount;
 #define ATLAS_SIZE 1024
 #define CACHE_COUNT 16384
 #define HASH_COUNT 32768
-#define MAX_DRAWS 16384
+/* Citro2D quads a frame. Layer cells, the bulk of them once, have their own
+ * buffer (FastCells), which takes the linear memory this used to. */
+#define MAX_DRAWS 12288
 
 typedef struct
 {
@@ -225,10 +228,12 @@ void CtrVideo_MarkVoxelWeatherOam(unsigned first, unsigned end)
 
 /* OAM entries of sprites placed on the screen rather than on the map. */
 static uint32_t sScreenOam[4];
+static uint32_t sMachineOam[4];
 
 void CtrVideo_ClearScreenOam(void)
 {
     memset(sScreenOam, 0, sizeof(sScreenOam));
+    memset(sMachineOam, 0, sizeof(sMachineOam));
 }
 
 void CtrVideo_MarkScreenOam(unsigned first, unsigned end)
@@ -236,6 +241,29 @@ void CtrVideo_MarkScreenOam(unsigned first, unsigned end)
     if (end > 128) end = 128;
     for (unsigned i = first; i < end; ++i)
         sScreenOam[i >> 5] |= 1u << (i & 31);
+}
+
+/* Screen sprites that belong to the map's picture around the player. */
+void CtrVideo_MarkMachineOam(unsigned first, unsigned end)
+{
+    if (end > 128) end = 128;
+    for (unsigned i = first; i < end; ++i)
+        sMachineOam[i >> 5] |= 1u << (i & 31);
+}
+
+/* OAM entries of the fog's sprites (CtrVideo_MarkFogOam). */
+static uint32_t sFogOam[4];
+
+void CtrVideo_ClearFogOam(void)
+{
+    memset(sFogOam, 0, sizeof(sFogOam));
+}
+
+void CtrVideo_MarkFogOam(unsigned first, unsigned end)
+{
+    if (end > 128) end = 128;
+    for (unsigned i = first; i < end; ++i)
+        sFogOam[i >> 5] |= 1u << (i & 31);
 }
 
 /* A battle transition's sprite: on the screen, and not the weather's. */
@@ -287,6 +315,68 @@ static C2D_ImageTint sTint;
 static uint32_t sPaletteVersion[34];
 static uint32_t sPaletteChanges[34][8];
 static unsigned sUsed;
+
+/*
+ * What changed in the logical VRAM, a kilobyte at a time. The game writes VRAM
+ * in many ways (copies, DMA, decompression, plain pointers), so instead of
+ * hooking them all the frame's VRAM is compared with a copy of the last one
+ * before anything reads it: 96 KiB, against walking every cell of every layer
+ * and comparing every tile drawn with its bytes, frame after frame, when
+ * nothing changed. sVramStamp[b] is the frame token (sStats.frames + 1, as
+ * Tile.checked) at which block b last changed; something checked at token t
+ * still holds while the stamps of its blocks are <= t.
+ */
+#define VRAM_BYTES 0x18000
+#define VRAM_BLOCK 1024
+static uint32_t sVramShadow[VRAM_BYTES / 4];
+static uint32_t sVramStamp[VRAM_BYTES / VRAM_BLOCK];
+/* The token at which a background palette last changed. */
+static uint32_t sBgPaletteStamp;
+/* Bumped when the tile cache is emptied: every slot changes meaning. */
+static uint32_t sCacheGeneration;
+
+/* Eight words at a time, one branch for all eight: memcmp's byte loop cost
+ * a millisecond a frame here. */
+static bool BlockDiffers(const uint32_t *a, const uint32_t *b)
+{
+    for (unsigned i = 0; i < VRAM_BLOCK / 4; i += 8)
+        if ((a[i] ^ b[i]) | (a[i + 1] ^ b[i + 1]) | (a[i + 2] ^ b[i + 2]) | (a[i + 3] ^ b[i + 3])
+            | (a[i + 4] ^ b[i + 4]) | (a[i + 5] ^ b[i + 5]) | (a[i + 6] ^ b[i + 6]) | (a[i + 7] ^ b[i + 7]))
+            return true;
+    return false;
+}
+
+static void TrackVram(void)
+{
+    uint32_t now = sStats.frames + 1;
+    const uint32_t *vram = (const uint32_t *)sMemory.vram;
+
+    for (unsigned b = 0; b < VRAM_BYTES / VRAM_BLOCK; ++b)
+    {
+        const uint32_t *block = vram + b * (VRAM_BLOCK / 4);
+        uint32_t *shadow = sVramShadow + b * (VRAM_BLOCK / 4);
+
+        if (BlockDiffers(block, shadow))
+        {
+            memcpy(shadow, block, VRAM_BLOCK);
+            sVramStamp[b] = now;
+        }
+    }
+}
+
+/* Whether VRAM [address, address + bytes) changed after token t. */
+static bool VramChangedAfter(unsigned address, unsigned bytes, uint32_t t)
+{
+    unsigned last;
+
+    if (bytes == 0) return false;
+    if (address >= VRAM_BYTES) return true;
+    if (bytes > VRAM_BYTES - address) bytes = VRAM_BYTES - address;
+    last = (address + bytes - 1) / VRAM_BLOCK;
+    for (unsigned b = address / VRAM_BLOCK; b <= last; ++b)
+        if (sVramStamp[b] > t) return true;
+    return false;
+}
 static bool sC3d, sC2d;
 static uint64_t sFpsStart;
 static unsigned sFpsFrames;
@@ -564,7 +654,11 @@ static void UpdatePalette(void)
             if (bank < 16) bgChanged = true; else objChanged = true;
         }
     }
-    if (bgChanged) ++sPaletteVersion[32];
+    if (bgChanged)
+    {
+        ++sPaletteVersion[32];
+        sBgPaletteStamp = sStats.frames + 1;
+    }
     if (objChanged) ++sPaletteVersion[33];
 }
 
@@ -610,8 +704,11 @@ static int GetTileSlot(unsigned address, unsigned bank, bool color256)
     if (!tile->valid || tile->checked != sStats.frames + 1)
     {
         unsigned bytes = color256 ? 64 : 32;
+        /* A tile's bytes sit in one block: unchanged since it was last
+         * checked, they need no comparing. */
         if (!tile->valid || TilePaletteChanged(tile, paletteId)
-            || memcmp(tile->bytes, sMemory.vram + address, bytes))
+            || (sVramStamp[address / VRAM_BLOCK] > tile->checked
+                && memcmp(tile->bytes, sMemory.vram + address, bytes)))
         {
             memcpy(tile->bytes, sMemory.vram + address, bytes);
             unsigned paletteBase = color256 ? (bank >= 16 ? 256 : 0) : bank * 16;
@@ -692,7 +789,10 @@ static void Blend(unsigned layer, bool effects, bool semiTransparent)
 
     C2D_PlainImageTint(&sTint, C2D_Color32(fadeTo >> 24, fadeTo >> 16, fadeTo >> 8, 255),
                        paletteTint ? sPaletteFade : 0);
-    if (!effects) return;
+    /* A semi-transparent sprite blends even where the window turns colour
+     * effects off: the overworld keeps WIN0 over the whole screen without
+     * them, and its fog and clouds are still see-through on the GBA. */
+    if (!effects && !semiTransparent) return;
     if ((effect == 1 && (control & (1u << layer))) || semiTransparent)
     {
         /* GPU implements independently clamped EVA/EVB (not 1-EVA).
@@ -1898,6 +1998,8 @@ typedef struct
     C3D_Tex tex;
     C3D_RenderTarget *target;
     uint32_t usedFrame;
+    /* The token and tile cache generation of the last walk of its cells. */
+    uint32_t walked, walkedGeneration;
     bool valid;
 } LayerTexture;
 static LayerTexture sLayers[4];
@@ -2104,6 +2206,163 @@ static unsigned sCellControl[4];
 
 static bool LayerDrawable(unsigned bg);
 
+/*
+ * Layer cells without Citro2D's per-quad work.
+ *
+ * Drawn through C2D_DrawImageAt a cell cost ~4.6 us of CPU on an Old 3DS: a
+ * scene that opens on four 256x512 layers drew 8192 of them, 37 ms, and every
+ * new screen paid it for each of its layers. A cell is always one whole atlas
+ * tile (or nothing) over one 8x8 square of the texture, so it needs no tint,
+ * no blending and no transform: four vertices of two shorts and two floats,
+ * written straight into a buffer, and one indexed draw per layer. The tile
+ * replaces what the square held, transparent texels included, so a changed
+ * cell needs no clearing first; an empty one is drawn in the constant 0.
+ *
+ * It runs on Citro2D's own program, set up for the layer by an empty Citro2D
+ * draw, and only borrows the vertex layout, the buffer and the first texture
+ * stage, which it puts back: rebinding Citro2D (C2D_Prepare) mid-frame left
+ * its tinted draws unfaded for the rest of the frame.
+ *
+ * The buffers are refilled from the start each frame: the GPU has finished
+ * the last frame's draws once C3D_FrameBegin returns, and C3D_FrameEnd flushes
+ * the linear heap before the GPU reads any of it. A frame that would need more
+ * than FAST_QUADS cells keeps the Citro2D path.
+ */
+#define FAST_QUADS 8192
+typedef struct { int16_t x, y; float s, t; } FastVertex;
+static FastVertex *sFastVertices;
+static uint16_t *sFastIndices;
+static unsigned sFastUsed;
+static bool sFastReady;
+
+static void FastInit(void)
+{
+    sFastVertices = linearAlloc(FAST_QUADS * 4 * sizeof(FastVertex));
+    sFastIndices = linearAlloc(FAST_QUADS * 6 * sizeof(uint16_t));
+    if (sFastVertices == NULL || sFastIndices == NULL)
+    {
+        linearFree(sFastVertices);
+        linearFree(sFastIndices);
+        sFastVertices = NULL;
+        sFastIndices = NULL;
+        CtrLog_Write(CTR_LOG_ERROR, "VIDEO: no linear memory for layer cells; through Citro2D");
+        return;
+    }
+    for (unsigned q = 0; q < FAST_QUADS; ++q)
+    {
+        uint16_t *index = sFastIndices + q * 6, base = (uint16_t)(q * 4);
+
+        index[0] = base;
+        index[1] = base + 1;
+        index[2] = base + 2;
+        index[3] = base + 2;
+        index[4] = base + 1;
+        index[5] = base + 3;
+    }
+    sFastReady = true;
+}
+
+/* One cell's square: corners top-left, top-right, bottom-left, bottom-right,
+ * with texcoords as Citro2D gives an atlas slot (DrawSlotTinted). */
+static void FastQuad(FastVertex *v, int x, int y, int slot, bool flipX, bool flipY)
+{
+    unsigned tileX = ((unsigned)slot % (ATLAS_SIZE / 8)) * 8, tileY = ((unsigned)slot / (ATLAS_SIZE / 8)) * 8;
+    float s0 = tileX / (float)ATLAS_SIZE, s1 = (tileX + 8) / (float)ATLAS_SIZE;
+    float t0 = 1.0f - tileY / (float)ATLAS_SIZE, t1 = 1.0f - (tileY + 8) / (float)ATLAS_SIZE;
+
+    if (flipX) { float swap = s0; s0 = s1; s1 = swap; }
+    if (flipY) { float swap = t0; t0 = t1; t1 = swap; }
+    v[0] = (FastVertex){(int16_t)x, (int16_t)y, s0, t0};
+    v[1] = (FastVertex){(int16_t)(x + 8), (int16_t)y, s1, t0};
+    v[2] = (FastVertex){(int16_t)x, (int16_t)(y + 8), s0, t1};
+    v[3] = (FastVertex){(int16_t)(x + 8), (int16_t)(y + 8), s1, t1};
+}
+
+static void FastDraw(unsigned first, unsigned count)
+{
+    if (count)
+        C3D_DrawElements(GPU_TRIANGLES, (int)count * 6, C3D_UNSIGNED_SHORT, sFastIndices + first * 6);
+}
+
+static bool FastCells(unsigned bg, const uint16_t *cells, unsigned count, const int16_t *cellSlot,
+                      const uint16_t *cellEntry, unsigned columns)
+{
+    LayerTexture *layer = &sLayers[bg];
+    unsigned tiles = 0, first = sFastUsed;
+    C3D_AttrInfo savedAttr, *attr;
+    C3D_BufInfo savedBuf, *buf;
+    C3D_TexEnv savedEnv, *env;
+    Tex3DS_SubTexture none = {0, 0, 0.0f, 1.0f, 0.0f, 1.0f};
+
+    if (!sFastReady || count > FAST_QUADS - sFastUsed)
+        return false;
+    /* Tiles first, then the empty cells after them. */
+    for (unsigned i = 0; i < count; ++i)
+        if (cellSlot[cells[i]] >= 0) ++tiles;
+    for (unsigned i = 0, t = 0, e = tiles; i < count; ++i)
+    {
+        unsigned cell = cells[i], entry = cellEntry[cell];
+        int x = (int)(cell % columns) * 8, y = (int)(cell / columns) * 8;
+
+        if (cellSlot[cell] >= 0)
+            FastQuad(sFastVertices + (first + t++) * 4, x, y, cellSlot[cell], entry & 1024, entry & 2048);
+        else
+            FastQuad(sFastVertices + (first + e++) * 4, x, y, 0, false, false);
+    }
+    sFastUsed += count;
+
+    /* Citro2D sets up the target, its projection and the atlas, with a quad
+     * of no size, and sends it: its state is then the GPU's. */
+    sInLayerTexture = true;
+    BlendForget();
+    C2D_SceneBegin(layer->target);
+    C2D_ViewReset();
+    Blend(bg, false, false);
+    C2D_DrawImageAt((C2D_Image){&sAtlas, &none}, 0, 0, 0, &sTint, 1, 1);
+    C2D_Flush();
+
+    attr = C3D_GetAttrInfo();
+    savedAttr = *attr;
+    AttrInfo_Init(attr);
+    AttrInfo_AddLoader(attr, 0, GPU_SHORT, 2);
+    AttrInfo_AddLoader(attr, 1, GPU_FLOAT, 2);
+    AttrInfo_AddFixed(attr, 2);
+    AttrInfo_AddFixed(attr, 3);
+    C3D_FixedAttribSet(2, 0.0f, 0.0f, 0.0f, 0.0f);
+    C3D_FixedAttribSet(3, 255.0f, 255.0f, 255.0f, 255.0f);
+    buf = C3D_GetBufInfo();
+    savedBuf = *buf;
+    BufInfo_Init(buf);
+    BufInfo_Add(buf, sFastVertices, sizeof(FastVertex), 2, 0x10);
+    C3D_AlphaTest(false, GPU_ALWAYS, 0);
+    C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
+
+    env = C3D_GetTexEnv(0);
+    savedEnv = *env;
+    C3D_TexEnvInit(env);
+    C3D_TexEnvSrc(env, C3D_Both, GPU_TEXTURE0, 0, 0);
+    C3D_TexEnvFunc(env, C3D_Both, GPU_REPLACE);
+    FastDraw(first, tiles);
+    if (count > tiles)
+    {
+        env = C3D_GetTexEnv(0);
+        C3D_TexEnvInit(env);
+        C3D_TexEnvSrc(env, C3D_Both, GPU_CONSTANT, 0, 0);
+        C3D_TexEnvFunc(env, C3D_Both, GPU_REPLACE);
+        C3D_TexEnvColor(env, 0);
+        FastDraw(first + tiles, count - tiles);
+    }
+
+    /* Citro2D's layout, buffer and stage back, as it left them. */
+    *C3D_GetTexEnv(0) = savedEnv;
+    C3D_SetAttrInfo(&savedAttr);
+    C3D_SetBufInfo(&savedBuf);
+    sInLayerTexture = false;
+    BlendForget();
+    sStats.cells += count;
+    return true;
+}
+
 static bool LayerRenderCells(unsigned bg)
 {
     static uint16_t dirty[LAYER_CELLS];
@@ -2122,6 +2381,14 @@ static bool LayerRenderCells(unsigned bg)
     bool full = !layer->valid || sCellControl[bg] != control;
     unsigned count = 0;
 
+    /* Nothing it is made of changed since its cells were last walked: the
+     * texture is what a walk would draw. */
+    if (!full && layer->walkedGeneration == sCacheGeneration && sBgPaletteStamp <= layer->walked
+        && !VramChangedAfter(map, rows * columns * 2, layer->walked)
+        && !VramChangedAfter(chars, Min(1024u * (color256 ? 64 : 32), 0x10000 - chars), layer->walked))
+        return false;
+    layer->walked = sStats.frames + 1;
+    layer->walkedGeneration = sCacheGeneration;
     ++stamp;
     for (unsigned row = 0; row < rows; ++row)
     {
@@ -2159,9 +2426,23 @@ static bool LayerRenderCells(unsigned bg)
     layer->valid = true;
     sCellControl[bg] = control;
 
+    {
+        /* Mostly changed: the whole layer, which needs no clearing either. */
+        bool whole = full || count > cells / 2;
+
+        if (whole)
+        {
+            count = 0;
+            for (unsigned cell = 0; cell < cells; ++cell)
+                dirty[count++] = (uint16_t)cell;
+        }
+        if (FastCells(bg, dirty, count, cellSlot, cellEntry, columns))
+            return true;
+        full = whole;
+    }
     BlendForget();
     sInLayerTexture = true;
-    if (full || count > cells / 2)
+    if (full)
     {
         C2D_TargetClear(layer->target, 0);
         C2D_SceneBegin(layer->target);
@@ -2393,11 +2674,13 @@ static unsigned sLeavesCount[4];
 static C3D_Tex sLeavesTex[4];
 static uint32_t sLeavesKey[4], sLeavesUsed;
 
-static bool LeavesScene(void)
+/*
+ * The strips' art, read and laid out once at start-up: done on the first frame
+ * of the leaves scene it was a 120 KiB read and a walk of every strip pixel in
+ * the middle of the intro, the frame the scene fades in on.
+ */
+static void LeavesLoad(void)
 {
-    if (!sStage) return false;
-    for (unsigned bg = 0; bg < 4; ++bg)
-        if (Reg(8 + bg * 2) != (bg | ((16 + 2 * bg) << 8) | 0x8000)) return false;
     if (!sLeavesTried)
     {
         uint32_t size = 0;
@@ -2444,6 +2727,14 @@ static bool LeavesScene(void)
             }
         }
     }
+}
+
+static bool LeavesScene(void)
+{
+    if (!sStage) return false;
+    for (unsigned bg = 0; bg < 4; ++bg)
+        if (Reg(8 + bg * 2) != (bg | ((16 + 2 * bg) << 8) | 0x8000)) return false;
+    LeavesLoad();
     return sLeaves != NULL;
 }
 
@@ -2835,6 +3126,88 @@ static const NavBand *NavObjectBand(unsigned tile, int y)
     return sNavBands == sNavSubmenu ? &sNavBands[1] : &sNavBands[0];
 }
 
+/*
+ * Where a sprite placed on the screen, not on the map, goes in the field view
+ * (400x240, the 240x160 picture's own layout on it). Those of a window - the
+ * item shown by the PC, the mon shown for a move - sit where their window
+ * layer does: BG0 is drawn moved by CTR_FIELD_UI_SHIFT (the field banner's
+ * streaks excepted), and they follow it. The healing machine's balls and
+ * monitors were placed by hand on the picture around the player (the player's
+ * tile centre at GBA (120, 80)), so they go where the map's machine is: in
+ * the 2D field the picture's offset on the view, in the voxel one the
+ * machine's tile seen by the camera.
+ */
+static void PlaceScreenObject(int i, unsigned boxW, unsigned boxH, bool voxel, int *x, int *y)
+{
+    if (sMachineOam[i >> 5] & (1u << (i & 31)))
+    {
+#if CTR_VOXEL_ENABLED
+        if (voxel)
+        {
+            float sx, sy;
+
+            if (CtrVoxel_ProjectPictureTile((*x + boxW / 2.0f - 120.0f) / 16.0f,
+                                            (*y + boxH / 2.0f - 80.0f) / 16.0f, &sx, &sy))
+            {
+                *x = (int)(sx - boxW / 2.0f);
+                *y = (int)(sy - boxH / 2.0f);
+            }
+            return;
+        }
+#endif
+        if (!voxel)
+        {
+            *x += CTR_STAGE_X;
+            *y += CTR_STAGE_Y - 16;
+        }
+        return;
+    }
+    if (!sFieldBanner) *x += (int)CTR_FIELD_UI_SHIFT;
+}
+
+/*
+ * The fog's picture repeated over the whole clip area, on the lattice the
+ * sprite at (x, y) sits on. The game lays twenty sprites for a 240x160
+ * screen and lets OAM wrap them round its edges; on this view that left the
+ * right of the screen bare, and the 8-bit y of a row past the bottom read as
+ * a row further down instead of the one at the top. The lattice does not
+ * care which sprite it starts from, so any wrap of x or y is harmless here.
+ * The 64 tiles are looked up once and drawn at every place.
+ */
+static void DrawFogLattice(unsigned attr2, unsigned width, unsigned height, bool color256,
+                           int x, int y, bool flipX, bool flipY)
+{
+    int slots[8 * 8];
+    unsigned columns = width / 8, rows = height / 8;
+    int x0 = x % (int)width, y0 = y % (int)height;
+
+    if (columns * rows > sizeof(slots) / sizeof(slots[0])) return;
+    for (unsigned ty = 0; ty < rows; ++ty)
+        for (unsigned tx = 0; tx < columns; ++tx)
+        {
+            unsigned sx = flipX ? columns - 1 - tx : tx;
+            unsigned sy = flipY ? rows - 1 - ty : ty;
+            unsigned tile = CtrVideo_ObjTile(attr2 & 1023, sx, sy, width, color256, Reg(0) & 0x40);
+            slots[ty * columns + tx] = GetTileSlot(0x10000 + tile * 32, 16 + (attr2 >> 12), color256);
+        }
+    if (x0 > sClipX0) x0 -= (int)width * ((x0 - sClipX0 + (int)width - 1) / (int)width);
+    if (y0 > sClipY0) y0 -= (int)height * ((y0 - sClipY0 + (int)height - 1) / (int)height);
+    for (int py = y0; py < sClipY1; py += (int)height)
+        for (int px = x0; px < sClipX1; px += (int)width)
+        {
+            if (px + (int)width <= sClipX0 || py + (int)height <= sClipY0) continue;
+            for (unsigned ty = 0; ty < rows; ++ty)
+                for (unsigned tx = 0; tx < columns; ++tx)
+                {
+                    int slot = slots[ty * columns + tx];
+
+                    if (slot >= 0)
+                        DrawSlot(slot, px + CTR_VIEW_X + sLayerShift + (int)tx * 8,
+                                 py + CTR_VIEW_Y + (int)ty * 8, flipX, flipY);
+                }
+        }
+}
+
 static void DrawObjects(unsigned priority, bool effects)
 {
     static const uint8_t dimensions[3][4][2] = {
@@ -2842,9 +3215,17 @@ static void DrawObjects(unsigned priority, bool effects)
         {{16,8},{32,8},{32,16},{64,32}},
         {{8,16},{8,32},{16,32},{32,64}}
     };
+    bool fogDrawn = false;
+
     for (int i = 127; i >= 0; --i)
     {
+        bool fog = (sFogOam[i >> 5] & (1u << (i & 31))) != 0;
+
+        /* The fog is one picture: drawn once, over the whole view. */
+        if (fog && fogDrawn) continue;
 #if CTR_VOXEL_ENABLED
+        /* The voxel world draws a fog of its own, in the scene. */
+        if (fog && sVoxelObjPass != VOXEL_OBJ_NONE && CtrVoxel_DrawsFog()) continue;
         if (sVoxelObjPass != VOXEL_OBJ_NONE)
         {
             bool weather = (sVoxelWeatherOam[i >> 5] & (1u << (i & 31))) != 0;
@@ -2890,12 +3271,31 @@ static void DrawObjects(unsigned priority, bool effects)
                 x += CTR_STAGE_X;
                 y += CTR_STAGE_Y;
             }
+            else if (sVoxelObjPass == VOXEL_OBJ_SCREEN)
+                PlaceScreenObject(i, boxW, boxH, true, &x, &y);
 #endif
+            if (sFieldUi && (sScreenOam[i >> 5] & (1u << (i & 31))))
+                PlaceScreenObject(i, boxW, boxH, false, &x, &y);
         }
         /* Below the PokeNav's picture is its background, not the space the
          * GBA parks its unused sprites in. */
         if (sCentredScreen == CTR_CENTRED_POKENAV && y >= 160) continue;
         if (sNavBand && NavObjectBand(attr2 & 1023, y) != sNavBand) continue;
+        /*
+         * Any one of the fog's sprites gives the lattice its phase, on the
+         * screen or not: as a map is entered the game can have all twenty
+         * of them outside it until the camera first moves.
+         */
+        if (fog && !affine)
+        {
+            ++sStats.sprites;
+            Blend(4, effects, mode == 1);
+            ViewBase();
+            DrawFogLattice(attr2, width, height, color256, x, y,
+                           (attr1 & 0x1000) != 0, (attr1 & 0x2000) != 0);
+            fogDrawn = true;
+            continue;
+        }
         if (x >= sClipX1 || x + (int)boxW <= sClipX0
          || y >= sClipY1 || y + (int)boxH <= sClipY0) continue;
         ++sStats.sprites;
@@ -3379,6 +3779,8 @@ bool CtrVideo_Init(void)
     for (unsigned i = 0; i < 512; ++i)
         sTexturePalette[i] = CtrVideo_RGBA5551(sPalette[i]);
     C2D_Prepare();
+    FastInit();
+    LeavesLoad();
 #if CTR_VOXEL_ENABLED
     /* Citro3D and Citro2D are up; the voxel module only adds its own shader,
      * textures and buffers on top of them. */
@@ -3924,6 +4326,28 @@ static void VoxelBloomCompose(float strength)
  * OBJ here would duplicate the player and every NPC over their billboards.
  */
 
+/*
+ * The dark of a cave: a soft ring of shadow closing in round the player, over
+ * the world and under the game's text. One textured quad (CtrVoxel_Gloom).
+ */
+static void VoxelGloom(void)
+{
+    float x, y, size, amount;
+    const C3D_Tex *tex = CtrVoxel_Gloom(&x, &y, &size, &amount);
+    C2D_ImageTint tint;
+
+    if (tex == NULL || amount <= 0.0f) return;
+    const Tex3DS_SubTexture whole = {tex->width, tex->height, 0.0f, 1.0f, 1.0f, 0.0f};
+    unsigned alpha = (unsigned)(amount * 255.0f + 0.5f);
+
+    Blend(5, false, false);
+    C2D_PlainImageTint(&tint, C2D_Color32(0, 0, 0, alpha > 255 ? 255 : alpha), 1.0f);
+    C2D_DrawImageAt((C2D_Image){(C3D_Tex *)tex, &whole}, x - size * 0.5f, y - size * 0.5f, 0,
+                    &tint, size / tex->width, size / tex->height);
+    C2D_Flush();
+    BlendForget();
+}
+
 static void ComposeVoxelOverlay(void)
 {
     sPriorityMask = SLOTS_ALL;
@@ -3934,7 +4358,10 @@ static void ComposeVoxelOverlay(void)
     sClipX1 = CTR_GAME_WIDTH;
     sClipY1 = CTR_GAME_HEIGHT;
     sVoxelObjPass = VOXEL_OBJ_WEATHER;
-    Layers(1u << 4);
+    /* With the blending: clouds and fog are semi-transparent sprites, and
+     * drawn without it they hid the world under them. */
+    Layers(1u << 4 | 32u);
+    BlendForget();
     /* Text windows and prompts must stay above the precipitation. */
     sLayerOrigin = sFieldBanner ? 0.0f : CTR_FIELD_UI_SHIFT;
     Layers(1u << 0);
@@ -3986,6 +4413,7 @@ static void RenderVoxel(uint32_t clear)
         VoxelDiorama();
     if (bloom > 0.005f)
         VoxelBloomCompose(bloom);
+    VoxelGloom();
     if (!(Reg(0) & 128)) ComposeVoxelOverlay();
     C2D_Flush();
     C3D_SetScissor(GPU_SCISSOR_DISABLE, 0, 0, 0, 0);
@@ -5279,11 +5707,15 @@ void CtrVideo_Present(void)
         sLastBegin = start;
     }
 #endif
-    sStats.tiles = sStats.uploads = sStats.sprites = 0;
+    sStats.tiles = sStats.uploads = sStats.sprites = sStats.cells = 0;
+    sFastUsed = 0;
     sBgTicks = sObjTicks = 0;
     sStats.display = Reg(0);
-    if (sUsed > CACHE_COUNT - 4096) { memset(sHash, 0, sizeof(sHash)); sUsed = 0; }
+    if (sUsed > CACHE_COUNT - 4096) { memset(sHash, 0, sizeof(sHash)); sUsed = 0; ++sCacheGeneration; }
+    PORT_PROF_BEGIN(palette);
+    TrackVram();
     UpdatePalette();
+    PORT_PROF_END(palette, PORT_PROF_PALETTE);
     if (sStage || sBattle) RecordScroll();
     /* The shown backdrop, faded: sPalette may hold the unfaded one. */
     uint16_t backdrop = (Reg(0) & 128) ? 0x7fff : sMemory.palette[0] & 0x7fff;
@@ -5358,7 +5790,10 @@ void CtrVideo_Present(void)
     if (bottom) stereo = planes = false;
     if (stereo != sStereo) { gfxSet3D(stereo); sStereo = stereo; }
     sStats.stereo = stereo ? roundf(slider * CTR_STEREO_PIXELS) : 0;
+    PORT_PROF_BEGIN(layers);
     if (!voxel && !blank) LayersRender();
+    PORT_PROF_END(layers, PORT_PROF_LAYERS);
+    PORT_PROF_BEGIN(draw);
 
     if (bottom)
     {
@@ -5418,7 +5853,10 @@ void CtrVideo_Present(void)
 #endif
     /* Queued in the frame, behind the drawing into sBottom (BottomTransfer). */
     if (bottom) BottomTransfer();
+    PORT_PROF_END(draw, PORT_PROF_DRAW);
+    PORT_PROF_BEGIN(frameEnd);
     C3D_FrameEnd(0);
+    PORT_PROF_END(frameEnd, PORT_PROF_FRAMEEND);
     ++sStats.frames;
     ++sFpsFrames;
     sStats.cpuMs = (svcGetSystemTick() - start) * 1000.0 / SYSCLOCK_ARM11;
@@ -5439,13 +5877,13 @@ void CtrVideo_Present(void)
     if (sStats.frames % 600 == 0)
     {
         CtrLog_Write(CTR_LOG_VIDEO, "frames=%lu fps=%.1f cpu=%.2fms bg=%.2fms obj=%.2fms gpu=%.2fms "
-                     "3d=%lupx%s x%lu quads=%lu sprites=%lu errors=%lu cache=%u linear=%lu vram=%lu",
+                     "3d=%lupx%s x%lu quads=%lu cells=%lu sprites=%lu errors=%lu cache=%u linear=%lu vram=%lu",
                      (unsigned long)sStats.frames, sStats.fps, sStats.cpuMs,
                      sBgTicks * 1000.0 / SYSCLOCK_ARM11, sObjTicks * 1000.0 / SYSCLOCK_ARM11,
                      sStats.gpuMs, (unsigned long)sStats.stereo,
                      sStats.stereo ? (sPlanes ? "/planes" : "/eyes") : "", (unsigned long)sPlanes,
-                     (unsigned long)sStats.tiles, (unsigned long)sStats.sprites,
-                     (unsigned long)sStats.errors, sUsed,
+                     (unsigned long)sStats.tiles, (unsigned long)sStats.cells,
+                     (unsigned long)sStats.sprites, (unsigned long)sStats.errors, sUsed,
                      (unsigned long)linearSpaceFree(), (unsigned long)vramSpaceFree());
 #if CTR_VOXEL_ENABLED
         if (voxel || sBattleWorld)

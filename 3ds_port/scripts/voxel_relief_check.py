@@ -93,12 +93,12 @@ def snapshot(groups=None):
                 cuts[(ox + x, oy + y)] = (mask, foot + b, ground)
             rim, fills, wall = g.cell_shapes(lid, roles_layout, h, cut)
             for (x, y), m in wall.items():
-                walls[(ox + x, oy + y)] = m
+                walls[(ox + x, oy + y)] = m[0]
             for (qx, qy), lv in getattr(g, "TOPS", {}).get(lid, {}).items():
                 tops[(ox * 16 + qx, oy * 16 + qy)] = lv + b
             for (x, y), grid in rim.items():
                 grids[(ox + x, oy + y)] = [[v + b for v in row] for row in grid]
-            for (x, y, foot, ground) in fills:
+            for (x, y, foot, ground, *_) in fills:
                 cuts[(ox + x, oy + y)] = (None, foot + b, ground)
             # as exported: the lattice levelled under the cut tiles
             for j in range(roles_layout.h * P + 1):

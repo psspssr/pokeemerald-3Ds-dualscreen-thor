@@ -340,6 +340,29 @@ bool CtrData_Size(const char *path, uint32_t *outSize)
     return true;
 }
 
+bool CtrData_Locate(const char *path, uint64_t *outOffset, uint32_t *outSize)
+{
+    const CtrPakEntry *entry;
+
+    if (sBackend != CTR_DATA_PAK || !PathValid(path) || (entry = FindEntry(path)) == NULL)
+        return false;
+    *outOffset = entry->offset;
+    *outSize = entry->rawSize;
+    return true;
+}
+
+bool CtrData_ReadRange(uint64_t offset, void *dest, uint32_t size)
+{
+    bool ok;
+
+    if (sBackend != CTR_DATA_PAK || sPak == NULL)
+        return false;
+    LightLock_Lock(&sPakLock);
+    ok = fseek(sPak, (long)offset, SEEK_SET) == 0 && fread(dest, 1, size, sPak) == size;
+    LightLock_Unlock(&sPakLock);
+    return ok;
+}
+
 bool CtrData_Exists(const char *path)
 {
     return CtrData_Size(path, NULL);
