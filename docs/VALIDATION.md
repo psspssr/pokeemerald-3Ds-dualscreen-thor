@@ -1,5 +1,9 @@
 # Validation
 
+The repository's [history cleanup](HISTORY.md) changed commit IDs while keeping
+every retained source snapshot identical. Release identities below preserve the
+original build records; the linked mapping identifies their rewritten commits.
+
 ## Latest beta: 0.1.0-beta.1
 
 The [signed beta.1 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.1)

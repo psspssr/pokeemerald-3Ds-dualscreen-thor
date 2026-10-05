@@ -1,5 +1,10 @@
 # Private Android releases
 
+Existing releases predate the [history cleanup](HISTORY.md). Their APKs and
+manifests remain unchanged, and original source IDs have an explicit mapping.
+Treat old workflow attempts as historical records and use new tags for future
+builds.
+
 Publish a GitHub release to start [the release workflow](../.github/workflows/release.yml).
 It validates the tagged source, builds the playable ARMv7 app, signs it with the
 existing release key, and attaches the APK, `build-info.json` and `SHA256SUMS`
