@@ -191,6 +191,7 @@ python3 android/native/test/run_evolution_tests.py
 python3 android/native/test/run_starter_tests.py
 python3 android/native/test/run_fps_settings_tests.py
 python3 android/native/test/run_bottom_menu_tests.py
+python3 android/native/test/run_pokedex_search_tests.py
 python3 android/native/test/run_save_ui_tests.py
 ```
 

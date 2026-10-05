@@ -1,0 +1,15 @@
+diff --git a/src/pokedex.c b/src/pokedex.c
+--- a/src/pokedex.c
++++ b/src/pokedex.c
+@@ -6165,8 +6165,9 @@
+     case 1: return SEARCH_COLOR;
+     case 2: return x < 88 ? SEARCH_TYPE_LEFT : SEARCH_TYPE_RIGHT;
+     case 3: return SEARCH_ORDER;
+-    case 4: return SEARCH_MODE;
+-    default: return x < 40 ? SEARCH_OK : -1;
++    // Without the National Dex, the drawn OK button occupies MODE's row.
++    case 4: return IsNationalPokedexEnabled() ? SEARCH_MODE : (x < 40 ? SEARCH_OK : -1);
++    default: return IsNationalPokedexEnabled() && x < 40 ? SEARCH_OK : -1;
+     }
+ }
+ 
