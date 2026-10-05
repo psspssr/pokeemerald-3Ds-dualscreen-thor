@@ -281,7 +281,7 @@ class ControlsOverlayView(
         // batched MOVE events. Acknowledge this whole gesture immediately,
         // including touches while gameplay input is disabled by the menu.
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-            if (Build.VERSION.SDK_INT < 30) requestUnbufferedDispatch(event)
+            requestUnbufferedDispatch(event)
             // A containing view can drop the previous gesture's UP/CANCEL.
             // A new primary DOWN always starts with this source released.
             releaseAll()

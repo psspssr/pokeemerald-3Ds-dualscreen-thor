@@ -42,6 +42,10 @@ class GamePresentation(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // This window is a touch/display surface. Keep keyboard and gamepad
+        // focus on the Activity, including while a finger uses this panel.
+        // It also avoids API 30's native MOVE/FOCUS batching dead end.
+        window?.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
         val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
         val surface = SurfaceView(context)
         surfaceView = surface
@@ -82,7 +86,7 @@ class GamePresentation(
         host.onSecondSurfaceChanged(0, 0)
     }
 
-    /* Touching this display can move key focus here; the activity owns input. */
+    /* Explicitly routed keys still belong to the Activity. */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = activity.dispatchKeyEvent(event)
 
     override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean =

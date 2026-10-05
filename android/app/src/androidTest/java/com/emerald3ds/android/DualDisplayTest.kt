@@ -739,11 +739,54 @@ class DualDisplayTest {
                 }
                 nativeBurstEvent(displayId, down, MotionEvent.ACTION_UP, 930f, 540f)
                 waitUntil("Secondary UP was not consumed") { HostProbe.snapshot()[1] and CtrKeys.TOUCH == 0 }
-                nativeBurstEvent(displayId, down, MotionEvent.ACTION_MOVE, 1f, 0f, joystick = true)
+                nativeBurstEvent(android.view.Display.INVALID_DISPLAY, down, MotionEvent.ACTION_MOVE, 1f, 0f, joystick = true)
                 waitUntil("Joystick MOVE without DOWN was not consumed") { HostProbe.snapshot()[2] > 100 }
-                nativeBurstEvent(displayId, down, MotionEvent.ACTION_MOVE, 0f, 0f, joystick = true)
+                nativeBurstEvent(android.view.Display.INVALID_DISPLAY, down, MotionEvent.ACTION_MOVE, 0f, 0f, joystick = true)
                 waitUntil("Joystick centering was not consumed") { HostProbe.snapshot()[2] == 0 }
                 assertTrue("First native input burst waited for UI frames", SystemClock.uptimeMillis() - down < 4000)
+            }
+        }
+    }
+
+    private fun systemControllerKey(action: Int, code: Int) {
+        val now = SystemClock.uptimeMillis()
+        val event = KeyEvent(now, now, action, code, 0, 0, 806, 0, 0, InputDevice.SOURCE_GAMEPAD)
+        assertTrue(inst.uiAutomation.injectInputEvent(event, true))
+    }
+
+    @Test fun secondaryTouchRetainsMainControllerFocusAndHeldShouldersInBothAssignments() {
+        addDisplay()
+        for (swapped in listOf(false, true)) {
+            PreferenceManager.getDefaultSharedPreferences(context).edit()
+                .putString("top_display", if (swapped) "second" else "main").commit()
+            ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+                waitUntil("Both assigned displays were not ready") {
+                    val s = HostProbe.snapshot()
+                    presentation(scenario)?.let { it.surfaceWidth == 1240 && it.touchView.inputEnabled } == true &&
+                        s[6] == (if (swapped) 1 else 0) &&
+                        s[7] == (if (swapped) 0 else 1) && s[16] > 0 && s[17] > 0
+                }
+                systemControllerKey(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_L1)
+                waitUntil("L1 did not reach the native game") { HostProbe.snapshot()[1] and CtrKeys.L != 0 }
+                val down = SystemClock.uptimeMillis()
+                touch(display!!.display.displayId, MotionEvent.ACTION_DOWN, 620f, 540f, down)
+                touch(display!!.display.displayId, MotionEvent.ACTION_MOVE, 690f, 647f, down)
+                scenario.onActivity { activity ->
+                    assertTrue("Secondary touch stole the controller window's focus", activity.hasWindowFocus())
+                    assertFalse("The auxiliary display acquired keyboard focus", activity.presentation!!.window!!.decorView.hasWindowFocus())
+                }
+                assertTrue("Touching another display released a held shoulder", HostProbe.snapshot()[1] and CtrKeys.L != 0)
+                assertEquals("Only the assigned bottom picture accepts native touch", !swapped,
+                    HostProbe.snapshot()[1] and CtrKeys.TOUCH != 0)
+                touch(display!!.display.displayId, MotionEvent.ACTION_UP, 690f, 647f, down)
+                systemControllerKey(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_R1)
+                waitUntil("Held L1 plus R1 did not pause through system input") { HostProbe.snapshot()[0] == NativeBridge.STATE_PAUSED }
+                systemControllerKey(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BUTTON_L1)
+                systemControllerKey(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BUTTON_R1)
+                systemControllerKey(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK)
+                systemControllerKey(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK)
+                waitUntil("System Back did not resume the native game") { HostProbe.snapshot()[0] == NativeBridge.STATE_RUNNING }
+                assertEquals(0, HostProbe.snapshot()[1] and (CtrKeys.L or CtrKeys.R or CtrKeys.TOUCH))
             }
         }
     }
