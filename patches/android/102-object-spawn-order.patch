@@ -1,0 +1,14 @@
+diff --git a/src/event_object_movement.c b/src/event_object_movement.c
+--- a/src/event_object_movement.c
++++ b/src/event_object_movement.c
+@@ -2222,8 +2222,9 @@
+ void UpdateObjectEventsForCameraUpdate(s16 x, s16 y)
+ {
+     UpdateObjectEventCoordsForCameraUpdate();
++    // Reuse off-view slots for objects entering on this same camera step.
++    RemoveObjectEventsOutsideView();
+     TrySpawnObjectEvents(x, y);
+-    RemoveObjectEventsOutsideView();
+ }
+ 
+ // The "CameraObject" functions below are responsible for an invisible sprite

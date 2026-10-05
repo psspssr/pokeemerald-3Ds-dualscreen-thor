@@ -94,6 +94,8 @@ jobs:
         run: python3 android/native/test/run_storage_init_tests.py
       - name: Preserve unfinished PC moves across allocation failures
         run: python3 android/native/test/run_storage_carry_tests.py
+      - name: Spawn incoming NPCs when offscreen slots become available
+        run: python3 android/native/test/run_object_spawn_tests.py
       - name: Shop assets and viewport
         run: python3 android/native/test/run_shop_tests.py
       - name: Contest graphics and Pokeblock viewport
