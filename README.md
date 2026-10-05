@@ -36,7 +36,7 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 
 ## Get started
 
-Download the signed **[0.1.0-beta.1 Android beta](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.1)** and install its ARMv7 APK. Matching game data is included. **Downloads require access to this private GitHub repository.**
+Download the signed **[0.1.0-beta.1 Android beta](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.1)** and install its ARMv7 APK. Matching game data is included.
 
 **Press L1 + R1 together** or keyboard **Escape** for Pause and Settings. Both Thor panels fill by default; choose **Fit** to preserve the original proportions. Phone layouts include on-screen controls. [Thor setup](docs/AYN_THOR.md).
 

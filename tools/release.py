@@ -114,9 +114,13 @@ def tag_commit(api, tag):
 def context(api, event, run_number, source_sha, ref):
     require(event.get("action") == "published", "only release:published may publish APKs")
     require(event.get("repository", {}).get("full_name") == REPOSITORY, "wrong event repository")
-    require(event.get("repository", {}).get("private") is True, "release repository must stay private")
+    visibility = event.get("repository", {}).get("private")
+    require(type(visibility) is bool, "release event repository visibility must be boolean")
     repo = api.get(f"repos/{REPOSITORY}")
-    require(repo.get("private") is True and repo.get("default_branch") == "main", "expected private repository with main as default")
+    require(repo.get("full_name") == REPOSITORY and repo.get("default_branch") == "main",
+            "expected release repository with main as default")
+    require(type(repo.get("private")) is bool, "live repository visibility must be boolean")
+    require(repo["private"] == visibility, "repository visibility changed after the release event")
     original = event.get("release", {})
     release_id = positive_id(original.get("id"), "release ID")
     tag = original.get("tag_name")

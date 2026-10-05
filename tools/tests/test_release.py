@@ -20,7 +20,7 @@ REF = "refs/tags/" + TAG
 
 class FakeGitHub:
     def __init__(self):
-        self.repo = {"private": True, "default_branch": "main"}
+        self.repo = {"full_name": release.REPOSITORY, "private": True, "default_branch": "main"}
         self.release = {"id": 27, "tag_name": TAG, "target_commitish": SHA,
                         "draft": False, "prerelease": True, "published_at": "2026-10-02T12:00:00Z"}
         self.tag = {"type": "commit", "sha": SHA}
@@ -114,10 +114,10 @@ class ReleaseTest(unittest.TestCase):
             with self.subTest(number=number), self.assertRaises(release.ReleaseError):
                 release.versions(TAG, number)
 
-    def test_published_private_tag_context_is_required(self):
+    def test_published_repository_and_tag_context_are_required(self):
         for change in (lambda: self.event.update(action="edited"),
                        lambda: self.event["repository"].update(full_name="other/repo"),
-                       lambda: self.api.repo.update(private=False),
+                       lambda: self.api.repo.update(full_name="other/repo"),
                        lambda: self.api.repo.update(default_branch="other"),
                        lambda: self.api.release.update(draft=True),
                        lambda: self.api.release.update(tag_name="v2.0.0"),
@@ -130,6 +130,58 @@ class ReleaseTest(unittest.TestCase):
             with self.assertRaises(release.ReleaseError):
                 self.preflight()
             self.assertFalse(self.api.uploads)
+
+    def test_event_and_live_visibility_must_be_explicit_booleans(self):
+        missing = object()
+        for visibility in (False, True):
+            for source in ("event", "live"):
+                for invalid in (missing, None, 0, 1, "false", "true"):
+                    with self.subTest(visibility=visibility, source=source, invalid=invalid):
+                        api = FakeGitHub()
+                        event = copy.deepcopy(self.event)
+                        api.repo["private"] = event["repository"]["private"] = visibility
+                        target = event["repository"] if source == "event" else api.repo
+                        if invalid is missing:
+                            target.pop("private")
+                        else:
+                            target["private"] = invalid
+                        with self.assertRaisesRegex(release.ReleaseError, "visibility must be boolean"):
+                            release.context(api, event, "1", SHA, REF)
+                        self.assertFalse(api.uploads)
+
+    def test_event_and_live_repository_visibility_must_match(self):
+        for visibility in (False, True):
+            with self.subTest(visibility=visibility):
+                self.event["repository"]["private"] = visibility
+                self.api.repo["private"] = not visibility
+                with self.assertRaisesRegex(release.ReleaseError, "visibility changed"):
+                    self.preflight()
+                self.assertFalse(self.api.uploads)
+
+    def test_visibility_change_after_planning_prevents_any_upload(self):
+        for visibility in (False, True):
+            with self.subTest(visibility=visibility):
+                self.api = FakeGitHub()
+                self.event["repository"]["private"] = self.api.repo["private"] = visibility
+                self.assertEqual("build", self.preflight()["mode"])
+                self.api.repo["private"] = not visibility
+                with self.assertRaisesRegex(release.ReleaseError, "visibility changed"):
+                    self.publish()
+                self.assertFalse(self.api.uploads)
+                self.assertFalse(self.api.data)
+
+    def test_visibility_is_rechecked_between_individual_uploads(self):
+        for visibility in (False, True):
+            with self.subTest(visibility=visibility):
+                self.api = FakeGitHub()
+                self.event["repository"]["private"] = self.api.repo["private"] = visibility
+                self.api.after_upload = lambda api: api.repo.update(private=not visibility)
+                with self.assertRaisesRegex(release.ReleaseError, "visibility changed"):
+                    self.publish()
+                self.assertEqual([(27, "build-info.json")], self.api.uploads)
+                self.assertEqual((self.bundle / "build-info.json").read_bytes(), self.api.data["build-info.json"])
+                self.assertNotIn(self.plan["apk"], self.api.data)
+                self.assertNotIn("SHA256SUMS", self.api.data)
 
     def test_tag_movement_branch_ambiguity_and_nonmain_history_are_rejected(self):
         self.api.tag["sha"] = OTHER
@@ -154,28 +206,34 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(release.ReleaseError, "cyclic"):
             self.preflight()
 
-    def test_fresh_publish_and_complete_rerun_are_exactly_idempotent(self):
-        self.assertEqual("build", self.preflight()["mode"])
-        self.publish()
-        original = self.api.data.copy()
-        self.assertEqual(3, len(self.api.uploads))
-        self.assertEqual("existing", self.preflight()["mode"])
-        self.publish()
-        self.assertEqual(original, self.api.data)
-        self.assertEqual(3, len(self.api.uploads))
+    def test_public_and_private_publish_and_rerun_are_exactly_idempotent(self):
+        for visibility in (False, True):
+            with self.subTest(visibility=visibility):
+                self.api = FakeGitHub()
+                self.event["repository"]["private"] = self.api.repo["private"] = visibility
+                self.assertEqual("build", self.preflight()["mode"])
+                self.publish()
+                original = self.api.data.copy()
+                self.assertEqual(3, len(self.api.uploads))
+                self.assertEqual("existing", self.preflight()["mode"])
+                self.publish()
+                self.assertEqual(original, self.api.data)
+                self.assertEqual(3, len(self.api.uploads))
 
     def test_existing_version_code_source_or_signer_mismatch_fails_closed(self):
-        for key, value in (("version_code", 3), ("version", "9.0.0"), ("code_commit", OTHER),
-                           ("release_id", 28), ("signer_sha256", "f" * 64)):
-            with self.subTest(key=key):
-                old = self.info[key]
-                self.info[key] = value
-                self.write_manifest()
-                self.api.data = {name: (self.bundle / name).read_bytes() for name in release.asset_names(self.plan)}
-                with self.assertRaises(release.ReleaseError):
-                    self.preflight()
-                self.assertFalse(self.api.uploads)
-                self.info[key] = old
+        for visibility in (False, True):
+            self.event["repository"]["private"] = self.api.repo["private"] = visibility
+            for key, value in (("version_code", 3), ("version", "9.0.0"), ("code_commit", OTHER),
+                               ("release_id", 28), ("signer_sha256", "f" * 64)):
+                with self.subTest(visibility=visibility, key=key):
+                    old = self.info[key]
+                    self.info[key] = value
+                    self.write_manifest()
+                    self.api.data = {name: (self.bundle / name).read_bytes() for name in release.asset_names(self.plan)}
+                    with self.assertRaises(release.ReleaseError):
+                        self.preflight()
+                    self.assertFalse(self.api.uploads)
+                    self.info[key] = old
 
     def test_partial_upload_retry_reuses_exact_bytes_without_replacement(self):
         self.api.fail_upload = self.plan["apk"]

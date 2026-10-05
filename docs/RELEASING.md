@@ -1,4 +1,4 @@
-# Private Android releases
+# Android releases
 
 Existing releases predate the [history cleanup](HISTORY.md). Their APKs and
 manifests remain unchanged, and original source IDs have an explicit mapping.
@@ -8,7 +8,9 @@ builds.
 Publish a GitHub release to start [the release workflow](../.github/workflows/release.yml).
 It validates the tagged source, builds the playable ARMv7 app, signs it with the
 existing release key, and attaches the APK, `build-info.json` and `SHA256SUMS`
-to that same release ID. Repository visibility remains **private**.
+to that same release ID. Public and private repositories are supported; the
+repository's visibility must remain unchanged from the release event through
+publication. The workflow never changes visibility.
 Routine pushes and pull requests run [normal validation](../.github/workflows/android.yml);
 they do not run the signing or release workflow, or publish APKs.
 
@@ -54,8 +56,8 @@ previously shipped codes. Failed runs can leave harmless gaps.
 Select a committed, reviewed source SHA on `main`, with the release workflow
 already present. Require green normal CI and appropriate local gameplay
 checks for changed features before publishing. Write release notes describing
-requirements, changed behavior and testing limits. The repository must be
-private, and the tag must resolve to the exact selected commit. Existing tags
+requirements, changed behavior and testing limits. Confirm the repository's
+current visibility, and require the tag to resolve to the exact selected commit. Existing tags
 must never be moved to different code.
 
 The GitHub release editor can create the release. An equivalent explicit
@@ -67,7 +69,8 @@ release_tag=v0.1.0-beta.2
 release_commit=$(git rev-parse HEAD)
 release_notes=build/release-notes.md  # Prepare and review this file first.
 test -z "$(git status --porcelain)"
-test "$(gh repo view "$release_repo" --json visibility --jq .visibility)" = PRIVATE
+test "$(gh repo view "$release_repo" --json defaultBranchRef --jq .defaultBranchRef.name)" = main
+gh repo view "$release_repo" --json nameWithOwner,visibility
 
 gh release create "$release_tag" --repo "$release_repo" \
   --draft --prerelease --target "$release_commit" \
@@ -86,8 +89,8 @@ succeeds. Draft creation, ordinary pushes and tag pushes alone do not trigger it
 
 ## What automation verifies
 
-1. The event and live release identify the same private repository, release
-   ID, tag and target. The tag must identify the workflow's source commit on
+1. The event and live release identify the same repository, visibility,
+   release ID, tag and target. The tag must identify the workflow's source commit on
    `main`. These checks repeat before individual uploads.
 2. Reusable CI runs source/update/patch tests, sanitizer and native gameplay
    tests, the strict ARM build, harness instrumentation, lint and GLES pixel

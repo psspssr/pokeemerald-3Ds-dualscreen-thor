@@ -31,7 +31,7 @@ The builder reads repository visibility and paginates the release list. It
 selects the newest `published_at` with a safe version tag and all three fully
 uploaded assets: the matching ARMv7 APK, `SHA256SUMS`, and `build-info.json`.
 Drafts and incomplete uploads are skipped; **prereleases are included**.
-It never uses `/releases/latest` or asks a public browser to access the private
+It never uses `/releases/latest` or asks a public browser to authenticate to the
 GitHub API. The offline snapshot is an explicit fallback, not a live lookup.
 
 Only allowlisted tag/date/download-link metadata is written to `release.json`.
@@ -39,15 +39,16 @@ API bodies, author/account data, credentials, game packs and APKs are not copied
 Image files are copied byte-for-byte from the existing project assets; the
 site distinguishes real gameplay captures from the illustrative Thor mockup.
 
-The game repository remains private. The deployment target is the separate
-public **website-only** repository `psspssr/emerald-dual-screen-site`.
+The deployment target is the separate public **website-only** repository
+`psspssr/emerald-dual-screen-site`.
 Publish only generated `build/site` files there, using a deploy key scoped to
 that website repository; never copy the game checkout, APKs or credentials.
-The publisher builds within the private game repository with Contents: read
+The publisher builds within the game repository with Contents: read
 access, then transfers the static output. It does not change game visibility.
 
-The page states that GitHub repository access is required for downloads.
-Publishing the website does not make private release assets public. This builder
+The page derives its download-access notice from the game repository's live
+visibility. Public releases have open download links; private releases require
+repository access. Publishing the website does not change that visibility. This builder
 does not enable hosting, push branches or publish releases.
 
 Rebuild the site **after** the signed-release workflow has finished uploading
