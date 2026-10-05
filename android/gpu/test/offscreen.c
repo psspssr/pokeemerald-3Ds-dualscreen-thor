@@ -1,5 +1,5 @@
 /* Executed on an Android emulator/device with its real GLES implementation.
- * No game code is stubbed: this is an isolated renderer conformance harness. */
+ * Selected upstream rendering functions use deterministic draw fixtures. */
 #include "../src/gpu_internal.h"
 #include <assert.h>
 #include <stdio.h>
@@ -13,6 +13,8 @@ static unsigned gameSpeed=1;
 static CtrHostBottomMenuContent bottomContent;
 static int voxelAaRequested,voxelAaCapabilities=-1;
 static int voxelScaleRequested=1,voxelScaleCapabilities=-1;
+static int imageFilter;
+static bool failNextVramAllocation;
 /* Link wrappers count actual backend/driver work without adding counters to
  * the production renderer. Pixel checks below still use the real GLES API. */
 static unsigned uniformCalls,uniformVectors,textureBinds,attributeCalls;
@@ -40,7 +42,8 @@ static CtrAptListener gpuListener;
 bool CtrApt_AddListener(CtrAptListener listener,void *user) { (void)user;gpuListener=listener;return true; }
 void CtrApt_RemoveListener(CtrAptListener listener,void *user) { (void)listener;(void)user;gpuListener=NULL; }
 void *linearAlloc(size_t size) { return calloc(1,size); }
-void *vramAlloc(size_t size) { return calloc(1,size); }
+void *vramAlloc(size_t size) { if(failNextVramAllocation) {failNextVramAllocation=false;return NULL;} return calloc(1,size); }
+u32 vramSpaceFree(void) { return 16u*1024u*1024u; }
 void linearFree(void *ptr) { free(ptr); }
 void vramFree(void *ptr) { free(ptr); }
 void CtrMem_Register(CtrMemKind k,void *p,size_t s,void *o) { (void)k;(void)p;(void)s;(void)o; }
@@ -48,7 +51,7 @@ void CtrMem_Unregister(void *p) { (void)p; }
 bool CtrMem_Find(const void *p,CtrMemBlock *out) { (void)p;(void)out;return false; }
 void CtrMem_SetOwner(void *p,void *owner) { (void)p;(void)owner; }
 void CtrHost_GetLayout(CtrHostLayout *layout)
-{ memset(layout,0,sizeof(*layout)); layout->voxelAASamples=voxelAaRequested; layout->voxelScale=voxelScaleRequested; }
+{ memset(layout,0,sizeof(*layout)); layout->voxelAASamples=voxelAaRequested; layout->voxelScale=voxelScaleRequested; layout->filter=imageFilter; }
 CtrHostBottomMenuContent CtrHost_BottomMenuContent(void) { return bottomContent; }
 void CtrHost_SetPresentedBottomMenuContent(CtrHostBottomMenuContent content) { (void)content; }
 void CtrHost_SetVoxelAACapabilities(int samples) { voxelAaCapabilities=samples; }
@@ -193,8 +196,8 @@ static void presentationSampling(C3D_RenderTarget *restore)
         }
         free(rgba); C3D_RenderTargetDelete(canvas);
     }
-    /* Final LCD sampling must not override the game's intentional filtering
-     * for voxel effects or the battle scene's fractional downsample. */
+    /* Final LCD sampling must not override explicit texture filtering used
+     * for effects such as bloom, shadows and the optional diorama blur. */
     C3D_Tex smooth={0}; assert(C3D_TexInit(&smooth,8,8,GPU_RGBA5551));
     for(unsigned y=0;y<8;y++) for(unsigned x=0;x<8;x++)
         ((u16 *)smooth.data)[morton(x,y)]=(x&1)?0xffff:0x0001;
@@ -214,6 +217,7 @@ static void presentationSampling(C3D_RenderTarget *restore)
 #include "indexed_checks.inc"
 #include "voxel_scale_checks.inc"
 #include "voxel_warmup_checks.inc"
+#include "battle_scene_checks.inc"
 
 int main(int argc,char **argv)
 {
@@ -518,6 +522,7 @@ int main(int argc,char **argv)
     voxelAaChecks(&program,target);
     voxelScaleChecks(&program,target);
     voxelWarmupChecks(target);
+    battleSceneChecks(&program,target);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
     if(argc==3) {
         /* Upstream's atlas is 1024x1024, but a typed glyph can change one
