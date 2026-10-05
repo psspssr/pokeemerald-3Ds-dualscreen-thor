@@ -57,12 +57,17 @@ exhaustion, fragmentation, bank offsets, repeated reuse and real heap failure;
 the new APK's repeated-scene acceptance is tracked separately from the older
 comparison captures.
 
-A normal in-game save advanced counter 19→20, produced a valid 128 KiB raw
+On the earlier `03b48fc` candidate (APK SHA-256
+`4820405ab034664530058b543c99f1245b3869b52c870b6514f6f4c68eda4b5e`,
+native library `c760ebb3210df419d7d4078bb995056faa390b098224c4cf27b8bf6b7e294ec1`),
+a normal in-game save advanced counter 19→20, produced a valid 128 KiB raw
 Emerald save, and exported byte-for-byte through Android's document picker.
 Original GBA Emerald loaded that export in mGBA, with all 400 party bytes
 unchanged. Returning from the picker retained working Party/Map touch input.
 Import validation now rejects corrupt active sectors before replacing the
 current save or backup; a corrupt pending import can be quarantined and retried.
+The later VRAM change does not alter save code; its runtime acceptance remains
+separate from this save/export check.
 
 Coverage is deliberately bounded. Frontier challenge menus, link desks,
 the NPC Berry Blender, ribbon/painting details, every Pokédex search filter,

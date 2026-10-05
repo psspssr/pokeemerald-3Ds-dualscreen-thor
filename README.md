@@ -42,7 +42,7 @@ Download the signed **[0.1.0-alpha.8 Android preview](https://github.com/psspssr
 
 Bring your progress through **Settings → Import save / Export save**. Standard Emerald GBA and emulator `.sav` files are supported; save states are not. Restart after importing and save normally in-game. Export your save before replacing a development APK, which uses a different signing key. [Save details](docs/BUILDING.md#engine-only-build-and-data-packs).
 
-**Sharp pixels are the default.** Settings → Display offers **1×–4× voxel resolution**, starting at **2× Sharp** for new settings. Choose 1× for lighter rendering or 3×/4× for more detail; optional anti-aliasing smooths voxel edges. Existing quality choices are preserved. Enable voxel scenery and battles in **OPTION**; set **3D BLUR → OFF** if an older setup still looks soft. **SHOW FPS** starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
+**Sharp pixels are the default.** The **beta candidate** adds **1×–4× voxel resolution** in Settings → Display, starting at **2× Sharp** for new settings. Choose 1× for lighter rendering or 3×/4× for more detail; optional anti-aliasing smooths voxel edges. Existing quality choices are preserved. Enable voxel scenery and battles in **OPTION**; set **3D BLUR → OFF** if an older setup still looks soft. **SHOW FPS** starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
 
 ## Compatibility
 
