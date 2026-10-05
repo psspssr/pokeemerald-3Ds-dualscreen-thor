@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.hardware.display.DisplayManager
@@ -28,8 +30,13 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import org.junit.After
@@ -633,6 +640,110 @@ class DualDisplayTest {
                 touch(displayId, MotionEvent.ACTION_UP, 930f, 540f, down)
                 assertTrue("secondary drag stalled", SystemClock.uptimeMillis() - down < 4000)
                 assertEquals(0, HostProbe.snapshot()[1] and CtrKeys.TOUCH)
+            }
+        }
+    }
+
+    private fun unbufferedSources(activity: Activity): Int {
+        val text = StringWriter()
+        activity.dump("", null, PrintWriter(text), null)
+        val value = Regex("mUnbufferedInputSource\\s*=\\s*(?:0x)?([0-9a-fA-F]+)")
+            .find(text.toString())?.groupValues?.get(1)
+        assertNotNull("Window root did not report its unbuffered input policy", value)
+        return value!!.toInt(16)
+    }
+
+    @Test @SdkSuppress(minSdkVersion = 30)
+    fun gameWindowUnbuffersNativeInputBeforeFirstGestureAndAfterReattachment() {
+        addDisplay()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            waitDual(scenario)
+            val expected = InputDevice.SOURCE_CLASS_POINTER or InputDevice.SOURCE_CLASS_JOYSTICK
+            scenario.onActivity { activity ->
+                assertEquals("Fresh game window still depends on a gesture request", expected, unbufferedSources(activity))
+                val overlay = activity.findViewById<FrameLayout>(R.id.overlay_container).getChildAt(0) as ControlsOverlayView
+                val parent = overlay.parent as android.view.ViewGroup
+                val params = overlay.layoutParams
+                assertTrue("The native game view did not obtain input focus", overlay.isFocused)
+                assertFalse("Native input focus opened the Android keyboard",
+                    ViewCompat.getRootWindowInsets(overlay)?.isVisible(WindowInsetsCompat.Type.ime()) == true)
+                val other = android.view.View(activity).apply { isFocusableInTouchMode = true }
+                parent.addView(other, android.view.ViewGroup.LayoutParams(1, 1))
+                assertTrue(other.requestFocus())
+                assertEquals("A later focus change removed the native pointer policy",
+                    InputDevice.SOURCE_CLASS_POINTER, unbufferedSources(activity))
+                assertTrue(overlay.requestFocus())
+                assertEquals("Joystick policy did not follow restored native focus", expected, unbufferedSources(activity))
+                parent.removeView(other)
+                parent.removeView(overlay)
+                assertEquals("Detached game input retained its window policy", 0, unbufferedSources(activity))
+                parent.addView(overlay, params)
+                assertEquals("Reattached game input did not notify its window root", expected, unbufferedSources(activity))
+                assertTrue(overlay.isFocused)
+                activity.startActivity(Intent(activity, SettingsActivity::class.java))
+            }
+            var settings: SettingsActivity? = null
+            waitUntil("Settings did not resume") {
+                inst.runOnMainSync {
+                    settings = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                        .filterIsInstance<SettingsActivity>().firstOrNull()
+                }
+                settings != null
+            }
+            inst.runOnMainSync {
+                assertEquals("Settings scrolling inherited native game input policy", 0, unbufferedSources(settings!!))
+                settings!!.finish()
+            }
+            waitUntil("Game did not resume") { HostProbe.snapshot()[0] == NativeBridge.STATE_RUNNING }
+            waitDual(scenario)
+            scenario.onActivity { assertEquals(expected, unbufferedSources(it)) }
+        }
+    }
+
+    /* A fast system burst deliberately has no waitForIdleSync between DOWN
+     * and MOVE. The old stream test drained View frames between every event,
+     * which could conceal first-input batching/lifecycle races. */
+    private fun nativeBurstEvent(displayId: Int, down: Long, action: Int,
+                                  x: Float, y: Float, joystick: Boolean = false) {
+        val properties = MotionEvent.PointerProperties().apply {
+            id = 0
+            toolType = if (joystick) MotionEvent.TOOL_TYPE_UNKNOWN else MotionEvent.TOOL_TYPE_FINGER
+        }
+        val coordinates = MotionEvent.PointerCoords().apply {
+            if (joystick) { setAxisValue(MotionEvent.AXIS_X, x); setAxisValue(MotionEvent.AXIS_Y, y) }
+            else { this.x = x; this.y = y; pressure = 1f; size = 1f }
+        }
+        val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, 1,
+            arrayOf(properties), arrayOf(coordinates), 0, 0, 1f, 1f, 0, 0,
+            if (joystick) InputDevice.SOURCE_JOYSTICK else InputDevice.SOURCE_TOUCHSCREEN, 0)
+        android.view.InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
+            .invoke(event, displayId)
+        try { assertTrue(inst.uiAutomation.injectInputEvent(event, false)) } finally { event.recycle() }
+    }
+
+    @Test fun firstSecondaryBurstAfterPauseAndRecreationReachesNative() {
+        addDisplay()
+        ActivityScenario.launch(GameActivity::class.java).use { scenario ->
+            for (round in 0..2) {
+                if (round == 1) { scenario.moveToState(Lifecycle.State.CREATED); scenario.moveToState(Lifecycle.State.RESUMED) }
+                if (round == 2) scenario.recreate()
+                waitDual(scenario)
+                val displayId = display!!.display.displayId
+                val down = SystemClock.uptimeMillis()
+                nativeBurstEvent(displayId, down, MotionEvent.ACTION_DOWN, 310f, 307.5f)
+                for (step in 1..10)
+                    nativeBurstEvent(displayId, down, MotionEvent.ACTION_MOVE, 310f + 62f * step, 307.5f + 23.25f * step)
+                waitUntil("First secondary burst was not consumed in round $round") {
+                    val snapshot = HostProbe.snapshot()
+                    snapshot[1] and CtrKeys.TOUCH != 0 && snapshot[4] == 240 && snapshot[5] == 120
+                }
+                nativeBurstEvent(displayId, down, MotionEvent.ACTION_UP, 930f, 540f)
+                waitUntil("Secondary UP was not consumed") { HostProbe.snapshot()[1] and CtrKeys.TOUCH == 0 }
+                nativeBurstEvent(displayId, down, MotionEvent.ACTION_MOVE, 1f, 0f, joystick = true)
+                waitUntil("Joystick MOVE without DOWN was not consumed") { HostProbe.snapshot()[2] > 100 }
+                nativeBurstEvent(displayId, down, MotionEvent.ACTION_MOVE, 0f, 0f, joystick = true)
+                waitUntil("Joystick centering was not consumed") { HostProbe.snapshot()[2] == 0 }
+                assertTrue("First native input burst waited for UI frames", SystemClock.uptimeMillis() - down < 4000)
             }
         }
     }
