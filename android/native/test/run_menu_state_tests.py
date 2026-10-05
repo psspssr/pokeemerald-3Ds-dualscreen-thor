@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise real Bag-grid to vertical-menu initialization and touch selection.
 
---before with a pristine generated --source reproduces the stale grid metadata.
+--before reproduces stale metadata with either pristine or already patched input.
 The test never writes to the generated tree or a game save.
 """
 import argparse
@@ -16,12 +16,13 @@ from run_summary_tests import function
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "tools"))
-from bootstrap import strict_apply
+from bootstrap import PatchError, strict_apply
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=ROOT / "build/upstream/src/menu.c")
+    tree = Path(os.environ.get("EMERALD_TEST_TREE", ROOT / "build/upstream"))
+    parser.add_argument("--source", type=Path, default=tree / "src/menu.c")
     parser.add_argument("--before", action="store_true")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="emerald-menu-state-") as folder:
@@ -29,8 +30,16 @@ def main():
         path = work / "src/menu.c"
         path.parent.mkdir()
         path.write_bytes(args.source.read_bytes())
+        patch = ROOT / "patches/android/083-menu-grid-state.patch"
+        # CI's bootstrap already applies083. Validate either complete image in
+        # this temporary copy, with the same no-offset checks as bootstrap.
+        try:
+            strict_apply(work, patch, ["--reverse"])
+        except PatchError:
+            strict_apply(work, patch)
+            strict_apply(work, patch, ["--reverse"])
         if not args.before:
-            strict_apply(work, ROOT / "patches/android/083-menu-grid-state.patch")
+            strict_apply(work, patch)
         source = path.read_text()
         declarations = re.search(r"struct Menu\n\{.*?\n\};", source, re.S)[0]
         (work / "menu_data.inc").write_text(declarations + "\nstatic struct Menu sMenu;\n")
