@@ -1,0 +1,108 @@
+--- a/src/mirage_tower.c
++++ b/src/mirage_tower.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "malloc.h"
+ #include "bg.h"
+ #include "event_data.h"
+@@ -56,8 +59,17 @@
+ 
+ #define TAG_CEILING_CRUMBLE 4000
+ 
++#ifdef PORT_BRIDGE
++#define MIRAGE_TOWER_GFX_LENGTH Port_GetSpriteFrameSize(sMirageTower_Gfx, sizeof(sMirageTower_Gfx))
++#else
+ #define MIRAGE_TOWER_GFX_LENGTH (sizeof(sMirageTower_Gfx))
++#endif
+ #define FOSSIL_DISINTEGRATE_LENGTH 0x100
++#ifdef PORT_BRIDGE
++#define FOSSIL_GFX_LENGTH Port_GetSpriteFrameSize(sFossil_Gfx, sizeof(sFossil_Gfx))
++#else
++#define FOSSIL_GFX_LENGTH sizeof(sFossil_Gfx)
++#endif
+ 
+ static void PlayerDescendMirageTower(u8);
+ static void DoScreenShake(u8);
+@@ -672,24 +684,31 @@
+ {
+     u16 i;
+     u8 *buffer;
++    const u8 *graphics;
++    u32 graphicsSize;
+ 
+     switch (gTasks[taskId].tState)
+     {
+     case 1:
+         sFallingFossil = AllocZeroed(sizeof(*sFallingFossil));
+-        sFallingFossil->frameImageTiles = AllocZeroed(sizeof(sFossil_Gfx));
++        sFallingFossil->frameImageTiles = AllocZeroed(FOSSIL_GFX_LENGTH);
+         sFallingFossil->frameImage = AllocZeroed(sizeof(*sFallingFossil->frameImage));
+         sFallingFossil->disintegrateRand = AllocZeroed(FOSSIL_DISINTEGRATE_LENGTH * sizeof(u16));
+         sFallingFossil->disintegrateIdx = 0;
+         break;
+     case 2:
+         buffer = sFallingFossil->frameImageTiles;
+-        for (i = 0; i < sizeof(sFossil_Gfx); i++, buffer++)
+-            *buffer = sFossil_Gfx[i];
++        graphics = sFossil_Gfx;
++        graphicsSize = FOSSIL_GFX_LENGTH;
++#ifdef PORT_BRIDGE
++        graphics = Port_ResolveAssetPointer(graphics);
++#endif
++        for (i = 0; i < graphicsSize; i++, buffer++)
++            *buffer = graphics[i];
+         break;
+     case 3:
+         sFallingFossil->frameImage->data = sFallingFossil->frameImageTiles;
+-        sFallingFossil->frameImage->size = sizeof(sFossil_Gfx);
++        sFallingFossil->frameImage->size = FOSSIL_GFX_LENGTH;
+         break;
+     case 4:
+         {
+--- a/src/pokemon.c
++++ b/src/pokemon.c
+@@ -50,6 +50,7 @@
+ #include "constants/union_room.h"
+ #ifdef PORT_BRIDGE
+ #include <stdio.h>
++#include "port_platform.h"
+ #endif
+ 
+ #define DAY_EVO_HOUR_BEGIN       12
+@@ -5756,19 +5757,32 @@
+         *(pixels) += (SPOT_COLOR_ADJUSTMENT << (shift)); \
+     }
+ 
++static const u16 *GetSpindaSpotImage(unsigned spot)
++{
++#ifdef PORT_BRIDGE
++    const void *images = Port_ResolveAssetPointer(gSpindaSpotGraphics);
++
++    // The external grouped asset contains only the four images, without x/y.
++    if (images != gSpindaSpotGraphics)
++        return (const u16 *)images + spot * SPINDA_SPOT_HEIGHT;
++#endif
++    return gSpindaSpotGraphics[spot].image;
++}
++
+ #define DRAW_SPINDA_SPOTS(personality, dest)                                    \
+ {                                                                               \
+     s32 i;                                                                      \
+     for (i = 0; i < (s32)ARRAY_COUNT(gSpindaSpotGraphics); i++)                 \
+     {                                                                           \
+         s32 row;                                                                \
++        const u16 *spotImage = GetSpindaSpotImage(i);                             \
+         u8 x = gSpindaSpotGraphics[i].x + ((personality & 0x0F) - 8);           \
+         u8 y = gSpindaSpotGraphics[i].y + (((personality & 0xF0) >> 4) - 8);    \
+                                                                                 \
+         for (row = 0; row < SPINDA_SPOT_HEIGHT; row++)                          \
+         {                                                                       \
+             s32 column;                                                         \
+-            s32 spotPixelRow = gSpindaSpotGraphics[i].image[row];               \
++            s32 spotPixelRow = spotImage[row];               \
+                                                                                 \
+             for (column = x; column < x + SPINDA_SPOT_WIDTH; column++)          \
+             {                                                                   \
