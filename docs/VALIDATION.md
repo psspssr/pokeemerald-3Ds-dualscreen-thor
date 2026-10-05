@@ -2,12 +2,14 @@
 
 ## Beta development checkpoint
 
-The candidate at `86aad4c` imports upstream `c330c0a1aece` and uses engine/data
-ABI `91b37e30`. Its native library SHA-256 is
-`56237a52b8c5b030aa21c6828432cbd2feac877bc9202cb0aed3a1d75709b2db`.
+The candidate at `f7bf78f` imports upstream `c330c0a1aece` and uses engine/data
+ABI `1e406ec1`. Its native library SHA-256 is
+`705ebc0ddefd17b9a8b5ebf57093ef6cbd3b0375fe341487e62d59868945428f`.
 The nondebuggable, release-signed APK was installed without changing the save
 or either settings file. Release packaging will record its own source and
 artifact identity; the data ABI alone does not identify executable bytes.
+Runtime coverage below spans the identified candidates, rather than implying
+that every earlier route was repeated after every change.
 
 | Local check | Result |
 |---|---|
@@ -16,7 +18,7 @@ artifact identity; the data ABI alone does not identify executable bytes.
 | Production GLES pixel checks | 370 assertions passed |
 | GPU host checks | 21 passed |
 | ARM game build and SDK coverage | Full link passed; 321 identifiers, no missing APIs |
-| Native regressions | 21 suites passed, including gameplay, assets, menu geometry, save layout and real thread/shutdown checks |
+| Native regressions | 22 suites passed, including gameplay, assets, menu geometry, save layout and real thread/shutdown checks |
 
 The menu pass fixes stale Bag-grid selection state, shop metatiles, naming
 touch input, Contest/Pokéblock/berry layouts, Contest graphics and hidden
@@ -39,7 +41,20 @@ Pokéblock feeding, HM replacement refusal and a complete five-appeal Contest.
 The later nondebuggable candidate also passed corrected Condition colors,
 hidden Contest hearts, Shop buy/sell cancellation, Bag-to-PC Summary/Mark,
 deposit/withdrawal, touch box naming, a natural capture and touch Pokémon
-naming. A normal save reloaded at the same PC with the expected party.
+naming. A normal save reloaded at the same PC with the expected party. Extra
+Player PC checks withdrew and redeposited an item, canceled a toss without
+losing it, and handled an empty mailbox.
+
+That extra pass also reproduced an ignored Pokédex OK button before National
+mode is unlocked: its drawn position differed from its touch target. Overlay
+097 aligns the Hoenn hitbox and disables the former invisible target. The
+regression exercises the actual drawing and action handlers for Hoenn and
+National layouts, including SEARCH and SHIFT. An independent review also
+checked conditional Options rows, Summary move slots and PokéNav layouts.
+The rebuilt nondebuggable APK passed Fire→Torchic and no-result searches
+through the visible OK button, ignored the old hidden hit area, and accepted
+SHIFT's alphabetical order before returning to Map. Filter popups and their
+cancel paths were exercised; National geometry has source-level coverage.
 
 Natural Route 102 play covered classic/voxel switching, 1×–4× resolution,
 anti-aliasing, battle Bag/Party, an animated attack, knockout, EXP and field
@@ -54,8 +69,12 @@ This playtest exposed the console's 6 MiB graphics-backing limit: some menu
 and battle transitions fell back to slower tile drawing or unfiltered zoom.
 Android now has a bounded, on-demand 16 MiB quota. Sanitizer tests cover
 exhaustion, fragmentation, bank offsets, repeated reuse and real heap failure;
-the new APK's repeated-scene acceptance is tracked separately from the older
-comparison captures.
+the `86aad4c` APK then passed three field cycles and three real battle-menu
+cycles with no allocation fallback. Observed peak usage was 6,564,864 bytes,
+above the old quota; settled battle use returned exactly to 5,362,688 bytes.
+Total emulator native heap still grows, consistent with earlier EGL-emulation
+traces; this is not a claim that aggregate heap use or physical-device memory
+has been validated. The later Pokédex change does not alter graphics allocation.
 
 On the earlier `03b48fc` candidate (APK SHA-256
 `4820405ab034664530058b543c99f1245b3869b52c870b6514f6f4c68eda4b5e`,
@@ -70,12 +89,12 @@ The later VRAM change does not alter save code; its runtime acceptance remains
 separate from this save/export check.
 
 Coverage is deliberately bounded. Frontier challenge menus, link desks,
-the NPC Berry Blender, ribbon/painting details, every Pokédex search filter,
+the NPC Berry Blender, ribbon/painting details, every Pokédex filter combination,
 and every storage-item route were not played in this pass. Source-level tests
 cover the repaired Frontier/asset paths. No full-game completion is claimed.
 
-The original QA saves and settings are restored after each owned run. Physical Thor lid
-behavior, audible audio, sustained performance, thermals and battery use still
+The original QA saves and settings are restored after each owned run. Physical
+Thor lid behavior, audible audio, sustained performance, thermals and battery use still
 need the [hardware pass](testing/HARDWARE_TEST.md). Existing releases retain
 the historical validation below.
 
