@@ -1,0 +1,67 @@
+--- a/3ds_port/src/3ds_video.c
++++ b/3ds_port/src/3ds_video.c
+@@ -5601,6 +5601,17 @@
+                      (unsigned long)sStats.frames);
+     sHoldTop = hold;
+ }
++
++#if defined(__ANDROID__) && CTR_VOXEL_ENABLED
++/* Android presents and then paces inside FrameEnd. Use its synchronous
++ * post-present hook so the stream gets the spare time before that wait.
++ * Clear the one-shot hook before using this frame's stack parameter. */
++static void VoxelAfterSubmitBeforePacing(void *parameter)
++{
++    C3D_FrameEndHook(NULL, NULL);
++    CtrVoxel_AfterSubmit(*(const uint64_t *)parameter);
++}
++#endif
+ 
+ void CtrVideo_Present(void)
+ {
+@@ -5900,13 +5911,17 @@
+     if (bottom) BottomTransfer();
+     PORT_PROF_END(draw, PORT_PROF_DRAW);
+     PORT_PROF_BEGIN(frameEnd);
++#if defined(__ANDROID__) && CTR_VOXEL_ENABLED
++    if (overworld || battleUpdated)
++        C3D_FrameEndHook(VoxelAfterSubmitBeforePacing, &start);
++#endif
+     C3D_FrameEnd(0);
+     PORT_PROF_END(frameEnd, PORT_PROF_FRAMEEND);
+     ++sStats.frames;
+     ++sFpsFrames;
+     sStats.cpuMs = (svcGetSystemTick() - start) * 1000.0 / SYSCLOCK_ARM11;
+     sStats.gpuMs = C3D_GetDrawingTime();
+-#if CTR_VOXEL_ENABLED
++#if CTR_VOXEL_ENABLED && !defined(__ANDROID__)
+     /* The GPU draws the frame now: the voxel world builds what comes next in
+      * the time the CPU would otherwise wait for the VBlank. */
+     if (overworld || battleUpdated)
+@@ -5984,6 +5999,9 @@
+ 
+ void CtrVideo_Shutdown(void)
+ {
++#if defined(__ANDROID__) && CTR_VOXEL_ENABLED
++    C3D_FrameEndHook(NULL, NULL);
++#endif
+     BottomRelease();
+ #if CTR_VOXEL_ENABLED
+     CtrVoxel_Shutdown();
+--- a/3ds_port/src/voxel/ctr_voxel.c
++++ b/3ds_port/src/voxel/ctr_voxel.c
+@@ -3925,6 +3925,15 @@
+     budget = VOXEL_FRAME_MS - TicksMs(started - frameBeginTick) - sOthersMs - VOXEL_AFTER_MARGIN_MS;
+     if (sCrossingSoon)
+         budget -= VOXEL_CROSSING_RESERVE_MS;
++#ifdef __ANDROID__
++    /* Fast-forward can run several game ticks before this picture. Bound
++     * optional work by Android's actual deadline, not just this render's
++     * start. Both estimates include the same reserves; do not subtract twice. */
++    float reserve = VOXEL_AFTER_MARGIN_MS + (sCrossingSoon ? VOXEL_CROSSING_RESERVE_MS : 0.0f);
++    float available = CtrGpu_FrameTimeLeftMs() - reserve;
++    if (budget > available)
++        budget = available;
++#endif
+     budget = Clamp(budget, 0.0f, VOXEL_AFTER_MAX_MS);
+     sStats.afterBudgetMs = budget;
+     if (budget < 0.5f)

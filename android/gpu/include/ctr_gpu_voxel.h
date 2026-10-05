@@ -8,6 +8,11 @@
 bool CtrGpu_BeginVoxelAA(C3D_RenderTarget *target);
 void CtrGpu_EndVoxelAA(void);
 
+/* Time remaining before the current Android presentation deadline, for
+ * optional work in C3D_FrameEndHook. Read-only: does not advance pacing.
+ * No budget while unanchored, suspended, exiting or already overdue. */
+float CtrGpu_FrameTimeLeftMs(void);
+
 /* Select backing resolution before this frame clears/draws these targets.
  * Public 3DS dimensions/coordinates stay unchanged. Bottom-only menus may
  * reuse the previous top image: keepTop leaves its target/LCD untouched.

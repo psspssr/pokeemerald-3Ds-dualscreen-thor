@@ -7,6 +7,7 @@
 #include <ctrshim_apt.h>
 #include <ctr_diagnostics.h>
 #include <ctr_bottom_content.h>
+#include <ctr_gpu_voxel.h>
 
 static EGLDisplay display=EGL_NO_DISPLAY;
 static EGLContext context=EGL_NO_CONTEXT;
@@ -51,6 +52,13 @@ static void lifecycle(CtrAptEvent event,void *user)
 
 double gpuNow(void)
 { struct timespec now; clock_gettime(CLOCK_MONOTONIC,&now); return now.tv_sec+now.tv_nsec*1e-9; }
+float CtrGpu_FrameTimeLeftMs(void)
+{
+    if(!initialized || nextVblank<=0 || CtrHost_GetState()!=CTR_HOST_RUNNING) return 0;
+    double now=gpuNow();
+    double left=gpuPacingDeadline(now,nextVblank,framePeriod)-now;
+    return left>0?(float)(left*1000.0):0;
+}
 bool gpuShouldRender(void)
 {
     unsigned speed=CtrHost_GameSpeed();

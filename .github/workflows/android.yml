@@ -51,6 +51,8 @@ jobs:
         run: python3 android/native/test/run_bottom_menu_tests.py
       - name: Texture and shader regressions
         run: python3 android/gpu/test/test_gpu.py
+      - name: Voxel streaming work before the presentation deadline
+        run: python3 android/native/test/run_voxel_stream_timing_tests.py
 
   arm-game-build:
     runs-on: ubuntu-24.04
