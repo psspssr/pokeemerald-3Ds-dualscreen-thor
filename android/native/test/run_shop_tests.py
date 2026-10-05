@@ -33,6 +33,18 @@ def main():
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes((TREE / rel).read_bytes())
         patch = ROOT / "patches/android/084-shop-screen.patch"
+        # Later focused scene patches extend the same make source list. Undo
+        # only exact later full.mk hunks before normalizing084, then restore
+        # those hunks for the final-target test. Never touch the real tree.
+        later = []
+        for candidate in sorted((ROOT / "patches/android").glob("*.patch"), reverse=True):
+            if candidate.name <= patch.name:
+                continue
+            try:
+                strict_apply(work, candidate, ["--reverse", "--include=3ds_port/full.mk"])
+                later.append(candidate)
+            except PatchError:
+                pass
         try:
             strict_apply(work, patch, ["--reverse"])
         except PatchError:
@@ -40,6 +52,8 @@ def main():
             strict_apply(work, patch, ["--reverse"])
         if not args.before:
             strict_apply(work, patch)
+            for candidate in reversed(later):
+                strict_apply(work, candidate, ["--include=3ds_port/full.mk"])
         source = (work / "src/shop.c").read_text()
         assert re.findall(r"SetVBlankCallback\((\w+)\)", source) == ["VBlankCB_BuyMenu"]
         signatures = (

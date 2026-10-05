@@ -1,0 +1,74 @@
+--- a/3ds_port/full.mk
++++ b/3ds_port/full.mk
+@@ -140,7 +140,8 @@
+ # GBA screens shown centred, margins only from layers that wrap on the GBA
+ # (compat/ctr_gba_centred.h).
+ CTR_GBA_CENTRED_SRCS := region_map field_region_map main_menu naming_screen wallclock \
+-	pokemon_summary_screen starter_choose evolution_scene evolution_graphics shop
++	pokemon_summary_screen starter_choose evolution_scene evolution_graphics shop \
++	pokeblock contest contest_util
+ CTR_GBA_CENTRED_OBJS := $(patsubst %,build/root/src/%.o,$(CTR_GBA_CENTRED_SRCS))
+ $(CTR_GBA_CENTRED_OBJS): FULLCFLAGS += -DCTR_GBA_STAGE -include $(abspath compat/ctr_gba_centred.h)
+ $(CTR_GBA_CENTRED_OBJS): compat/ctr_gba_centred.h $(ROOT)/include/gba/defines.h
+--- a/src/contest.c
++++ b/src/contest.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "gpu_regs.h"
+ #include "bg.h"
+ #include "malloc.h"
+@@ -4731,15 +4734,19 @@
+ static void UpdateApplauseMeter(void)
+ {
+     s32 i;
++    const u8 *gfx = gContestApplauseMeterGfx;
++#ifdef PORT_BRIDGE
++    gfx = Port_ResolveAssetPointer(gfx);
++#endif
+ 
+     for (i = 0; i < APPLAUSE_METER_SIZE; i++)
+     {
+         const u8 *src;
+ 
+         if (i < eContest.applauseLevel)
+-            src = &gContestApplauseMeterGfx[64];
++            src = gfx + 64;
+         else
+-            src = gContestApplauseMeterGfx;
++            src = gfx;
+         CpuCopy32(src, (void *)(OBJ_VRAM0 + (gSprites[eContest.applauseMeterSpriteId].oam.tileNum + 17 + i) * 32), 32);
+         CpuCopy32(src + 32, (void *)(OBJ_VRAM0 + (gSprites[eContest.applauseMeterSpriteId].oam.tileNum + 25 + i) * 32), 32);
+ 
+--- a/src/contest_util.c
++++ b/src/contest_util.c
+@@ -1,4 +1,7 @@
+ #include "global.h"
++#ifdef PORT_BRIDGE
++#include "port_platform.h"
++#endif
+ #include "malloc.h"
+ #include "battle.h"
+ #include "battle_gfx_sfx_util.h"
+@@ -1119,6 +1122,9 @@
+         frameNum = 0;
+ 
+     iconPtr = GetMonIconPtr(species, personality, frameNum);
++#ifdef PORT_BRIDGE
++    iconPtr = Port_ResolveAssetPointer(iconPtr);
++#endif
+     iconPtr += srcOffset * 0x200 + 0x80;
+     if (useDmaNow)
+     {
+@@ -1196,6 +1202,9 @@
+         const u8 *src, *windowTilesPtr;
+         windowTilesPtr = (u8 *)GetWindowAttribute(windowId, WINDOW_TILE_DATA);
+         src = (u8 *)sResultsTextWindow_Gfx;
++#ifdef PORT_BRIDGE
++        src = Port_ResolveAssetPointer(src);
++#endif
+ 
+         sprite = &gSprites[spriteId];
+         spriteTilePtrs[0] = (u8 *)(sprite->oam.tileNum * 32 + OBJ_VRAM0);

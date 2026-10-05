@@ -90,6 +90,8 @@ jobs:
         run: python3 android/native/test/run_menu_state_tests.py
       - name: Shop assets and viewport
         run: python3 android/native/test/run_shop_tests.py
+      - name: Contest graphics and Pokeblock viewport
+        run: python3 android/native/test/run_contest_graphics_tests.py
       - name: Bottom-screen naming keyboard
         run: python3 android/native/test/run_naming_tests.py
       - name: Unsupported transfer exit path
