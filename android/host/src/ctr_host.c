@@ -606,10 +606,14 @@ CtrHostState CtrHost_WaitWhilePaused(void)
     CtrHostState state;
 
     pthread_mutex_lock(&sLock);
-    sPauseAcknowledged = sState == CTR_HOST_PAUSED;
-    pthread_cond_broadcast(&sCond);
     while (sState == CTR_HOST_PAUSED)
     {
+        /* RUNNING then PAUSED may both arrive before this sleeper wakes.
+         * SetState cleared the acknowledgement, but the game never left its
+         * released/suspended state. Acknowledge each renewed wait, not just
+         * the first entry, or exports/surface release can time out forever. */
+        sPauseAcknowledged = true;
+        pthread_cond_broadcast(&sCond);
         if (sMysteryPhase == MYSTERY_QUEUED)
             RunMysteryRequest();
         else

@@ -27,6 +27,11 @@ with tempfile.TemporaryDirectory(prefix="emerald-host-test-") as directory:
     subprocess.run(flags + [str(obj), str(HOST / "test/test_mystery_host.c"),
                             "-o", str(mystery)], check=True)
     subprocess.run([str(mystery)], check=True, timeout=15)
+    # A quick resume/pause can happen before the sleeping thread wakes.
+    reentry = Path(directory) / "test_pause_reentry"
+    subprocess.run(flags + [str(obj), str(HOST / "test/test_pause_reentry.c"),
+                            "-Wl,--wrap=pthread_cond_wait", "-o", str(reentry)], check=True)
+    subprocess.run([str(reentry)], check=True, timeout=5)
     # The production APT listener ordering releases GPU windows before the
     # host acknowledges pause. Exercise both main and secondary window slots.
     root = HOST.parents[1]
