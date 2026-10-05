@@ -18,6 +18,8 @@ static struct {
     unsigned char *data,*shadow,*rgba;
     GSPGPU_FramebufferFormat format;
     GLuint texture,fbo;
+    GLuint nativeTexture,nativeFbo,scaledTexture,scaledFbo;
+    unsigned scale,cachedScale;
     unsigned columns;
     /* Origin's framebuffer writers flush complete LCD columns. A flush is a
      * CPU ownership claim even when its bytes equal the previous CPU shadow. */
@@ -113,12 +115,14 @@ bool gpuInit(void)
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
         glGenFramebuffers(1,&screens[i].fbo); glBindFramebuffer(GL_FRAMEBUFFER,screens[i].fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,screens[i].texture,0);
+        screens[i].nativeTexture=screens[i].texture; screens[i].nativeFbo=screens[i].fbo; screens[i].scale=1;
     }
     glBindFramebuffer(GL_FRAMEBUFFER,0); glPixelStorei(GL_UNPACK_ALIGNMENT,1);
     listenerRegistered=CtrApt_AddListener(lifecycle,NULL);
     if(!listenerRegistered) goto fail;
     initialized=true;
     gpuVoxelAaInit();
+    gpuVoxelScaleInit();
     nextVblank=gpuNow();
     __android_log_print(ANDROID_LOG_INFO,"EmeraldGPU","GLES %s, %s",glGetString(GL_VERSION),glGetString(GL_RENDERER));
     CtrDiagnostics_Graphics((const char *)glGetString(GL_VENDOR),(const char *)glGetString(GL_RENDERER),(const char *)glGetString(GL_VERSION));
@@ -161,6 +165,7 @@ void gpuShutdown(void)
     if(listenerRegistered) { CtrApt_RemoveListener(lifecycle,NULL); listenerRegistered=false; }
     if(display!=EGL_NO_DISPLAY) {
         gpuVoxelAaShutdown();
+        gpuVoxelScaleShutdown();
         for(int i=0;i<CTR_HOST_MAX_WINDOWS;i++) destroyWindow(i);
         for(int i=0;i<2;i++) {
             if(screens[i].data) CtrMem_Unregister(screens[i].data);
@@ -182,6 +187,8 @@ void gpuShutdown(void)
 void gpuFlushScreens(void)
 {
     if(!initialized) return;
+    GLint previousRead=0,previousDraw=0;
+    bool restore=false,scissored=false;
     for(unsigned i=0;i<2;i++) {
         GPU_TEXCOLOR format=screenFormat(screens[i].format); unsigned bpp=gpuPixelBytes(format);
         unsigned bytesPerColumn=240*bpp;
@@ -200,11 +207,85 @@ void gpuFlushScreens(void)
             } else if(first>=0) {
                 /* Never upload a clean gap: its pixels may belong to a GPU
                  * blit and differ from the intentionally retained CPU canvas. */
-                glBindTexture(GL_TEXTURE_2D,screens[i].texture);
+                glBindTexture(GL_TEXTURE_2D,screens[i].nativeTexture);
                 glTexSubImage2D(GL_TEXTURE_2D,0,0,first,240,x-(unsigned)first,GL_RGBA,GL_UNSIGNED_BYTE,screens[i].rgba+(unsigned)first*240*4);
+                if(screens[i].scale>1) {
+                    if(!restore) {
+                        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&previousRead);
+                        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&previousDraw);
+                        scissored=glIsEnabled(GL_SCISSOR_TEST); restore=true;
+                        glDisable(GL_SCISSOR_TEST);
+                    }
+                    unsigned scale=screens[i].scale;
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER,screens[i].nativeFbo);
+                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER,screens[i].fbo);
+                    glBlitFramebuffer(0,first,240,x,0,first*scale,240*scale,x*scale,
+                                      GL_COLOR_BUFFER_BIT,GL_NEAREST);
+                }
                 first=-1;
             }
         }
+    }
+    if(restore) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER,(GLuint)previousRead);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER,(GLuint)previousDraw);
+        if(scissored) glEnable(GL_SCISSOR_TEST);
+    }
+}
+
+/* The CPU LCD canvas stays native-sized; only its GL presentation backing
+ * grows. Copy the held image when changing size, and upload future dirty
+ * columns through the native texture so they cannot erase intervening GPU
+ * pixels. The caller restores framebuffer/render state after this selection. */
+bool gpuScreenScale(gfxScreen_t screen,unsigned scale)
+{
+    if((unsigned)screen>1 || scale<1 || scale>4) return false;
+    typeof(*screens) *s=&screens[screen];
+    if(s->scale==scale) return true;
+    if(scale>1 && gpuScaleAllocationFails(scale,3)) return false;
+    GLuint texture=s->nativeTexture,fbo=s->nativeFbo;
+    if(scale>1) {
+        if(s->cachedScale!=scale) {
+            GLuint nextTexture=0,nextFbo=0;
+            glGenTextures(1,&nextTexture); glBindTexture(GL_TEXTURE_2D,nextTexture);
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,240*scale,s->columns*scale,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+            glGenFramebuffers(1,&nextFbo); glBindFramebuffer(GL_FRAMEBUFFER,nextFbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,nextTexture,0);
+            bool okay=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+            for(GLenum error;(error=glGetError())!=GL_NO_ERROR;) {
+                GPU_LOG("LCD resolution allocation failed: 0x%x",error); okay=false;
+            }
+            if(!okay) { glDeleteFramebuffers(1,&nextFbo); glDeleteTextures(1,&nextTexture); return false; }
+            /* Keep the old texture until the held image has been copied. */
+            glDisable(GL_SCISSOR_TEST);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER,s->fbo); glBindFramebuffer(GL_DRAW_FRAMEBUFFER,nextFbo);
+            glBlitFramebuffer(0,0,240*s->scale,s->columns*s->scale,0,0,240*scale,s->columns*scale,
+                              GL_COLOR_BUFFER_BIT,GL_NEAREST);
+            glDeleteFramebuffers(1,&s->scaledFbo); glDeleteTextures(1,&s->scaledTexture);
+            s->scaledTexture=nextTexture; s->scaledFbo=nextFbo; s->cachedScale=scale;
+            s->texture=nextTexture; s->fbo=nextFbo; s->scale=scale;
+            return true;
+        }
+        texture=s->scaledTexture; fbo=s->scaledFbo;
+    }
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER,s->fbo); glBindFramebuffer(GL_DRAW_FRAMEBUFFER,fbo);
+    glBlitFramebuffer(0,0,240*s->scale,s->columns*s->scale,0,0,240*scale,s->columns*scale,
+                      GL_COLOR_BUFFER_BIT,GL_NEAREST);
+    s->texture=texture; s->fbo=fbo; s->scale=scale;
+    return true;
+}
+
+void gpuReleaseScreenScales(void)
+{
+    for(unsigned i=0;i<2;i++) {
+        glDeleteFramebuffers(1,&screens[i].scaledFbo); glDeleteTextures(1,&screens[i].scaledTexture);
+        screens[i].scaledFbo=screens[i].scaledTexture=screens[i].cachedScale=0;
+        screens[i].fbo=screens[i].nativeFbo; screens[i].texture=screens[i].nativeTexture; screens[i].scale=1;
     }
 }
 
@@ -212,11 +293,17 @@ void gpuTransferToScreen(GpuTarget *target,gfxScreen_t screen,unsigned width,uns
 {
     if((unsigned)screen>1 || !target) return;
     gpuFlushScreens();
+    if(!gpuScreenScale(screen,target->scale)) {
+        gpuVoxelScaleLimit(target->scale-1); gpuScreenScale(screen,1);
+    }
     if(width>240) width=240;
     if(height>screens[screen].columns) height=screens[screen].columns;
+    if(width>target->target->frameBuf.width) width=target->target->frameBuf.width;
+    if(height>target->target->frameBuf.height) height=target->target->frameBuf.height;
     glDisable(GL_SCISSOR_TEST);
     glBindFramebuffer(GL_READ_FRAMEBUFFER,target->fbo); glBindFramebuffer(GL_DRAW_FRAMEBUFFER,screens[screen].fbo);
-    glBlitFramebuffer(0,0,width,height,0,0,width,height,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+    glBlitFramebuffer(0,0,width*target->scale,height*target->scale,
+                      0,0,width*screens[screen].scale,height*screens[screen].scale,GL_COLOR_BUFFER_BIT,GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0); gpuApplyState();
 }
 static void drawScreenRegion(int screen,CtrHostRect rect,CtrHostRect source,int width,int height,int filter)
@@ -232,8 +319,8 @@ static void drawScreenRegion(int screen,CtrHostRect rect,CtrHostRect source,int 
      * navigation). Smooth scaling must clamp to this region's texel centres,
      * not bleed those neighbours into its outermost visible pixels. */
     glUniform4f(glGetUniformLocation(presentProgram,"sampleBounds"),
-                u1+0.5f/240,v0+0.5f/screens[screen].columns,
-                u0-0.5f/240,v1-0.5f/screens[screen].columns);
+                u1+0.5f/(240*screens[screen].scale),v0+0.5f/(screens[screen].columns*screens[screen].scale),
+                u0-0.5f/(240*screens[screen].scale),v1-0.5f/(screens[screen].columns*screens[screen].scale));
     glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,screens[screen].texture);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,filter?GL_LINEAR:GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,filter?GL_LINEAR:GL_NEAREST);
@@ -296,7 +383,8 @@ void gpuPresent(void)
     }
     eglMakeCurrent(display,pbuffer,pbuffer,context);
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0);
-    if(gpuTarget) glViewport(0,0,gpuTarget->target->frameBuf.width,gpuTarget->target->frameBuf.height);
+    if(gpuTarget) glViewport(0,0,gpuTarget->target->frameBuf.width*gpuTarget->scale,
+                                  gpuTarget->target->frameBuf.height*gpuTarget->scale);
     gpuApplyState();
     if(diagnosticStart && presentedSurfaces)
         CtrDiagnostics_Present(diagnosticEpoch,diagnosticStart,CtrDiagnostics_NowNs(),presentedSurfaces);
@@ -344,6 +432,7 @@ Result GSPGPU_InvalidateDataCache(const void *address,u32 size) { (void)address;
 #ifdef CTR_GPU_TEST
 /* Present-day GPU readback for the isolated conformance binary only. */
 GLuint gpuTestScreenFramebuffer(gfxScreen_t screen) { return screens[screen].fbo; }
+unsigned gpuTestScreenScale(gfxScreen_t screen) { return screens[screen].scale; }
 double gpuTestPacingDeadline(void) { return nextVblank; }
 unsigned gpuTestPresentCount(void) { return presentCount; }
 /* Exercise the production LCD quad/shader against an offscreen target.

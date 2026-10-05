@@ -30,8 +30,16 @@ compiler="$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64/bin/$target-clang"
 out="$repo_root/build/gpu-tests"
 mkdir -p "$out"
 python3 tools/picasso2glsl.py origin/3ds_port/src/voxel/voxel.v.pica -o "$out/voxel.shbin"
+python3 - "$out/upstream_voxel_diorama.inc" <<'PY'
+from pathlib import Path
+import sys
+source = Path("origin/3ds_port/src/3ds_video.c").read_text()
+first = source.index("#define DIORAMA_TOP")
+last = source.index("/*\n * Bloom:", first)
+Path(sys.argv[1]).write_text(source[first:last])
+PY
 "$compiler" -std=gnu11 -O2 -Wall -Wextra -Werror -D__3DS__ -DCTR_GPU_TEST \
-    -Iandroid/gpu/include -Iandroid/shim/include -Iandroid/host/include \
+    -Iandroid/gpu/include -Iandroid/shim/include -Iandroid/host/include -I"$out" \
     android/gpu/test/offscreen.c android/gpu/src/*.c android/gpu/src/maths/*.c android/host/src/diagnostics.c \
     -Wl,--wrap=glUniform4fv -Wl,--wrap=glBindTexture -Wl,--wrap=GX_BindQueue \
     -Wl,--wrap=glDisableVertexAttribArray -Wl,--wrap=glVertexAttribPointer \

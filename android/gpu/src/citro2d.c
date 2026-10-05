@@ -33,7 +33,9 @@ void gpuC2DFlush(void)
     glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(Vertex2D),(void *)offsetof(Vertex2D,u));
     glVertexAttribPointer(2,4,GL_FLOAT,GL_FALSE,sizeof(Vertex2D),(void *)offsetof(Vertex2D,r));
     glVertexAttribPointer(3,1,GL_FLOAT,GL_FALSE,sizeof(Vertex2D),(void *)offsetof(Vertex2D,blend));
-    gpuApplyState(); glDrawArrays(GL_TRIANGLES,0,used); used=0;
+    gpuApplyState();
+    if(gpuTarget && gpuTarget->texture) gpuTarget->texture->authoritative=true;
+    glDrawArrays(GL_TRIANGLES,0,used); used=0;
 }
 void C2D_Flush(void) { gpuC2DFlush(); }
 void C2D_Prepare(void)

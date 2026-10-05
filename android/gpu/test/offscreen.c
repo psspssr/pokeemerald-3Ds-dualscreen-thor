@@ -12,6 +12,7 @@ static CtrHostState state=CTR_HOST_RUNNING;
 static unsigned gameSpeed=1;
 static CtrHostBottomMenuContent bottomContent;
 static int voxelAaRequested,voxelAaCapabilities=-1;
+static int voxelScaleRequested=1,voxelScaleCapabilities=-1;
 /* Link wrappers count actual backend/driver work without adding counters to
  * the production renderer. Pixel checks below still use the real GLES API. */
 static unsigned uniformCalls,uniformVectors,textureBinds,attributeCalls;
@@ -46,11 +47,14 @@ void CtrMem_Register(CtrMemKind k,void *p,size_t s,void *o) { (void)k;(void)p;(v
 void CtrMem_Unregister(void *p) { (void)p; }
 bool CtrMem_Find(const void *p,CtrMemBlock *out) { (void)p;(void)out;return false; }
 void CtrMem_SetOwner(void *p,void *owner) { (void)p;(void)owner; }
-void CtrHost_GetLayout(CtrHostLayout *layout) { memset(layout,0,sizeof(*layout)); layout->voxelAASamples=voxelAaRequested; }
+void CtrHost_GetLayout(CtrHostLayout *layout)
+{ memset(layout,0,sizeof(*layout)); layout->voxelAASamples=voxelAaRequested; layout->voxelScale=voxelScaleRequested; }
 CtrHostBottomMenuContent CtrHost_BottomMenuContent(void) { return bottomContent; }
 void CtrHost_SetPresentedBottomMenuContent(CtrHostBottomMenuContent content) { (void)content; }
 void CtrHost_SetVoxelAACapabilities(int samples) { voxelAaCapabilities=samples; }
 int CtrHost_VoxelAACapabilities(void) { return voxelAaCapabilities; }
+void CtrHost_SetVoxelScaleCapabilities(int scale) { voxelScaleCapabilities=scale; }
+int CtrHost_VoxelScaleCapabilities(void) { return voxelScaleCapabilities; }
 CtrHostState CtrHost_GetState(void) { return state; }
 unsigned CtrHost_GameSpeed(void) { return gameSpeed; }
 void CtrHost_SetState(CtrHostState s) { state=s; }
@@ -208,6 +212,7 @@ static void presentationSampling(C3D_RenderTarget *restore)
 #include "bottom_content_checks.inc"
 #include "voxel_msaa_checks.inc"
 #include "indexed_checks.inc"
+#include "voxel_scale_checks.inc"
 
 int main(int argc,char **argv)
 {
@@ -510,6 +515,7 @@ int main(int argc,char **argv)
     presentationSampling(target);
     bottomContentChecks(target);
     voxelAaChecks(&program,target);
+    voxelScaleChecks(&program,target);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
     if(argc==3) {
         /* Upstream's atlas is 1024x1024, but a typed glyph can change one
@@ -561,7 +567,8 @@ int main(int argc,char **argv)
     }
     C2D_Fini(); C3D_Fini(); assert(observedQueue==NULL);
     voxelAaReinitChecks(&program);
+    voxelScaleReinitChecks();
     assert(observedQueue==NULL);
-    printf("PASS %d GLES pixel assertions and fast-forward presentation scheduling: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display, full-panel/offset presentation, sharp single-pass menus and voxel MSAA/reinitialization\n",checks);
+    printf("PASS %d GLES pixel assertions and fast-forward presentation scheduling: 2D, tiling, flips, tint, CPU edits, arena-backed texture views/reuse, TexEnv/cache, alpha, scissor, blending, FBO sampling, rotation, translated voxel shader, packed/indexed vertices, depth, RGBA5551 masks, suspend/resume, mixed CPU/GPU bottom display, full-panel/offset presentation, sharp menus, voxel MSAA and 1-4x resolution/lifetime/fallback/reinitialization\n",checks);
     shaderProgramFree(&program); DVLB_Free(binary); gfxExit(); return 0;
 }

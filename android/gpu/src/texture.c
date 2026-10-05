@@ -89,6 +89,11 @@ GLuint gpuTextureId(C3D_Tex *texture)
 {
     GpuTexture *record=ensureTextureRecord(texture);
     if(!record) return 0;
+    if(record->authoritative) for(GpuTarget *target=gpuTargets;target;target=target->next)
+        if(target->texture==record) {
+            glBindTexture(GL_TEXTURE_2D,target->color); gpuSetTextureParams(texture);
+            return target->color;
+        }
     glBindTexture(GL_TEXTURE_2D,record->id); gpuSetTextureParams(texture);
     if(!record->authoritative && (!record->uploaded || memcmp(record->shadow,texture->data,texture->size))) {
         /* Origin edits atlas tiles directly, without a TexFlush per glyph.
@@ -205,6 +210,8 @@ static C3D_RenderTarget *createTarget(int width,int height,GPU_COLORBUF color,C3
         if(!texture) { glDeleteTextures(1,&record->color); vramFree(target->frameBuf.colorBuf); }
         vramFree(target->frameBuf.depthBuf); free(target); free(record); return NULL;
     }
+    record->nativeFbo=record->fbo; record->nativeColor=record->color; record->nativeDepth=record->depth;
+    record->scale=1;
     record->next=gpuTargets; gpuTargets=record;
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0);
     return target;
@@ -224,6 +231,16 @@ void C3D_RenderTargetDelete(C3D_RenderTarget *target)
     if(!*item) return;
     GpuTarget *t=*item; *item=t->next;
     if(gpuTarget==t) { gpuTarget=NULL; glBindFramebuffer(GL_FRAMEBUFFER,0); }
+    if(t->texture && t->texture->authoritative && t->scale>1) {
+        /* The caller may retain/sample its texture after deleting the FBO.
+         * Commit the last rendered image to that texture's native backing. */
+        glDisable(GL_SCISSOR_TEST);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER,t->fbo); glBindFramebuffer(GL_DRAW_FRAMEBUFFER,t->nativeFbo);
+        glBlitFramebuffer(0,0,target->frameBuf.width*t->scale,target->frameBuf.height*t->scale,
+                          0,0,target->frameBuf.width,target->frameBuf.height,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0); gpuApplyState();
+    }
+    gpuReleaseTargetScale(t);
     glDeleteFramebuffers(1,&t->fbo); glDeleteRenderbuffers(1,&t->depth);
     if(target->ownsColor) { glDeleteTextures(1,&t->color); vramFree(target->frameBuf.colorBuf); }
     if(target->ownsDepth) vramFree(target->frameBuf.depthBuf);
@@ -240,7 +257,7 @@ void C3D_SetFrameBuf(C3D_FrameBuf *buffer)
 {
     gpuC2DFlush(); gpuTarget=buffer?gpuFindTarget(buffer):NULL;
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0);
-    if(gpuTarget) glViewport(0,0,buffer->width,buffer->height);
+    if(gpuTarget) glViewport(0,0,buffer->width*gpuTarget->scale,buffer->height*gpuTarget->scale);
 }
 void C3D_FrameBufTex(C3D_FrameBuf *buffer,C3D_Tex *texture,GPU_TEXFACE face,int level)
 {
@@ -251,6 +268,7 @@ void C3D_FrameBufTex(C3D_FrameBuf *buffer,C3D_Tex *texture,GPU_TEXFACE face,int 
 void C3D_FrameBufClear(C3D_FrameBuf *buffer,C3D_ClearBits bits,u32 color,u32 depth)
 {
     gpuC2DFlush(); GpuTarget *t=gpuFindTarget(buffer); if(!t) return;
+    if(t->texture) t->texture->authoritative=true;
     unsigned char rgba[4]; gpuDecodePixel((unsigned char *)&color,(GPU_TEXCOLOR)buffer->colorFmt,rgba);
     glBindFramebuffer(GL_FRAMEBUFFER,t->fbo); glDisable(GL_SCISSOR_TEST); glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE); glDepthMask(GL_TRUE);
     glClearColor(rgba[0]/255.f,rgba[1]/255.f,rgba[2]/255.f,rgba[3]/255.f);

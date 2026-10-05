@@ -29,6 +29,11 @@ static void releaseSurface(void)
     voxelAa.width = voxelAa.height = voxelAa.samples = 0;
 }
 
+/* A failed larger resolution must release the older MSAA allocation before
+ * retrying smaller targets, while retaining the discovered sample support. */
+void gpuVoxelAaReleaseSurface(void)
+{ if(!voxelAa.active) releaseSurface(); }
+
 static unsigned sampleBit(int samples) { return samples == 2 ? 1u : samples == 4 ? 2u : 0; }
 
 static unsigned formatSamples(GLenum format)
@@ -136,9 +141,11 @@ bool CtrGpu_BeginVoxelAA(C3D_RenderTarget *target)
     for (int samples = requested; samples >= 2; samples -= 2) {
         unsigned bit = sampleBit(samples);
         if (!(voxelAa.capabilities & (int)bit)) continue;
-        bool fresh = voxelAa.width != target->frameBuf.width || voxelAa.height != target->frameBuf.height
+        unsigned width = target->frameBuf.width * gpuTarget->scale;
+        unsigned height = target->frameBuf.height * gpuTarget->scale;
+        bool fresh = voxelAa.width != (int)width || voxelAa.height != (int)height
             || voxelAa.samples != samples;
-        bool okay = !fresh || allocateSurface(target->frameBuf.width, target->frameBuf.height, samples);
+        bool okay = !fresh || allocateSurface((int)width, (int)height, samples);
         if (okay) {
             glBindFramebuffer(GL_FRAMEBUFFER, voxelAa.fbo);
             glDisable(GL_SCISSOR_TEST);

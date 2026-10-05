@@ -45,6 +45,7 @@ bool C3D_Init(size_t size)
     (void)size;
     if(!gpuInit()) return false;
     gpuVoxelAaInit();
+    gpuVoxelScaleInit();
     /* Citro3D reserves 32 GX entries. Preserve that upload allowance even
      * though GLES performs the transfers directly, without a PICA queue. */
     frameQueue=(gxCmdQueue_s){.maxEntries=32};
@@ -61,6 +62,7 @@ void C3D_Fini(void)
 {
     gpuC2DFlush();
     gpuVoxelAaShutdown();
+    gpuVoxelScaleShutdown();
     GX_BindQueue(NULL);
     while(gpuTargets) C3D_RenderTargetDelete(gpuTargets->target);
     while(gpuTextures) C3D_TexDelete(gpuTextures->tex);
@@ -79,7 +81,8 @@ void gpuApplyState(void)
     glBlendFuncSeparate(blendFactors[0],blendFactors[1],blendFactors[2],blendFactors[3]);
     glBlendColor(blendColor[0],blendColor[1],blendColor[2],blendColor[3]);
     if(cullMode==GPU_CULL_NONE) glDisable(GL_CULL_FACE); else { glEnable(GL_CULL_FACE); glFrontFace(GL_CCW); glCullFace(cullMode==GPU_CULL_FRONT_CCW?GL_FRONT:GL_BACK); }
-    if(scissorMode==GPU_SCISSOR_NORMAL) { glEnable(GL_SCISSOR_TEST); glScissor(scissorBox[0],scissorBox[1],scissorBox[2],scissorBox[3]); } else glDisable(GL_SCISSOR_TEST);
+    unsigned scale=gpuTarget?gpuTarget->scale:1;
+    if(scissorMode==GPU_SCISSOR_NORMAL) { glEnable(GL_SCISSOR_TEST); glScissor(scissorBox[0]*scale,scissorBox[1]*scale,scissorBox[2]*scale,scissorBox[3]*scale); } else glDisable(GL_SCISSOR_TEST);
 }
 void C3D_CullFace(GPU_CULLMODE mode) { gpuC2DFlush(); cullMode=mode; gpuApplyState(); }
 void C3D_DepthTest(bool enable,GPU_TESTFUNC function,GPU_WRITEMASK mask)
@@ -111,7 +114,8 @@ void C3D_SetScissor(GPU_SCISSORMODE mode,u32 left,u32 bottom,u32 right,u32 top)
     if(mode==GPU_SCISSOR_INVERT) { GPU_LOG("inverted scissor unsupported"); CtrHost_SetState(CTR_HOST_EXITING); }
     gpuApplyState();
 }
-void C3D_SetViewport(u32 x,u32 y,u32 width,u32 height) { gpuC2DFlush(); glViewport(x,y,width,height); }
+void C3D_SetViewport(u32 x,u32 y,u32 width,u32 height)
+{ gpuC2DFlush(); unsigned scale=gpuTarget?gpuTarget->scale:1; glViewport(x*scale,y*scale,width*scale,height*scale); }
 void C3D_DepthMap(bool isZ,float scale,float offset) { (void)isZ; glDepthRangef(offset+scale,offset); }
 void C3D_StencilTest(bool enable,GPU_TESTFUNC function,int ref,int inputMask,int mask)
 { gpuC2DFlush(); if(enable) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST); glStencilFunc(tests[function&7],ref,inputMask); glStencilMask(mask); }
@@ -225,6 +229,7 @@ static bool prepareDraw(int first,int count)
 void C3D_DrawArrays(GPU_Primitive_t primitive,int first,int count)
 {
     if(!prepareDraw(first,count)) return;
+    if(gpuTarget->texture) gpuTarget->texture->authoritative=true;
     GLenum mode=primitive==GPU_TRIANGLE_STRIP?GL_TRIANGLE_STRIP:primitive==GPU_TRIANGLE_FAN?GL_TRIANGLE_FAN:GL_TRIANGLES;
     glDrawArrays(mode,0,count);
 }
@@ -252,6 +257,7 @@ void C3D_DrawElements(GPU_Primitive_t primitive,int count,int type,const void *i
         indexStaging[i]=(u16)(value-low);
     }
     if(!prepareDraw((int)low,(int)(high-low+1))) return;
+    if(gpuTarget->texture) gpuTarget->texture->authoritative=true;
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,drawEbo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,(size_t)count*sizeof(*indexStaging),indexStaging,GL_STREAM_DRAW);
     GLenum mode=primitive==GPU_TRIANGLE_STRIP?GL_TRIANGLE_STRIP:primitive==GPU_TRIANGLE_FAN?GL_TRIANGLE_FAN:GL_TRIANGLES;
