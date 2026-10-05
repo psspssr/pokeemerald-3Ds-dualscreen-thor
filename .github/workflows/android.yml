@@ -108,6 +108,8 @@ jobs:
         run: python3 android/native/test/run_unsupported_entry_tests.py
       - name: Sound-worker handoff and shutdown
         run: python3 android/native/test/run_audio_worker_tests.py
+      - name: Asset-worker cancellation and shutdown
+        run: python3 android/native/test/run_asset_worker_tests.py
       - name: Evolution sparkle coordinates and animation callbacks
         run: python3 android/native/test/run_evolution_tests.py
       - name: Build engine-only release APK
