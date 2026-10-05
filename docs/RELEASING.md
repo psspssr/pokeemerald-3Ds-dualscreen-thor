@@ -14,6 +14,14 @@ publication. The workflow never changes visibility.
 Routine pushes and pull requests run [normal validation](../.github/workflows/android.yml);
 they do not run the signing or release workflow, or publish APKs.
 
+Every successful release automatically triggers the [Website workflow](../.github/workflows/website.yml)
+after its APK, manifest and checksums are uploaded. Treat the website update
+as part of every release: refresh feature descriptions and unmodified gameplay
+screenshots when behavior changes, update the offline release snapshot, and
+verify the [live site](https://psspssr.github.io/emerald-dual-screen-site/) shows
+the new version, direct APK link and current images. If deployment fails, fix
+or rerun the Website workflow before calling the release publication complete.
+
 The release build runs bootstrap **without** `--release`, then Gradle
 `assembleRelease lintRelease`, so the APK includes matching game data and
 starts immediately. Bootstrap's `--release` means **engine-only data packaging**;
