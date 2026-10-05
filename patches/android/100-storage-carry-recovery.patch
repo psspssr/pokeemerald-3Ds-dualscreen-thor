@@ -1,0 +1,220 @@
+diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
+--- a/src/pokemon_storage_system.c
++++ b/src/pokemon_storage_system.c
+@@ -582,6 +582,92 @@
+ EWRAM_DATA static u8 sMovingMonOrigBoxPos = 0;
+ EWRAM_DATA static bool8 sAutoActionOn = 0;
+ 
++// A child screen frees the PC UI while a single Pokémon or item may still
++// be in the cursor. Keep the unfinished move outside the fallible heap.
++// Completed moves commit this checkpoint; init failure rolls back only the
++// current move. Box names/wallpapers, world state and playtime are not copied.
++struct StorageCarryCheckpoint
++{
++    bool8 active;
++    u16 bagKey;
++    struct Pokemon party[PARTY_SIZE];
++    struct BoxPokemon boxes[TOTAL_BOXES_COUNT][IN_BOX_COUNT];
++    struct ItemSlot bagPocket_Items[BAG_ITEMS_COUNT];
++    struct ItemSlot bagPocket_KeyItems[BAG_KEYITEMS_COUNT];
++    struct ItemSlot bagPocket_PokeBalls[BAG_POKEBALLS_COUNT];
++    struct ItemSlot bagPocket_TMHM[BAG_TMHM_COUNT];
++    struct ItemSlot bagPocket_Berries[BAG_BERRIES_COUNT];
++    struct Mail mail[MAIL_COUNT];
++};
++STATIC_ASSERT(sizeof(struct StorageCarryCheckpoint) <= 40 * 1024, storage_carry_checkpoint_budget);
++EWRAM_DATA static struct StorageCarryCheckpoint sStorageCarry = {0};
++EWRAM_DATA static bool8 sStorageCarryRecovered = FALSE;
++EWRAM_DATA static bool8 sStorageInitFailed = FALSE;
++static const u8 sText_StorageMemoryFull[] = _("The PC could not open.\nPlease try again.");
++static const u8 sText_StorageCarryRecovered[] = _("The PC could not reopen.\nUnfinished move was undone.");
++
++static void CtrStorageCarry_Begin(void)
++{
++    if (sStorageCarry.active)
++        return;
++    memcpy(sStorageCarry.party, gPlayerParty, sizeof(sStorageCarry.party));
++    memcpy(sStorageCarry.boxes, gPokemonStoragePtr->boxes, sizeof(sStorageCarry.boxes));
++#define SNAPSHOT(member) memcpy(sStorageCarry.member, gSaveBlock1Ptr->member, sizeof(sStorageCarry.member))
++    SNAPSHOT(bagPocket_Items);
++    SNAPSHOT(bagPocket_KeyItems);
++    SNAPSHOT(bagPocket_PokeBalls);
++    SNAPSHOT(bagPocket_TMHM);
++    SNAPSHOT(bagPocket_Berries);
++    SNAPSHOT(mail);
++#undef SNAPSHOT
++    sStorageCarry.bagKey = (u16)gSaveBlock2Ptr->encryptionKey;
++    sStorageCarry.active = TRUE;
++}
++
++static void CtrStorageCarry_Commit(void)
++{
++    sStorageCarry.active = FALSE;
++}
++
++static void CtrStorageCarry_RestorePocket(struct ItemSlot *dest, const struct ItemSlot *src, u32 count)
++{
++    u32 i;
++    u16 keyChange = sStorageCarry.bagKey ^ (u16)gSaveBlock2Ptr->encryptionKey;
++    for (i = 0; i < count; i++)
++    {
++        dest[i].itemId = src[i].itemId;
++        dest[i].quantity = src[i].quantity ^ keyChange;
++    }
++}
++
++static void CtrStorageCarry_Rollback(void)
++{
++    if (!sStorageCarry.active)
++        return;
++    memcpy(gPlayerParty, sStorageCarry.party, sizeof(sStorageCarry.party));
++    memcpy(gPokemonStoragePtr->boxes, sStorageCarry.boxes, sizeof(sStorageCarry.boxes));
++#define RESTORE(member) CtrStorageCarry_RestorePocket(gSaveBlock1Ptr->member, sStorageCarry.member, ARRAY_COUNT(sStorageCarry.member))
++    RESTORE(bagPocket_Items);
++    RESTORE(bagPocket_KeyItems);
++    RESTORE(bagPocket_PokeBalls);
++    RESTORE(bagPocket_TMHM);
++    RESTORE(bagPocket_Berries);
++#undef RESTORE
++    memcpy(gSaveBlock1Ptr->mail, sStorageCarry.mail, sizeof(sStorageCarry.mail));
++    gPlayerPartyCount = CalculatePlayerPartyCount();
++    sIsMonBeingMoved = FALSE;
++    sMovingItemId = ITEM_NONE;
++    memset(&sSavedMovingMon, 0, sizeof(sSavedMovingMon));
++    sStorageCarry.active = FALSE;
++    sStorageCarryRecovered = TRUE;
++}
++
++static void CtrStorageCarry_InitFailed(void)
++{
++    sStorageInitFailed = TRUE;
++    CtrStorageCarry_Rollback();
++}
++
+ // Main tasks
+ static void EnterPokeStorage(u8);
+ static void Task_InitPokeStorage(u8);
+@@ -1582,14 +1668,18 @@
+         LoadMessageBoxAndBorderGfx();
+         DrawDialogueFrame(0, FALSE);
+         FillWindowPixelBuffer(0, PIXEL_FILL(1));
+-        AddTextPrinterParameterized2(0, FONT_NORMAL, sMainMenuTexts[task->tSelectedOption].desc, TEXT_SKIP_DRAW, NULL, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY);
++        AddTextPrinterParameterized2(0, FONT_NORMAL, sStorageInitFailed ? (sStorageCarryRecovered ? sText_StorageCarryRecovered : sText_StorageMemoryFull) : sMainMenuTexts[task->tSelectedOption].desc, TEXT_SKIP_DRAW, NULL, TEXT_COLOR_DARK_GRAY, TEXT_COLOR_WHITE, TEXT_COLOR_LIGHT_GRAY);
+         CopyWindowToVram(0, COPYWIN_FULL);
+         CopyWindowToVram(task->tWindowId, COPYWIN_FULL);
+         task->tState++;
+         break;
+     case STATE_FADE_IN:
+         if (IsWeatherNotFadingIn())
+-            task->tState++;
++        {
++            task->tState = sStorageInitFailed ? STATE_ERROR_MSG : STATE_HANDLE_INPUT;
++            sStorageInitFailed = FALSE;
++            sStorageCarryRecovered = FALSE;
++        }
+         break;
+     case STATE_HANDLE_INPUT:
+         task->tInput = Menu_ProcessInput();
+@@ -2062,6 +2152,7 @@
+     sStorage = AllocZeroed(sizeof(*sStorage));
+     if (sStorage == NULL)
+     {
++        CtrStorageCarry_InitFailed();
+         SetMainCallback2(CB2_ExitPokeStorage);
+     }
+     else
+@@ -2082,6 +2173,7 @@
+     sStorage = AllocZeroed(sizeof(*sStorage));
+     if (sStorage == NULL)
+     {
++        CtrStorageCarry_InitFailed();
+         SetMainCallback2(CB2_ExitPokeStorage);
+     }
+     else
+@@ -2178,6 +2270,7 @@
+     case 1:
+         if (!InitPokeStorageWindows())
+         {
++            CtrStorageCarry_InitFailed();
+             SetPokeStorageTask(Task_ChangeScreen);
+             return;
+         }
+@@ -2203,6 +2296,7 @@
+     case 5:
+         if (!MultiMove_Init())
+         {
++            CtrStorageCarry_InitFailed();
+             SetPokeStorageTask(Task_ChangeScreen);
+             return;
+         }
+@@ -3810,6 +3904,7 @@
+     {
+     case SCREEN_CHANGE_EXIT_BOX:
+     default:
++        CtrStorageCarry_Commit();
+         FreePokeStorageData();
+         SetMainCallback2(CB2_ExitPokeStorage);
+         break;
+@@ -6399,12 +6494,14 @@
+     switch (sCursorArea)
+     {
+     case CURSOR_AREA_IN_PARTY:
++        CtrStorageCarry_Begin();
+         SetMovingMonData(TOTAL_BOXES_COUNT, sCursorPosition);
+         SetMovingMonSprite(MODE_PARTY, sCursorPosition);
+         break;
+     case CURSOR_AREA_IN_BOX:
+         if (sStorage->inBoxMovingMode == MOVE_MODE_NORMAL)
+         {
++            CtrStorageCarry_Begin();
+             SetMovingMonData(StorageGetCurrentBox(), sCursorPosition);
+             SetMovingMonSprite(MODE_BOX, sCursorPosition);
+         }
+@@ -6436,6 +6533,7 @@
+     }
+ 
+     sIsMonBeingMoved = FALSE;
++    CtrStorageCarry_Commit();
+ }
+ 
+ static void RefreshDisplayMon(void)
+@@ -6509,6 +6607,7 @@
+         DestroyPartyMonIcon(sCursorPosition);
+     }
+ 
++    CtrStorageCarry_Commit();
+     if (boxId == StorageGetCurrentBox())
+         CreateBoxMonIconAtPos(boxPosition);
+ 
+@@ -6568,6 +6667,7 @@
+ 
+         PurgeMonOrBoxMon(boxId, sCursorPosition);
+     }
++    CtrStorageCarry_Commit();
+     TryRefreshDisplayMon();
+ }
+ 
+@@ -9271,6 +9371,7 @@
+     if (sStorage->boxOption != OPTION_MOVE_ITEMS)
+         return;
+ 
++    CtrStorageCarry_Begin();
+     id = GetItemIconIdxByPosition(cursorArea, cursorPos);
+     itemId = ITEM_NONE;
+     SetItemIconAffineAnim(id, ITEM_ANIM_PICK_UP);
+@@ -9352,6 +9453,7 @@
+         SetMonData(&gPlayerParty[cursorPos], MON_DATA_HELD_ITEM, &sStorage->movingItemId);
+         SetPartyMonIconObjMode(cursorPos, ST_OAM_OBJ_NORMAL);
+     }
++    CtrStorageCarry_Commit();
+ }
+ 
+ static void MoveItemFromMonToBag(u8 cursorArea, u8 cursorPos)
+@@ -9385,6 +9487,7 @@
+         u8 id = GetItemIconIdxByPosition(CURSOR_AREA_IN_HAND, 0);
+         SetItemIconAffineAnim(id, ITEM_ANIM_PUT_AWAY);
+         SetItemIconCallback(id, ITEM_CB_WAIT_ANIM, CURSOR_AREA_IN_HAND, 0);
++        CtrStorageCarry_Commit();
+     }
+ }
+ 

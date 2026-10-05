@@ -40,6 +40,10 @@ def main():
         target = work / "src/pokemon_storage_system.c"
         target.parent.mkdir(parents=True)
         target.write_bytes((TREE / "src/pokemon_storage_system.c").read_bytes())
+        # Keep099's initialization/cleanup regression independent of100's
+        # additional data transaction, which has its own real-Pokemon suite.
+        if "CtrStorageCarry_Begin" in target.read_text():
+            strict_apply(work, ROOT / "patches/android/100-storage-carry-recovery.patch", ["--reverse"])
         if patch.exists():
             try:
                 strict_apply(work, patch, ["--reverse"])
