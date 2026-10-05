@@ -23,6 +23,7 @@ data class AppSettings(
     val topOnSecondDisplay: Boolean,
     val dualControls: Boolean,
     val voxelAASamples: Int,
+    val voxelScale: Int = 1,
 ) {
     companion object {
         const val PORTRAIT_FILL = "fill"
@@ -68,6 +69,7 @@ data class AppSettings(
                 topOnSecondDisplay = p.getString("top_display", "main") == "second",
                 dualControls = p.getBoolean("dual_controls", false),
                 voxelAASamples = VoxelAntiAliasing.samples(p.getString("voxel_aa", "0")),
+                voxelScale = VoxelResolution.scale(p.getString("voxel_resolution", "1")),
             )
         }
     }

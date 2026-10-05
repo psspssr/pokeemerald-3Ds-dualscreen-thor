@@ -65,6 +65,10 @@ typedef struct
     /* Requested voxel-only MSAA samples: 0 (off), 2 or 4. The renderer may
      * choose a lower supported count; the stored request stays unchanged. */
     int voxelAASamples;
+    /* Requested internal voxel raster scale, 1..4. Logical 3DS coordinates
+     * and original pixel-art textures stay unchanged. Zero means 1x for old
+     * callers; the renderer can fall back without rewriting the request. */
+    int voxelScale;
 } CtrHostLayout;
 
 typedef enum
@@ -126,6 +130,10 @@ enum { CTR_HOST_VOXEL_AA_2X = 1, CTR_HOST_VOXEL_AA_4X = 2 };
  * -1 means not known yet; 0 means neither optional level is supported. */
 void CtrHost_SetVoxelAACapabilities(int mask);
 int CtrHost_VoxelAACapabilities(void);
+/* Cached maximum supported scale, 1..4; -1 until the GL context is ready.
+ * The renderer lowers this on allocation failure and resets it on teardown. */
+void CtrHost_SetVoxelScaleCapabilities(int maxScale);
+int CtrHost_VoxelScaleCapabilities(void);
 CtrHostState CtrHost_GetState(void);
 /* Blocks while paused. Returns the state it leaves in (RUNNING or EXITING). */
 CtrHostState CtrHost_WaitWhilePaused(void);

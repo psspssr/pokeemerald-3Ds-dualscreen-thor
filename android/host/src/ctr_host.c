@@ -46,9 +46,10 @@ typedef struct
 
 static HostWindow sWindows[CTR_HOST_MAX_WINDOWS];
 
-static CtrHostLayout sLayout;
+static CtrHostLayout sLayout = {.voxelScale = 1};
 static CtrHostBottomMenuContent sBottomMenuContent, sPresentedBottomMenuContent;
 static int sVoxelAACapabilities = -1;
+static int sVoxelScaleCapabilities = -1;
 static CtrHostInput sInput;
 static CtrHostState sState = CTR_HOST_RUNNING;
 static bool sPauseAcknowledged;
@@ -234,6 +235,8 @@ void CtrHost_SetLayout(const CtrHostLayout *layout)
         sLayout.bottomWindow = 0;
     if (sLayout.voxelAASamples != 2 && sLayout.voxelAASamples != 4)
         sLayout.voxelAASamples = 0;
+    if (sLayout.voxelScale < 1 || sLayout.voxelScale > 4)
+        sLayout.voxelScale = 1;
     pthread_mutex_unlock(&sLock);
 }
 
@@ -310,6 +313,21 @@ int CtrHost_VoxelAACapabilities(void)
     int mask = sVoxelAACapabilities;
     pthread_mutex_unlock(&sLock);
     return mask;
+}
+
+void CtrHost_SetVoxelScaleCapabilities(int maxScale)
+{
+    pthread_mutex_lock(&sLock);
+    sVoxelScaleCapabilities = maxScale < 0 ? -1 : maxScale < 1 ? 1 : maxScale > 4 ? 4 : maxScale;
+    pthread_mutex_unlock(&sLock);
+}
+
+int CtrHost_VoxelScaleCapabilities(void)
+{
+    pthread_mutex_lock(&sLock);
+    int maxScale = sVoxelScaleCapabilities;
+    pthread_mutex_unlock(&sLock);
+    return maxScale;
 }
 
 void CtrHost_SetInput(const CtrHostInput *input)

@@ -53,6 +53,7 @@ JNIEXPORT jintArray JNICALL Java_com_emerald3ds_android_HostProbe_snapshot(JNIEn
         atomic_load(&sFrames[0]), atomic_load(&sFrames[1]),
         CtrHost_ExpandBottomMenus(),
         layout.voxelAASamples,
+        layout.voxelScale,
     };
     jintArray result = (*env)->NewIntArray(env, sizeof(values) / sizeof(values[0]));
     if (result) (*env)->SetIntArrayRegion(env, result, 0, sizeof(values) / sizeof(values[0]), values);
@@ -64,6 +65,13 @@ JNIEXPORT void JNICALL Java_com_emerald3ds_android_HostProbe_setVoxelAACapabilit
     (void)env;
     (void)cls;
     CtrHost_SetVoxelAACapabilities(mask);
+}
+
+JNIEXPORT void JNICALL Java_com_emerald3ds_android_HostProbe_setVoxelScaleCapabilities(JNIEnv *env, jclass cls, jint maximum)
+{
+    (void)env;
+    (void)cls;
+    CtrHost_SetVoxelScaleCapabilities(maximum);
 }
 
 static long long NowMs(void)
