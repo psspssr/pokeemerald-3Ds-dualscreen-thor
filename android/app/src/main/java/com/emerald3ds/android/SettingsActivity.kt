@@ -13,7 +13,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.preference.Preference
+import androidx.preference.PreferenceDialogFragmentCompat
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
@@ -25,6 +28,15 @@ import java.text.DateFormat
 import java.util.Date
 
 class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPreferenceStartScreenCallback {
+    private val preferenceDialogs = object : FragmentManager.FragmentLifecycleCallbacks() {
+        override fun onFragmentStarted(manager: FragmentManager, fragment: Fragment) {
+            // DialogFragment has shown its window by onStart. This also
+            // covers a preference dialog restored after Activity recreation.
+            if (fragment is PreferenceDialogFragmentCompat)
+                fragment.dialog?.let(::observePausedGameInput)
+        }
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         GameActivity.observePausedKeyEvent(event)
         return super.dispatchKeyEvent(event)
@@ -38,6 +50,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Diagnostics.configure(applicationContext)
+        supportFragmentManager.registerFragmentLifecycleCallbacks(preferenceDialogs, true)
         setContentView(R.layout.activity_settings)
         val root = findViewById<android.view.View>(R.id.settings_root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
@@ -52,6 +65,11 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction().replace(R.id.settings_container, SettingsFragment()).commit()
         }
+    }
+
+    override fun onDestroy() {
+        supportFragmentManager.unregisterFragmentLifecycleCallbacks(preferenceDialogs)
+        super.onDestroy()
     }
 
     override fun onPreferenceStartScreen(caller: PreferenceFragmentCompat, pref: PreferenceScreen): Boolean {
@@ -171,7 +189,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                         }
                         .setNegativeButton(R.string.import_later) { _, _ -> fileModel.consumeResult() }
                         .setOnCancelListener { fileModel.consumeResult() }
-                        .show().also(::observeGameReleases)
+                        .show().also(::observePausedGameInput)
                 }
             }
         }
@@ -206,8 +224,8 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                         .setMessage(getString(R.string.restore_backup_confirm, labels[which]))
                         .setNegativeButton(android.R.string.cancel, null)
                         .setPositiveButton(R.string.restore_backup_action) { _, _ -> fileModel.restoreBackup(backups[which]) }
-                        .show().also(::observeGameReleases)
-                }.setNegativeButton(android.R.string.cancel, null).show().also(::observeGameReleases)
+                        .show().also(::observePausedGameInput)
+                }.setNegativeButton(android.R.string.cancel, null).show().also(::observePausedGameInput)
         }
 
         /*
@@ -217,14 +235,6 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
          */
         private fun import(uri: android.net.Uri, kind: GameFiles.Kind) {
             fileModel.importFile(uri, kind)
-        }
-
-        private fun observeGameReleases(dialog: AlertDialog) {
-            dialog.setOnKeyListener { _, _, event -> GameActivity.observePausedKeyEvent(event); false }
-            dialog.window?.decorView?.setOnGenericMotionListener { _, event ->
-                GameActivity.observePausedMotionEvent(event)
-                false
-            }
         }
 
         private fun showAbout() {
@@ -246,7 +256,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                 }.create().also { about ->
                     about.setOnDismissListener { if (aboutDialog === about) aboutDialog = null }
                     about.show()
-                    observeGameReleases(about)
+                    observePausedGameInput(about)
                     about.getButton(AlertDialog.BUTTON_NEUTRAL).isEnabled =
                         diagnosticsModel.state.value?.phase == DiagnosticsExportModel.Phase.IDLE
                 }

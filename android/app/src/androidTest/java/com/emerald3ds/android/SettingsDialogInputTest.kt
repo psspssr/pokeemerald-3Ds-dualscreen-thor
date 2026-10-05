@@ -85,9 +85,10 @@ class SettingsDialogInputTest {
                     val field = try { fragment.javaClass.getDeclaredField("aboutDialog") }
                         catch (_: NoSuchFieldException) { fragment.javaClass.getDeclaredField("dialog") }
                     val about = field.apply { isAccessible = true }.get(fragment) as AlertDialog
-                    about.dispatchKeyEvent(up(guide))
-                    about.dispatchKeyEvent(up(r2))
-                    trigger(0f) { about.dispatchGenericMotionEvent(it) }
+                    val callback = about.window!!.callback
+                    callback.dispatchKeyEvent(up(guide))
+                    callback.dispatchKeyEvent(up(r2))
+                    trigger(0f) { callback.dispatchGenericMotionEvent(it) }
                     assertEquals(0, HostProbe.snapshot()[1])
                     about.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
                     settings.finish()

@@ -91,6 +91,7 @@ class MysteryEventsFragment : PreferenceFragmentCompat() {
             }
         }
         shown.show()
+        observePausedGameInput(shown)
         updateDialog(model.state.value ?: MysteryEventsModel.State())
     }
 
