@@ -110,8 +110,11 @@ change the assignment of two physical displays.
 
 The app uses **Settings → Display → Image filtering → Sharp pixels** by
 default. Upgrading an older preview switches its Linear
-filter to Sharp once; choosing Smooth afterward is respected. Fill still
-uses the entire panel. For equally sized pixel blocks, choose **Fit** and
+filter to Sharp once; choosing Smooth afterward is respected. Sharp also
+keeps Pokémon sprites, names and health bars crisp in classic and voxel
+battles. Changing this setting applies to an ongoing battle after resuming.
+Voxel anti-aliasing remains separate. Fill still uses the entire panel.
+For equally sized pixel blocks in the final display upscale, choose **Fit** and
 enable **Integer scaling**; this adds borders.
 
 **Settings → Display → Voxel resolution** offers:

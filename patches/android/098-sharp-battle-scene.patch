@@ -1,0 +1,47 @@
+--- a/3ds_port/src/3ds_video.c
++++ b/3ds_port/src/3ds_video.c
+@@ -4,6 +4,7 @@
+ #include <citro2d.h>
+ #ifdef __ANDROID__
+ #include <ctr_gpu_voxel.h>
++#include <ctr_gpu_battle.h>
+ #endif
+ #include <math.h>
+ #include <stdio.h>
+@@ -3840,6 +3841,15 @@
+     memset(&sSceneTex, 0, sizeof(sSceneTex));
+ }
+ 
++static void SceneSetFilter(void)
++{
++    GPU_TEXTURE_FILTER_PARAM filter = GPU_LINEAR;
++#ifdef __ANDROID__
++    filter = CtrGpu_BattleSceneFilter();
++#endif
++    C3D_TexSetFilter(&sSceneTex, filter, filter);
++}
++
+ static void ScenePrepare(void)
+ {
+     if (!sBattle && !sTransition)
+@@ -3848,6 +3858,11 @@
+         return;
+     }
+     sSceneUsedFrame = sStats.frames;
++#ifdef __ANDROID__
++    /* Settings may change while this cached target survives a pause/menu.
++     * Both battles and their transitions sample this same pixel-art image. */
++    if (sScene) SceneSetFilter();
++#endif
+     if (sScene || (sSceneFailed && sStats.frames - sSceneFailFrame < LAYER_RETRY_FRAMES)) return;
+     for (unsigned attempt = 0; attempt < 2 && !sScene; ++attempt)
+     {
+@@ -3875,7 +3890,7 @@
+     CtrLog_Write(CTR_LOG_VIDEO, "battle scene surface ready: filtered zoom (VRAM free=%lu)",
+                  (unsigned long)vramSpaceFree());
+     sSceneFailed = false;
+-    C3D_TexSetFilter(&sSceneTex, GPU_LINEAR, GPU_LINEAR);
++    SceneSetFilter();
+     C3D_TexSetWrap(&sSceneTex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
+ }
+ 
