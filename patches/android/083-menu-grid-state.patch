@@ -1,0 +1,22 @@
+--- a/src/menu.c
++++ b/src/menu.c
+@@ -935,6 +935,9 @@
+     sMenu.windowId = windowId;
+     sMenu.fontId = fontId;
+     sMenu.optionHeight = cursorHeight;
++    // Touch hit testing must not retain an earlier two-column Bag menu.
++    sMenu.columns = 1;
++    sMenu.rows = numChoices;
+     sMenu.APressMuted = muteAPress;
+ 
+     pos = initialCursorPos;
+@@ -1617,6 +1620,9 @@
+     sMenu.windowId = windowId;
+     sMenu.fontId = FONT_NORMAL;
+     sMenu.optionHeight = 16;
++    // PC and yes/no menus are vertical even after a Bag action grid.
++    sMenu.columns = 1;
++    sMenu.rows = itemCount;
+     sMenu.APressMuted = APressMuted;
+ 
+     pos = initialCursorPos;
