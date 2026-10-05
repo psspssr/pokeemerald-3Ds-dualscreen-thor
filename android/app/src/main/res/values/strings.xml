@@ -29,10 +29,22 @@
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
+    <string name="settings_display_summary">Two screens, scaling and picture quality</string>
+    <string name="settings_controls">Controls</string>
+    <string name="settings_controls_summary">Button mapping and on-screen controls</string>
+    <string name="settings_gameplay_summary">Quality of life and Mystery events</string>
+    <string name="settings_saves_data">Saves &amp; data</string>
+    <string name="settings_saves_data_summary">Import, export and save backups</string>
     <string name="cat_display">Display</string>
+    <string name="cat_graphics">Graphics</string>
+    <string name="cat_single_screen">Single-screen layouts</string>
+    <string name="cat_general">General</string>
+    <string name="cat_save_files">Save files</string>
+    <string name="cat_backups">Backups</string>
+    <string name="cat_game_data">Game data</string>
     <string name="cat_controls">On-screen controls</string>
     <string name="cat_input">Gamepad and keyboard</string>
-    <string name="cat_dual">Dual display</string>
+    <string name="cat_dual">Two screens</string>
     <string name="cat_data">Data</string>
     <string name="cat_about">About</string>
     <string name="pref_layout_portrait">Portrait layout</string>
@@ -67,7 +79,7 @@
     <string name="pref_import_save_summary">Import an Emerald GBA, emulator or 3DS .sav. Raw saves and mGBA RTC trailers are supported; emulator clock overrides are not transferred. A backup is kept. Save states are not supported.</string>
     <string name="pref_export_save">Export save…</string>
     <string name="pref_data_location">Data folder</string>
-    <string name="pref_about">About</string>
+    <string name="pref_about">About &amp; diagnostics</string>
     <string name="pref_version">Version %1$s</string>
 
     <string name="import_restart_title">Restart needed</string>
@@ -93,7 +105,7 @@ Engine-only builds require a data pack generated for the same Android build. Pla
 This is an unofficial fan project, not affiliated with or endorsed by Nintendo, Game Freak, Creatures or The Pokémon Company. Pokémon and Pokémon Emerald are trademarks of their respective owners.]]></string>
     <string name="cat_gameplay">Gameplay</string>
     <string name="qol_title">Quality of life</string>
-    <string name="qol_summary">Optional speed, shiny odds, experience and save helpers</string>
+    <string name="qol_summary">Optional speed, shiny odds and party experience</string>
     <string name="qol_intro">Your rules, your choice</string>
     <string name="qol_intro_summary">Every option starts off. Preferences stay separate from your Emerald save; Pokémon and progress still use the original save format.</string>
     <string name="qol_fast_forward">Enable fast-forward controls</string>

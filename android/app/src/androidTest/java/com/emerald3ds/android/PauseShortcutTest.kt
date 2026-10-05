@@ -471,7 +471,11 @@ class PauseShortcutTest {
             assertEquals(0, HostProbe.snapshot()[1])
             closeMenu(scenario)
 
-            scenario.onActivity { it.dispatchKeyEvent(down(KeyEvent.KEYCODE_ESCAPE)) }
+            scenario.onActivity {
+                val escape = down(KeyEvent.KEYCODE_ESCAPE)
+                it.dispatchKeyEvent(escape)
+                it.dispatchKeyEvent(up(escape))
+            }
             val hiddenLeft = down(KeyEvent.KEYCODE_BUTTON_L1, 905)
             val hiddenRight = down(KeyEvent.KEYCODE_BUTTON_R1, 905)
             scenario.onActivity { activity ->
@@ -556,7 +560,11 @@ class PauseShortcutTest {
                         before = (stateField.get(activity) as FastForwardState).toggled
                     }
                     val prompt = if (shiny) worker.submit<Boolean> { NativeBridge.testShinyFleeRoundTrip() } else null
-                    if (!shiny) scenario.onActivity { it.dispatchKeyEvent(down(KeyEvent.KEYCODE_ESCAPE)) }
+                    if (!shiny) scenario.onActivity {
+                        val escape = down(KeyEvent.KEYCODE_ESCAPE)
+                        it.dispatchKeyEvent(escape)
+                        it.dispatchKeyEvent(up(escape))
+                    }
                     val dialogField = GameActivity::class.java.getDeclaredField(if (shiny) "shinyDialog" else "menuDialog")
                         .apply { isAccessible = true }
                     var dialog: AlertDialog? = null
@@ -690,7 +698,10 @@ class PauseShortcutTest {
                 assertEquals(NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
                 closeMenu(scenario, second = true)
                 val escape = down(KeyEvent.KEYCODE_ESCAPE)
-                scenario.onActivity { it.presentation!!.dispatchKeyEvent(escape) }
+                scenario.onActivity {
+                    it.presentation!!.dispatchKeyEvent(escape)
+                    it.presentation!!.dispatchKeyEvent(up(escape))
+                }
                 assertEquals(NativeBridge.STATE_PAUSED, HostProbe.snapshot()[0])
                 closeMenu(scenario, second = true)
             }

@@ -1,203 +1,309 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceScreen
+        app:key="display"
+        app:title="@string/cat_display"
+        app:summary="@string/settings_display_summary"
+        app:iconSpaceReserved="false">
+        <PreferenceCategory
+            app:title="@string/cat_dual"
+            app:iconSpaceReserved="false">
+            <SwitchPreferenceCompat
+                app:defaultValue="true"
+                app:iconSpaceReserved="false"
+                app:key="dual_display"
+                app:summary="@string/pref_dual_display_summary"
+                app:title="@string/pref_dual_display" />
 
-    <PreferenceCategory app:title="@string/cat_display" app:iconSpaceReserved="false">
-        <ListPreference
-            app:defaultValue="fill"
-            app:entries="@array/layout_portrait_entries"
-            app:entryValues="@array/layout_portrait_values"
-            app:iconSpaceReserved="false"
-            app:key="layout_portrait"
-            app:title="@string/pref_layout_portrait"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:defaultValue="side_by_side"
-            app:entries="@array/layout_landscape_entries"
-            app:entryValues="@array/layout_landscape_values"
-            app:iconSpaceReserved="false"
-            app:key="layout_landscape"
-            app:title="@string/pref_layout_landscape"
-            app:useSimpleSummaryProvider="true" />
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:iconSpaceReserved="false"
-            app:key="integer_scaling"
-            app:summary="@string/pref_integer_scaling_summary"
-            app:title="@string/pref_integer_scaling" />
-        <ListPreference
-            app:defaultValue="nearest"
-            app:entries="@array/filter_entries"
-            app:entryValues="@array/filter_values"
-            app:iconSpaceReserved="false"
-            app:key="filter"
-            app:title="@string/pref_filter"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:defaultValue="2"
-            app:entries="@array/voxel_resolution_entries"
-            app:entryValues="@array/voxel_resolution_values"
-            app:iconSpaceReserved="false"
-            app:key="voxel_resolution"
-            app:title="@string/pref_voxel_resolution" />
-        <ListPreference
-            app:defaultValue="0"
-            app:entries="@array/voxel_aa_entries"
-            app:entryValues="@array/voxel_aa_values"
-            app:iconSpaceReserved="false"
-            app:key="voxel_aa"
-            app:title="@string/pref_voxel_aa" />
-        <SwitchPreferenceCompat
-            app:defaultValue="true"
-            app:iconSpaceReserved="false"
-            app:key="keep_screen_on"
-            app:title="@string/pref_keep_screen_on" />
-    </PreferenceCategory>
+            <ListPreference
+                app:defaultValue="main"
+                app:dependency="dual_display"
+                app:entries="@array/top_display_entries"
+                app:entryValues="@array/top_display_values"
+                app:iconSpaceReserved="false"
+                app:key="top_display"
+                app:title="@string/pref_top_display"
+                app:useSimpleSummaryProvider="true" />
 
-    <PreferenceCategory app:title="@string/cat_controls" app:iconSpaceReserved="false">
-        <ListPreference
-            app:defaultValue="auto"
-            app:entries="@array/controls_visibility_entries"
-            app:entryValues="@array/controls_visibility_values"
-            app:iconSpaceReserved="false"
-            app:key="controls_visibility"
-            app:title="@string/pref_controls_visibility"
-            app:useSimpleSummaryProvider="true" />
-        <SeekBarPreference
-            android:max="100"
-            app:defaultValue="55"
-            app:iconSpaceReserved="false"
-            app:key="controls_opacity"
-            app:min="10"
-            app:showSeekBarValue="true"
-            app:title="@string/pref_controls_opacity" />
-        <SeekBarPreference
-            android:max="160"
-            app:defaultValue="100"
-            app:iconSpaceReserved="false"
-            app:key="controls_size"
-            app:min="50"
-            app:showSeekBarValue="true"
-            app:title="@string/pref_controls_size" />
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:iconSpaceReserved="false"
-            app:key="circle_pad"
-            app:summary="@string/pref_circle_pad_summary"
-            app:title="@string/pref_circle_pad" />
-        <SwitchPreferenceCompat
-            app:defaultValue="true"
-            app:iconSpaceReserved="false"
-            app:key="haptics"
-            app:title="@string/pref_haptics" />
-    </PreferenceCategory>
+            <ListPreference
+                app:defaultValue="fill"
+                app:dependency="dual_display"
+                app:entries="@array/dual_scaling_entries"
+                app:entryValues="@array/dual_scaling_values"
+                app:iconSpaceReserved="false"
+                app:key="dual_scaling"
+                app:title="@string/pref_dual_scaling"
+                app:useSimpleSummaryProvider="true" />
 
-    <PreferenceCategory app:title="@string/cat_input" app:iconSpaceReserved="false">
-        <ListPreference
-            app:defaultValue="position"
-            app:entries="@array/gamepad_mapping_entries"
-            app:entryValues="@array/gamepad_mapping_values"
-            app:iconSpaceReserved="false"
-            app:key="gamepad_mapping"
-            app:title="@string/pref_gamepad_mapping"
-            app:useSimpleSummaryProvider="true" />
-    </PreferenceCategory>
+            <SwitchPreferenceCompat
+                app:defaultValue="false"
+                app:dependency="dual_display"
+                app:iconSpaceReserved="false"
+                app:key="dual_controls"
+                app:summary="@string/pref_dual_controls_summary"
+                app:title="@string/pref_dual_controls" />
+        </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/cat_dual" app:iconSpaceReserved="false">
-        <SwitchPreferenceCompat
-            app:defaultValue="true"
-            app:iconSpaceReserved="false"
-            app:key="dual_display"
-            app:summary="@string/pref_dual_display_summary"
-            app:title="@string/pref_dual_display" />
-        <ListPreference
-            app:defaultValue="fill"
-            app:dependency="dual_display"
-            app:entries="@array/dual_scaling_entries"
-            app:entryValues="@array/dual_scaling_values"
-            app:iconSpaceReserved="false"
-            app:key="dual_scaling"
-            app:title="@string/pref_dual_scaling"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:defaultValue="main"
-            app:dependency="dual_display"
-            app:entries="@array/top_display_entries"
-            app:entryValues="@array/top_display_values"
-            app:iconSpaceReserved="false"
-            app:key="top_display"
-            app:title="@string/pref_top_display"
-            app:useSimpleSummaryProvider="true" />
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:dependency="dual_display"
-            app:iconSpaceReserved="false"
-            app:key="dual_controls"
-            app:summary="@string/pref_dual_controls_summary"
-            app:title="@string/pref_dual_controls" />
-    </PreferenceCategory>
+        <PreferenceCategory
+            app:title="@string/cat_graphics"
+            app:iconSpaceReserved="false">
+            <ListPreference
+                app:defaultValue="nearest"
+                app:entries="@array/filter_entries"
+                app:entryValues="@array/filter_values"
+                app:iconSpaceReserved="false"
+                app:key="filter"
+                app:title="@string/pref_filter"
+                app:useSimpleSummaryProvider="true" />
 
-    <PreferenceCategory app:title="@string/cat_gameplay" app:iconSpaceReserved="false">
-        <PreferenceScreen app:key="qol" app:title="@string/qol_title"
-            app:summary="@string/qol_summary" app:iconSpaceReserved="false">
-            <Preference app:title="@string/qol_intro" app:summary="@string/qol_intro_summary"
-                app:selectable="false" app:iconSpaceReserved="false" />
-            <SwitchPreferenceCompat app:key="qol_fast_forward" app:defaultValue="false"
-                app:title="@string/qol_fast_forward" app:summary="@string/qol_fast_forward_summary"
+            <ListPreference
+                app:defaultValue="2"
+                app:entries="@array/voxel_resolution_entries"
+                app:entryValues="@array/voxel_resolution_values"
+                app:iconSpaceReserved="false"
+                app:key="voxel_resolution"
+                app:title="@string/pref_voxel_resolution" />
+
+            <ListPreference
+                app:defaultValue="0"
+                app:entries="@array/voxel_aa_entries"
+                app:entryValues="@array/voxel_aa_values"
+                app:iconSpaceReserved="false"
+                app:key="voxel_aa"
+                app:title="@string/pref_voxel_aa" />
+
+            <SwitchPreferenceCompat
+                app:defaultValue="false"
+                app:iconSpaceReserved="false"
+                app:key="integer_scaling"
+                app:summary="@string/pref_integer_scaling_summary"
+                app:title="@string/pref_integer_scaling" />
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            app:title="@string/cat_single_screen"
+            app:iconSpaceReserved="false">
+            <ListPreference
+                app:defaultValue="fill"
+                app:entries="@array/layout_portrait_entries"
+                app:entryValues="@array/layout_portrait_values"
+                app:iconSpaceReserved="false"
+                app:key="layout_portrait"
+                app:title="@string/pref_layout_portrait"
+                app:useSimpleSummaryProvider="true" />
+
+            <ListPreference
+                app:defaultValue="side_by_side"
+                app:entries="@array/layout_landscape_entries"
+                app:entryValues="@array/layout_landscape_values"
+                app:iconSpaceReserved="false"
+                app:key="layout_landscape"
+                app:title="@string/pref_layout_landscape"
+                app:useSimpleSummaryProvider="true" />
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            app:title="@string/cat_general"
+            app:iconSpaceReserved="false">
+            <SwitchPreferenceCompat
+                app:defaultValue="true"
+                app:iconSpaceReserved="false"
+                app:key="keep_screen_on"
+                app:title="@string/pref_keep_screen_on" />
+        </PreferenceCategory>
+    </PreferenceScreen>
+
+    <PreferenceScreen
+        app:key="controls"
+        app:title="@string/settings_controls"
+        app:summary="@string/settings_controls_summary"
+        app:iconSpaceReserved="false">
+        <PreferenceCategory
+            app:title="@string/cat_input"
+            app:iconSpaceReserved="false">
+            <ListPreference
+                app:defaultValue="position"
+                app:entries="@array/gamepad_mapping_entries"
+                app:entryValues="@array/gamepad_mapping_values"
+                app:iconSpaceReserved="false"
+                app:key="gamepad_mapping"
+                app:title="@string/pref_gamepad_mapping"
+                app:useSimpleSummaryProvider="true" />
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            app:title="@string/cat_controls"
+            app:iconSpaceReserved="false">
+            <ListPreference
+                app:defaultValue="auto"
+                app:entries="@array/controls_visibility_entries"
+                app:entryValues="@array/controls_visibility_values"
+                app:iconSpaceReserved="false"
+                app:key="controls_visibility"
+                app:title="@string/pref_controls_visibility"
+                app:useSimpleSummaryProvider="true" />
+
+            <SeekBarPreference
+                android:max="160"
+                app:defaultValue="100"
+                app:iconSpaceReserved="false"
+                app:key="controls_size"
+                app:min="50"
+                app:showSeekBarValue="true"
+                app:title="@string/pref_controls_size" />
+
+            <SeekBarPreference
+                android:max="100"
+                app:defaultValue="55"
+                app:iconSpaceReserved="false"
+                app:key="controls_opacity"
+                app:min="10"
+                app:showSeekBarValue="true"
+                app:title="@string/pref_controls_opacity" />
+
+            <SwitchPreferenceCompat
+                app:defaultValue="false"
+                app:iconSpaceReserved="false"
+                app:key="circle_pad"
+                app:summary="@string/pref_circle_pad_summary"
+                app:title="@string/pref_circle_pad" />
+
+            <SwitchPreferenceCompat
+                app:defaultValue="true"
+                app:iconSpaceReserved="false"
+                app:key="haptics"
+                app:title="@string/pref_haptics" />
+        </PreferenceCategory>
+    </PreferenceScreen>
+
+    <PreferenceScreen
+        app:key="gameplay"
+        app:title="@string/cat_gameplay"
+        app:summary="@string/settings_gameplay_summary"
+        app:iconSpaceReserved="false">
+        <PreferenceScreen
+            app:key="qol"
+            app:title="@string/qol_title"
+            app:summary="@string/qol_summary"
+            app:iconSpaceReserved="false">
+            <Preference
+                app:title="@string/qol_intro"
+                app:summary="@string/qol_intro_summary"
+                app:selectable="false"
                 app:iconSpaceReserved="false" />
-            <ListPreference app:key="qol_speed" app:defaultValue="4" app:dependency="qol_fast_forward"
-                app:title="@string/qol_speed" app:entries="@array/qol_speed_entries"
-                app:entryValues="@array/qol_speed_values" app:useSimpleSummaryProvider="true"
+
+            <SwitchPreferenceCompat
+                app:key="qol_fast_forward"
+                app:defaultValue="false"
+                app:title="@string/qol_fast_forward"
+                app:summary="@string/qol_fast_forward_summary"
                 app:iconSpaceReserved="false" />
-            <ListPreference app:key="qol_shiny" app:defaultValue="1"
-                app:title="@string/qol_shiny" app:entries="@array/qol_shiny_entries"
-                app:entryValues="@array/qol_shiny_values" app:useSimpleSummaryProvider="true"
+
+            <ListPreference
+                app:key="qol_speed"
+                app:defaultValue="4"
+                app:dependency="qol_fast_forward"
+                app:title="@string/qol_speed"
+                app:entries="@array/qol_speed_entries"
+                app:entryValues="@array/qol_speed_values"
+                app:useSimpleSummaryProvider="true"
                 app:iconSpaceReserved="false" />
-            <SwitchPreferenceCompat app:key="qol_shared_exp" app:defaultValue="false"
-                app:title="@string/qol_shared_exp" app:summary="@string/qol_shared_exp_summary"
+
+            <ListPreference
+                app:key="qol_shiny"
+                app:defaultValue="1"
+                app:title="@string/qol_shiny"
+                app:entries="@array/qol_shiny_entries"
+                app:entryValues="@array/qol_shiny_values"
+                app:useSimpleSummaryProvider="true"
                 app:iconSpaceReserved="false" />
-            <SwitchPreferenceCompat app:key="qol_backups" app:defaultValue="false"
-                app:title="@string/qol_backups" app:summary="@string/qol_backups_summary"
+
+            <SwitchPreferenceCompat
+                app:key="qol_shared_exp"
+                app:defaultValue="false"
+                app:title="@string/qol_shared_exp"
+                app:summary="@string/qol_shared_exp_summary"
                 app:iconSpaceReserved="false" />
-            <Preference app:key="restore_backup" app:title="@string/restore_backup"
-                app:summary="@string/restore_backup_summary" app:iconSpaceReserved="false" />
-            <SwitchPreferenceCompat app:key="qol_protect_shinies" app:defaultValue="false"
-                app:title="@string/qol_protect_shinies" app:summary="@string/qol_protect_shinies_summary"
+
+            <SwitchPreferenceCompat
+                app:key="qol_protect_shinies"
+                app:defaultValue="false"
+                app:title="@string/qol_protect_shinies"
+                app:summary="@string/qol_protect_shinies_summary"
                 app:iconSpaceReserved="false" />
         </PreferenceScreen>
-        <PreferenceScreen app:key="mystery_events" app:title="@string/mystery_events_title"
-            app:summary="@string/mystery_events_summary" app:iconSpaceReserved="false">
-            <Preference app:key="mystery_events_intro" app:title="@string/mystery_events_intro"
+
+        <PreferenceScreen
+            app:key="mystery_events"
+            app:title="@string/mystery_events_title"
+            app:summary="@string/mystery_events_summary"
+            app:iconSpaceReserved="false">
+            <Preference
+                app:key="mystery_events_intro"
+                app:title="@string/mystery_events_intro"
                 app:summary="@string/mystery_events_intro_summary"
-                app:selectable="false" app:iconSpaceReserved="false" />
+                app:selectable="false"
+                app:iconSpaceReserved="false" />
         </PreferenceScreen>
-    </PreferenceCategory>
+    </PreferenceScreen>
 
-    <PreferenceCategory app:title="@string/cat_data" app:iconSpaceReserved="false">
-        <Preference
-            app:iconSpaceReserved="false"
-            app:key="import_pak"
-            app:title="@string/pref_import_pak" />
-        <Preference
-            app:iconSpaceReserved="false"
-            app:key="import_save"
-            app:summary="@string/pref_import_save_summary"
-            app:title="@string/pref_import_save" />
-        <Preference
-            app:iconSpaceReserved="false"
-            app:key="export_save"
-            app:title="@string/pref_export_save" />
-        <Preference
-            app:iconSpaceReserved="false"
-            app:key="data_location"
-            app:selectable="false"
-            app:title="@string/pref_data_location" />
-    </PreferenceCategory>
+    <PreferenceScreen
+        app:key="saves_data"
+        app:title="@string/settings_saves_data"
+        app:summary="@string/settings_saves_data_summary"
+        app:iconSpaceReserved="false">
+        <PreferenceCategory
+            app:title="@string/cat_save_files"
+            app:iconSpaceReserved="false">
+            <Preference
+                app:iconSpaceReserved="false"
+                app:key="import_save"
+                app:summary="@string/pref_import_save_summary"
+                app:title="@string/pref_import_save" />
 
-    <PreferenceCategory app:title="@string/cat_about" app:iconSpaceReserved="false">
-        <Preference
-            app:iconSpaceReserved="false"
-            app:key="about"
-            app:title="@string/pref_about" />
-    </PreferenceCategory>
+            <Preference
+                app:iconSpaceReserved="false"
+                app:key="export_save"
+                app:title="@string/pref_export_save" />
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            app:title="@string/cat_backups"
+            app:iconSpaceReserved="false">
+            <SwitchPreferenceCompat
+                app:key="qol_backups"
+                app:defaultValue="false"
+                app:title="@string/qol_backups"
+                app:summary="@string/qol_backups_summary"
+                app:iconSpaceReserved="false" />
+
+            <Preference
+                app:key="restore_backup"
+                app:title="@string/restore_backup"
+                app:summary="@string/restore_backup_summary"
+                app:iconSpaceReserved="false" />
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            app:title="@string/cat_game_data"
+            app:iconSpaceReserved="false">
+            <Preference
+                app:iconSpaceReserved="false"
+                app:key="import_pak"
+                app:title="@string/pref_import_pak" />
+
+            <Preference
+                app:iconSpaceReserved="false"
+                app:key="data_location"
+                app:selectable="false"
+                app:title="@string/pref_data_location" />
+        </PreferenceCategory>
+    </PreferenceScreen>
+
+    <Preference
+        app:iconSpaceReserved="false"
+        app:key="about"
+        app:title="@string/pref_about" />
 </PreferenceScreen>

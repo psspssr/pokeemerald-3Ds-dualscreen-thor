@@ -230,6 +230,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     }
 
     private fun releaseGameInput() {
+        MenuNavigation.gameInputPaused()
         overlay.releaseAll()
         presentation?.touchView?.releaseAll()
         physical.clear()
@@ -425,8 +426,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         dismissShinyPrompt()
         shinyRequest = request
         updateInputEnabled()
-        physical.clear()
-        InputHub.clear()
+        releaseGameInput()
         // The native thread is waiting for this answer, so do not pause it
         // through aptMainLoop here. A real Activity pause cancels the request.
         fun answer(allow: Boolean) {
@@ -456,6 +456,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         shinyDialog?.show()
         observeDialogMotion(shinyDialog)
         shinyDialog?.getButton(AlertDialog.BUTTON_NEGATIVE)?.requestFocus()
+        shinyDialog?.let(::observePausedGameInput)
     }
 
     private fun observeDialogMotion(dialog: AlertDialog?) {
@@ -602,15 +603,22 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         physical.observeKeyEvent(event, suspended = !acceptsGameInput())
-        if (shinyDialog?.dispatchKeyEvent(event) == true) return true
-        if (menuShown && menuDialog?.dispatchKeyEvent(event) == true) return true
+        if (!acceptsGameInput() && shinyDialog == null && !menuShown)
+            MenuNavigation.observeInactiveKey(event)
+        if (shinyDialog?.window?.callback?.dispatchKeyEvent(event) == true) return true
+        if (menuShown && menuDialog?.window?.callback?.dispatchKeyEvent(event) == true) return true
+        if (acceptsGameInput() && MenuNavigation.consumeGameKey(event)) return true
         if (acceptsGameInput() && physical.onKey(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
         if (!acceptsGameInput()) physical.observeMotionEvent(ev)
-        if (acceptsGameInput() && physical.onMotion(ev)) return true
+        if (!acceptsGameInput() && shinyDialog == null && !menuShown)
+            MenuNavigation.observeInactiveMotion(ev)
+        if (shinyDialog?.window?.callback?.dispatchGenericMotionEvent(ev) == true) return true
+        if (menuShown && menuDialog?.window?.callback?.dispatchGenericMotionEvent(ev) == true) return true
+        if (acceptsGameInput() && MenuNavigation.dispatchGameMotion(ev, physical::onMotion)) return true
         return super.dispatchGenericMotionEvent(ev)
     }
 
@@ -621,8 +629,11 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
     override fun onMenuKey() = onBackKey()
 
     override fun onInputDeviceAdded(deviceId: Int) {}
-    override fun onInputDeviceChanged(deviceId: Int) = physical.removeDevice(deviceId)
-    override fun onInputDeviceRemoved(deviceId: Int) = physical.removeDevice(deviceId)
+    override fun onInputDeviceChanged(deviceId: Int) = onInputDeviceRemoved(deviceId)
+    override fun onInputDeviceRemoved(deviceId: Int) {
+        MenuNavigation.removeDevice(deviceId)
+        physical.removeDevice(deviceId)
+    }
 
     // ── Menu, settings, exit ─────────────────────────────────────────────
 
@@ -636,9 +647,7 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
         menuShown = true
         updateInputEnabled()
         NativeBridge.setState(NativeBridge.STATE_PAUSED)
-        overlay.releaseAll()
-        physical.clear()
-        InputHub.clear()
+        releaseGameInput()
         val items = mutableListOf(getString(R.string.menu_resume), getString(R.string.menu_settings), getString(R.string.menu_quit))
         val fastForwardIndex = if (fastForward.options.fastForwardEnabled) items.size.also {
             items.add(getString(if (fastForward.toggled) R.string.fast_forward_stop else R.string.fast_forward_start,
@@ -672,6 +681,10 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
             .create()
         menuDialog?.show()
         observeDialogMotion(menuDialog)
+        menuDialog?.let {
+            observePausedGameInput(it)
+            MenuNavigation.refreshFocus(it.window!!, force = true)
+        }
     }
 
     private fun openSettings() {

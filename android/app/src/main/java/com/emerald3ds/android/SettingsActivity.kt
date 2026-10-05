@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnNextLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.preference.Preference
@@ -20,6 +21,8 @@ import androidx.preference.PreferenceDialogFragmentCompat
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
+import androidx.preference.PreferenceGroup
+import androidx.recyclerview.widget.RecyclerView
 import androidx.lifecycle.ViewModelProvider
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -28,7 +31,45 @@ import java.text.DateFormat
 import java.util.Date
 
 class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPreferenceStartScreenCallback {
+    private val preferenceFocus = mutableMapOf<String, String>()
+    private val restoreFocus = mutableSetOf<String>()
+    private var pendingFocusLayout: RecyclerView? = null
+    private val preferenceLists = mutableMapOf<Fragment, Pair<RecyclerView, RecyclerView.OnChildAttachStateChangeListener>>()
     private val preferenceDialogs = object : FragmentManager.FragmentLifecycleCallbacks() {
+        override fun onFragmentViewCreated(manager: FragmentManager, fragment: Fragment, view: View,
+                                           savedInstanceState: Bundle?) {
+            if (fragment is PreferenceFragmentCompat) {
+                restoreFocus += pageKey(fragment)
+                val list = fragment.listView
+                val listener = object : RecyclerView.OnChildAttachStateChangeListener {
+                    override fun onChildViewAttachedToWindow(view: View) {
+                        val preference = preferenceRows(fragment)[list.getChildAdapterPosition(view)]
+                        view.isFocusable = preference?.let { it.isEnabled && it.isSelectable } == true
+                    }
+                    override fun onChildViewDetachedFromWindow(view: View) = Unit
+                }
+                list.addOnChildAttachStateChangeListener(listener)
+                preferenceLists[fragment] = list to listener
+                view.post { MenuNavigation.refreshFocus(window) }
+            }
+        }
+
+        override fun onFragmentResumed(manager: FragmentManager, fragment: Fragment) {
+            if (fragment is PreferenceFragmentCompat)
+                fragment.view?.post { MenuNavigation.refreshFocus(window) }
+        }
+
+        override fun onFragmentPaused(manager: FragmentManager, fragment: Fragment) {
+            if (fragment is PreferenceFragmentCompat) rememberFocus(fragment)
+        }
+
+        override fun onFragmentViewDestroyed(manager: FragmentManager, fragment: Fragment) {
+            preferenceLists.remove(fragment)?.let { (list, listener) ->
+                list.removeOnChildAttachStateChangeListener(listener)
+            }
+            pendingFocusLayout = null
+        }
+
         override fun onFragmentStarted(manager: FragmentManager, fragment: Fragment) {
             // DialogFragment has shown its window by onStart. This also
             // covers a preference dialog restored after Activity recreation.
@@ -39,7 +80,9 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         GameActivity.observePausedKeyEvent(event)
-        return super.dispatchKeyEvent(event)
+        val handled = super.dispatchKeyEvent(event) || movePreferenceFocus(event)
+        currentPreferences()?.let(::rememberFocus)
+        return handled
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
@@ -47,11 +90,21 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         return super.dispatchGenericMotionEvent(event)
     }
 
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN)
+            currentPreferences()?.let { restoreFocus += pageKey(it) }
+        return super.dispatchTouchEvent(event)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Diagnostics.configure(applicationContext)
         supportFragmentManager.registerFragmentLifecycleCallbacks(preferenceDialogs, true)
         setContentView(R.layout.activity_settings)
+        savedInstanceState?.getBundle("preference_focus")?.let { saved ->
+            for (key in saved.keySet()) saved.getString(key)?.let { preferenceFocus[key] = it }
+        }
+        MenuNavigation.install(window, ::ensurePreferenceFocus)
         val root = findViewById<android.view.View>(R.id.settings_root)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -68,11 +121,127 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
     }
 
     override fun onDestroy() {
+        for ((list, listener) in preferenceLists.values)
+            list.removeOnChildAttachStateChangeListener(listener)
+        preferenceLists.clear()
         supportFragmentManager.unregisterFragmentLifecycleCallbacks(preferenceDialogs)
         super.onDestroy()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        currentPreferences()?.let(::rememberFocus)
+        outState.putBundle("preference_focus", Bundle().apply {
+            for ((page, key) in preferenceFocus) putString(page, key)
+        })
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun currentPreferences() = supportFragmentManager.findFragmentById(R.id.settings_container)
+        as? PreferenceFragmentCompat
+
+    private fun pageKey(fragment: PreferenceFragmentCompat) =
+        fragment.arguments?.getString(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT)
+            ?: fragment.preferenceScreen?.key ?: "root"
+
+    private fun preferenceRows(fragment: PreferenceFragmentCompat): Map<Int, Preference> {
+        val positions = fragment.listView.adapter as? PreferenceGroup.PreferencePositionCallback ?: return emptyMap()
+        val rows = mutableMapOf<Int, Preference>()
+        fun visit(group: PreferenceGroup) {
+            for (i in 0 until group.preferenceCount) {
+                val preference = group.getPreference(i)
+                val position = positions.getPreferenceAdapterPosition(preference)
+                if (position >= 0) rows[position] = preference
+                if (preference is PreferenceGroup) visit(preference)
+            }
+        }
+        visit(fragment.preferenceScreen)
+        return rows
+    }
+
+    private fun focusedPreference(fragment: PreferenceFragmentCompat): Preference? {
+        if (fragment.view == null) return null
+        val list = fragment.listView
+        val focused = list.findFocus() ?: return null
+        val row = list.findContainingItemView(focused) ?: return null
+        val position = list.getChildAdapterPosition(row)
+        return preferenceRows(fragment)[position]
+    }
+
+    private fun rememberFocus(fragment: PreferenceFragmentCompat) {
+        if (!MenuNavigation.usingController || pageKey(fragment) in restoreFocus) return
+        focusedPreference(fragment)?.takeIf { it.isEnabled && it.isSelectable }?.key?.let {
+            preferenceFocus[pageKey(fragment)] = it
+        }
+    }
+
+    private fun movePreferenceFocus(event: KeyEvent): Boolean {
+        if (!MenuNavigation.usingController || event.action != KeyEvent.ACTION_DOWN ||
+            event.keyCode !in listOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)) return false
+        val fragment = currentPreferences()?.takeIf { it.view != null } ?: return false
+        val list = fragment.listView
+        val focused = list.findFocus() ?: return false
+        val row = list.findContainingItemView(focused) ?: return false
+        val current = list.getChildAdapterPosition(row)
+        if (current == RecyclerView.NO_POSITION) return false
+        val eligible = preferenceRows(fragment).filterValues { it.isEnabled && it.isSelectable }.toSortedMap()
+        val target = if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+            eligible.entries.firstOrNull { it.key > current }
+        else eligible.entries.lastOrNull { it.key < current }
+        val key = target?.value?.key ?: return false // let Android reach the toolbar at either boundary
+        // RecyclerView's default focus search only lays out a bounded area.
+        // A run of offscreen disabled rows can be longer than that area.
+        // Use the real preference positions, then restore this exact row.
+        val page = pageKey(fragment)
+        preferenceFocus[page] = key
+        restoreFocus += page
+        ensurePreferenceFocus()
+        return true
+    }
+
+    /** Establish or restore a valid row after native controls handle input. */
+    private fun ensurePreferenceFocus(): Boolean {
+        if (!MenuNavigation.usingController || !window.decorView.hasWindowFocus()) return false
+        val fragment = currentPreferences()?.takeIf { it.view != null } ?: return false
+        val list = fragment.listView
+        val rows = preferenceRows(fragment)
+        fun eligible(position: Int): Boolean = rows[position]?.let { it.isEnabled && it.isSelectable } == true
+        // AndroidX binds focusable from selectable alone. Disabled dependency
+        // rows must also be skipped when a D-pad moves through this list.
+        for (i in 0 until list.childCount) {
+            val child = list.getChildAt(i)
+            child.isFocusable = eligible(list.getChildAdapterPosition(child))
+        }
+        val page = pageKey(fragment)
+        if (page !in restoreFocus && window.currentFocus != null) {
+            val focused = focusedPreference(fragment)
+            if (focused?.let { it.isEnabled && it.isSelectable } == true || !list.hasFocus()) return false
+        }
+        val remembered = rows.entries.firstOrNull { it.value.key == preferenceFocus[page] }?.key
+        val position = remembered?.takeIf(::eligible)
+            ?: rows.keys.sorted().firstOrNull(::eligible) ?: return false
+        val row = list.findViewHolderForAdapterPosition(position)?.itemView
+        if (row != null) {
+            val restored = page in restoreFocus
+            restoreFocus -= page
+            rows[position]?.key?.let { preferenceFocus[page] = it }
+            return if (row.hasFocus() && !row.isInTouchMode) restored else row.requestFocusFromTouch()
+        }
+        // A saved row can be outside the recreated viewport. Wait for that
+        // layout once; do not spin a posted focus loop before a frame arrives.
+        if (pendingFocusLayout !== list) {
+            pendingFocusLayout = list
+            list.doOnNextLayout {
+                if (pendingFocusLayout === list) pendingFocusLayout = null
+                MenuNavigation.refreshFocus(window)
+            }
+            list.scrollToPosition(position)
+            list.requestLayout()
+        }
+        return list.requestFocusFromTouch()
+    }
+
     override fun onPreferenceStartScreen(caller: PreferenceFragmentCompat, pref: PreferenceScreen): Boolean {
+        pref.key?.let { preferenceFocus[pageKey(caller)] = it }
         val fragment = (if (pref.key == "mystery_events") MysteryEventsFragment() else SettingsFragment()).apply {
             arguments = Bundle().apply { putString(PreferenceFragmentCompat.ARG_PREFERENCE_ROOT, pref.key) }
         }
@@ -112,7 +281,9 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             AppSettings.prepareDefaults(requireContext())
             setPreferencesFromResource(R.xml.preferences, rootKey)
-            fileModel = ViewModelProvider(this)[GameFilesModel::class.java]
+            // Nested pages share in-flight work and unacknowledged results.
+            // Only the currently attached view observes/presents that result.
+            fileModel = ViewModelProvider(requireActivity())[GameFilesModel::class.java]
             diagnosticsModel = ViewModelProvider(requireActivity())[DiagnosticsExportModel::class.java]
             files = fileModel.files
             click("import_pak") { importPak.launch(arrayOf("*/*")) }
