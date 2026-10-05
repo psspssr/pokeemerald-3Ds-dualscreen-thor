@@ -46,8 +46,8 @@ class GameFilesTest {
         Uri.fromFile(File(dir, name).apply { writeBytes(bytes) })
 
     @Test fun importingSaveWaitsForRestartAndKeepsBackup() {
-        val old = ByteArray(128 * 1024) { 1 }
-        val replacement = ByteArray(128 * 1024) { 2 }
+        val old = EmeraldSaveFixture.create(1, 2)
+        val replacement = EmeraldSaveFixture.create(2, 4)
         files.saveFile.writeBytes(old)
         files.stageImport(input("new.sav", replacement), GameFiles.Kind.SAVE)
         assertArrayEquals(old, files.saveFile.readBytes())
@@ -64,8 +64,8 @@ class GameFilesTest {
     }
 
     @Test fun invalidImportPreservesCurrentAndPreviouslyStagedSave() {
-        val old = ByteArray(128 * 1024) { 1 }
-        val recovery = ByteArray(64 * 1024) { 2 }
+        val old = EmeraldSaveFixture.create(1, 2)
+        val recovery = EmeraldSaveFixture.create(2, 4, 64 * 1024)
         files.saveFile.writeBytes(old)
         files.stageImport(input("good.sav", recovery), GameFiles.Kind.SAVE)
         for (bad in listOf(ByteArray(0), ByteArray(1), ByteArray(128 * 1024 - 1), ByteArray(128 * 1024 + 1))) {
@@ -185,8 +185,8 @@ class GameFilesTest {
     }
 
     @Test fun interruptedExportRecoversBeforeApplyingAnotherImport() {
-        val original = ByteArray(128 * 1024) { 6 }
-        val replacement = ByteArray(128 * 1024) { 9 }
+        val original = EmeraldSaveFixture.create(6, 6)
+        val replacement = EmeraldSaveFixture.create(9, 10)
         val recovery = File(files.romfsDir.parentFile, GameFiles.EXPORT_RECOVERY_NAME)
         recovery.writeBytes(original)
         files.saveFile.writeBytes(byteArrayOf(1, 2, 3))
@@ -225,8 +225,8 @@ class GameFilesTest {
     }
 
     @Test fun restoringBackupStagesItAndRejectsOutsideOrTruncatedFiles() {
-        val current = ByteArray(128 * 1024) { 7 }
-        val previous = ByteArray(128 * 1024) { 3 }
+        val current = EmeraldSaveFixture.create(7, 8)
+        val previous = EmeraldSaveFixture.create(3, 4)
         files.saveFile.writeBytes(current)
         files.backupsDir.mkdirs()
         val backup = File(files.backupsDir, "save-1700000000000-3.sav").apply { writeBytes(previous) }
@@ -236,7 +236,8 @@ class GameFilesTest {
         assertArrayEquals(current, files.saveFile.readBytes())
         val outside = File(dir, "save-1700000000000-4.sav").apply { writeBytes(previous) }
         val short = File(files.backupsDir, "save-1700000000000-5.sav").apply { writeBytes(ByteArray(30)) }
-        for (bad in listOf(outside, short)) {
+        val corrupt = File(files.backupsDir, "save-1700000000000-6.sav").apply { writeBytes(ByteArray(128 * 1024)) }
+        for (bad in listOf(outside, short, corrupt)) {
             try { files.stageBackup(bad); fail("invalid backup accepted") } catch (_: IOException) { }
         }
         files.applyPendingImports()
@@ -287,7 +288,7 @@ class GameFilesTest {
     private fun mgbaFooter() = "26100205123319406f88bf6a00000000".chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     @Test fun mgbaRtcTrailerIsArchivedAndOnlyRawFlashIsImportedAndExported() {
-        val raw = ByteArray(128 * 1024) { (it % 251).toByte() }
+        val raw = EmeraldSaveFixture.create(10, 10)
         val footer = mgbaFooter() // Observed mGBA 0.10.2 RTC layout; synthetic flash data.
         val uri = input("mgba.sav", raw + footer)
         files.stageImport(uri, GameFiles.Kind.SAVE)
@@ -302,8 +303,8 @@ class GameFilesTest {
     }
 
     @Test fun unrelatedOrMalformedTrailersDoNotReplaceAStagedSave() {
-        val old = ByteArray(128 * 1024) { 1 }
-        val replacement = ByteArray(128 * 1024) { 2 }
+        val old = EmeraldSaveFixture.create(1, 2)
+        val replacement = EmeraldSaveFixture.create(2, 4)
         files.saveFile.writeBytes(old)
         files.stageImport(input("good.sav", replacement), GameFiles.Kind.SAVE)
         val malformed = listOf(
@@ -328,7 +329,7 @@ class GameFilesTest {
     }
 
     @Test fun mgbaInitializedRtcBeforeFirstClockReadIsAccepted() {
-        val raw = ByteArray(128 * 1024) { 0xff.toByte() }
+        val raw = EmeraldSaveFixture.create(11, 12)
         val footer = ByteArray(16).apply { this[7] = 0x40 }
         files.stageImport(input("mgba-new.sav", raw + footer), GameFiles.Kind.SAVE)
         files.applyPendingImports()

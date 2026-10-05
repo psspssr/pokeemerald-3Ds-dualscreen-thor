@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="import_damaged_save">That file has no complete, valid Emerald save slot. Your current save has not been changed.</string>
+    <string name="import_pending_damaged">An invalid pending save was set aside. Your current save and backup are unchanged. Tap Retry to continue.</string>
+    <string name="import_quarantine_failed">The invalid pending save could not be set aside. Your current save and backup are unchanged.</string>
+</resources>

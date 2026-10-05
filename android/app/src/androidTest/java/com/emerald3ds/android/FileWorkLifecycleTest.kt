@@ -25,7 +25,7 @@ class FileWorkLifecycleTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val input = File(context.cacheDir, "restart-choice.sav")
-        val replacement = ByteArray(128 * 1024) { (it % 251).toByte() }
+        val replacement = EmeraldSaveFixture.create(76, 76)
         input.writeBytes(replacement)
         fun waitFor(message: String, condition: () -> Boolean) {
             val deadline = SystemClock.uptimeMillis() + 15_000

@@ -118,6 +118,16 @@ class GameFiles(private val context: Context) {
      */
     fun applyPendingImports() {
         recoverInterruptedExport()
+        val pendingSave = pendingFile(Kind.SAVE)
+        if (pendingSave.isFile && !validSave(pendingSave)) {
+            // A previous app version or an interrupted copy may have left an
+            // invalid import. Keep one rejected copy, without touching either
+            // real save, and allow the next preparation to load the old game.
+            val rejected = File(dataDir, pendingSave.name + ".rejected")
+            if (!pendingSave.renameTo(rejected))
+                throw IOException(context.getString(R.string.import_quarantine_failed))
+            throw IOException(context.getString(R.string.import_pending_damaged))
+        }
         for (kind in Kind.entries) {
             val pending = pendingFile(kind)
             if (!pending.isFile) continue
@@ -166,6 +176,8 @@ class GameFiles(private val context: Context) {
                 }
                 Kind.SAVE -> {
                     rtcFooter = normalizeSave(temp)
+                    if (!validSave(temp))
+                        throw IOException(context.getString(R.string.import_damaged_save))
                     true
                 }
             }
@@ -178,6 +190,23 @@ class GameFiles(private val context: Context) {
         } finally {
             temp.delete()
         }
+    }
+
+    private fun validSave(file: File): Boolean {
+        val size = file.length()
+        if (size != SAVE_MAX_BYTES && size != SAVE_MAX_BYTES / 2) return false
+        // Bound the read even if a pending file changes after its size check.
+        val bytes = ByteArray(size.toInt())
+        file.inputStream().use { input ->
+            var offset = 0
+            while (offset < bytes.size) {
+                val count = input.read(bytes, offset, bytes.size - offset)
+                if (count < 0) return false
+                offset += count
+            }
+            if (input.read() != -1) return false
+        }
+        return EmeraldSaveFormat.hasValidSlot(bytes)
     }
 
     /** mGBA 0.10.2's GBASavedataRTCBuffer has no magic or signature. Accept
