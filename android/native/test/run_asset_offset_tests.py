@@ -24,10 +24,23 @@ def main():
     patch = ROOT / "patches/android/088-external-graphics-offsets.patch"
     with tempfile.TemporaryDirectory(prefix="emerald-asset-offsets-") as directory:
         work = Path(directory)
-        for rel in patch_files(patch):
+        copied = tuple(patch_files(patch))
+        for rel in copied:
             p = work / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes((TREE / rel).read_bytes())
+        # Subsequent menu fixes can add lines before these strict hunks.
+        # Undo/reapply only exact later hunks belonging to the copied files.
+        selected = ["--include=" + rel for rel in copied]
+        later = []
+        for candidate in sorted((ROOT / "patches/android").glob("*.patch"), reverse=True):
+            if candidate.name <= patch.name:
+                continue
+            try:
+                strict_apply(work, candidate, ["--reverse", *selected])
+                later.append(candidate)
+            except PatchError:
+                pass
         try:
             strict_apply(work, patch, ["--reverse"])
         except PatchError:
@@ -35,6 +48,8 @@ def main():
             strict_apply(work, patch, ["--reverse"])
         if not args.before:
             strict_apply(work, patch)
+            for candidate in reversed(later):
+                strict_apply(work, candidate, selected)
         signatures = {
             "evolution_scene": ["static void InitMovingBgPalette(u16 *palette)"],
             "field_effect": ["u8 FldEff_RayquazaSpotlight(void)"],

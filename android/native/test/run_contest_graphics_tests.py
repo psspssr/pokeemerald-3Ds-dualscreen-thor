@@ -28,14 +28,15 @@ def main():
         for rel in ("3ds_port/full.mk", "src/contest.c", "src/contest_util.c"):
             p = work / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes((TREE / rel).read_bytes())
         patch = ROOT / "patches/android/086-contest-pokeblock-graphics.patch"
-        # Subsequent focused menu patches extend the same make source list.
-        # Normalize only exact later full.mk hunks in this temporary copy.
+        # Later patches extend the make list or add earlier lines in contest.c.
+        # Normalize exact later hunks for these copied files, then restore them.
+        selected = ["--include=" + rel for rel in ("3ds_port/full.mk", "src/contest.c", "src/contest_util.c")]
         later = []
         for candidate in sorted((ROOT / "patches/android").glob("*.patch"), reverse=True):
             if candidate.name <= patch.name:
                 continue
             try:
-                strict_apply(work, candidate, ["--reverse", "--include=3ds_port/full.mk"])
+                strict_apply(work, candidate, ["--reverse", *selected])
                 later.append(candidate)
             except PatchError:
                 pass
@@ -47,7 +48,7 @@ def main():
         if not args.before:
             strict_apply(work, patch)
             for candidate in reversed(later):
-                strict_apply(work, candidate, ["--include=3ds_port/full.mk"])
+                strict_apply(work, candidate, selected)
         contest = (work / "src/contest.c").read_text()
         results = (work / "src/contest_util.c").read_text()
         bios = (TREE / "src/platform/bios.c").read_text()

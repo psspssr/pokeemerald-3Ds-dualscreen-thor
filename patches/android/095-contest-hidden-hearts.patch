@@ -1,0 +1,16 @@
+--- a/src/contest.c
++++ b/src/contest.c
+@@ -3940,7 +3940,13 @@
+             if (!invisible)
+                 gSprites[eContestGfxState[i].sliderHeartSpriteId].x = 180;
+             else
++#ifdef PORT_BRIDGE
++                // x2 may add 56 pixels. Keep the 8px heart (including a doubled
++                // affine box) past the centred 400px view without 9-bit wrap.
++                gSprites[eContestGfxState[i].sliderHeartSpriteId].x = 336;
++#else
+                 gSprites[eContestGfxState[i].sliderHeartSpriteId].x = 256;
++#endif
+         }
+     }
+ }

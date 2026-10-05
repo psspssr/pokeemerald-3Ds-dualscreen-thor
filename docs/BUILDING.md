@@ -5,9 +5,9 @@ only**; check the device's actual ABI list before installing. The separate
 display-test APK also contains x86_64 so the Android UI can be tested on a
 standard hardware-accelerated emulator.
 
-This guide builds the checked-out source. Alpha.8 and current `main`/`dev` import upstream
-`cdc77a3d2b01`, including opt-in voxel battle scenery and native Party/Summary
-menus.
+This guide builds the checked-out source, which pins upstream `c330c0a1aece`
+(0.2.0). The published alpha.8 APK retains its earlier `cdc77a3d2b01` pin.
+Updating source does not change an existing release.
 
 ## Install the tools
 
@@ -109,6 +109,15 @@ with erased flash bytes in memory. A recovery file remains 64 KiB on disk
 until an in-game save writes the full flash image, and an earlier export
 retains that size. Emulator save states are unsupported; export a raw
 battery/flash save from the emulator first.
+
+Development builds also verify Emerald's section IDs, checksums, save counters
+and slot layout before staging an import and again before replacing the live
+save. An intact older slot is accepted when a newer write was interrupted.
+Invalid imports preserve the current save and its backup. If an older app left
+an invalid pending import, the next launch sets it aside and reports the
+problem; choose **Retry** to continue with the existing save. This validates
+the flash format without changing Pokémon data.
+
 **Export save** writes the raw file; choose the filename your emulator expects
 (commonly the ROM basename plus `.sav`). Export pauses the native game through
 completion so an in-progress save write cannot be copied halfway through.
@@ -117,8 +126,7 @@ destination points back to the live save and the provider fails while writing,
 the original is restored. If storage prevents restoration, the app keeps the
 copy and pauses gameplay; retry the export or restart after storage is available.
 
-The port keeps its voxel/camera options, including `3D BATTLE`,
-choice, separately at
+The port keeps its voxel/camera options, including `3D BATTLE`, separately at
 `sdmc/3ds/emerald3ds/settings.txt`; Android screen and control preferences are
 app settings. Neither is inserted into the GBA `.sav`. Transfer the raw save
 alone to a GBA emulator, and keep the settings file separately if retaining

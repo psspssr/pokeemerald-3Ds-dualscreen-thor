@@ -40,6 +40,7 @@ not establish physical Thor performance or complete-game coverage.
 | PokéNav | Map, condition/search, Match Call and ribbons where unlocked |
 | Battles and progression | Commands, targets, Party switching, Bag, stats/level-up, evolution, capture/name entry, starter choice |
 | Other game menus | Shop/buy/sell, Pokéblocks/contests, link entry points and any reachable unsupported-feature exits |
+| Later facilities and services | Battle Frontier selection/swap menus, field-service choices, Mirage Tower/fossil scenes and their return paths; record host-only versus live coverage |
 | Android app | Pause/Resume, Settings, display/graphics selectors, controls, QoL, mystery events, import/export/backups, diagnostics |
 
 Late-game saves used to reach specific routes must be labelled as QA fixtures.

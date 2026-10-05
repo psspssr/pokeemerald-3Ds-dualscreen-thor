@@ -92,6 +92,8 @@ jobs:
         run: python3 android/native/test/run_shop_tests.py
       - name: Contest graphics and Pokeblock viewport
         run: python3 android/native/test/run_contest_graphics_tests.py
+      - name: Hidden Contest sprites stay outside the wide canvas
+        run: python3 android/native/test/run_contest_heart_tests.py
       - name: Berry and Pokeblock feeding geometry
         run: python3 android/native/test/run_item_menu_geometry_tests.py
       - name: External graphics offsets and direct asset reads
