@@ -213,6 +213,7 @@ static void presentationSampling(C3D_RenderTarget *restore)
 #include "voxel_msaa_checks.inc"
 #include "indexed_checks.inc"
 #include "voxel_scale_checks.inc"
+#include "voxel_warmup_checks.inc"
 
 int main(int argc,char **argv)
 {
@@ -516,6 +517,7 @@ int main(int argc,char **argv)
     bottomContentChecks(target);
     voxelAaChecks(&program,target);
     voxelScaleChecks(&program,target);
+    voxelWarmupChecks(target);
     assert(state==CTR_HOST_RUNNING); assert(glGetError()==GL_NO_ERROR);
     if(argc==3) {
         /* Upstream's atlas is 1024x1024, but a typed glyph can change one

@@ -30,13 +30,35 @@ compiler="$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64/bin/$target-clang"
 out="$repo_root/build/gpu-tests"
 mkdir -p "$out"
 python3 tools/picasso2glsl.py origin/3ds_port/src/voxel/voxel.v.pica -o "$out/voxel.shbin"
-python3 - "$out/upstream_voxel_diorama.inc" <<'PY'
+python3 - "$out/upstream_voxel_diorama.inc" "$out/upstream_voxel_warmup.inc" <<'PY'
 from pathlib import Path
+import os
+import re
 import sys
+import tempfile
 source = Path("origin/3ds_port/src/3ds_video.c").read_text()
 first = source.index("#define DIORAMA_TOP")
 last = source.index("/*\n * Bloom:", first)
 Path(sys.argv[1]).write_text(source[first:last])
+# Exercise the real render-dispatch branch, including the complete strict
+# Android overlay order. The opt-in old image proves the pixel regression.
+sys.path.insert(0, "tools")
+from bootstrap import patch_files, strict_apply
+relative = "3ds_port/src/3ds_video.c"
+with tempfile.TemporaryDirectory(prefix="emerald-warmup-gles-") as directory:
+    stage = Path(directory)
+    path = stage / relative
+    path.parent.mkdir(parents=True)
+    path.write_text(source)
+    for patch in sorted(Path("patches/android").glob("*.patch")):
+        if os.environ.get("CTR_GPU_WARMUP_BEFORE") == "1" and patch.name.startswith("096-"):
+            continue
+        if relative in patch_files(patch):
+            strict_apply(stage, patch, ("--include=" + relative,))
+    branch = re.search(r"    else if \(blank\)\n    \{(.*?)\n    \}", path.read_text(), re.S)
+    if branch is None:
+        raise SystemExit("upstream voxel warm-up branch changed")
+    Path(sys.argv[2]).write_text(branch.group(1) + "\n")
 PY
 "$compiler" -std=gnu11 -O2 -Wall -Wextra -Werror -D__3DS__ -DCTR_GPU_TEST \
     -Iandroid/gpu/include -Iandroid/shim/include -Iandroid/host/include -I"$out" \

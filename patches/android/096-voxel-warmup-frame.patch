@@ -1,0 +1,10 @@
+--- a/3ds_port/src/3ds_video.c
++++ b/3ds_port/src/3ds_video.c
+@@ -5846,6 +5846,7 @@
+     {
+         sPlanes = 0;
+         C2D_TargetClear(sTop, C2D_Color32(0, 0, 0, 255));
++        C2D_SceneBegin(sTop);
+     }
+ #if CTR_VOXEL_ENABLED
+     else if (sBattleWorld)
