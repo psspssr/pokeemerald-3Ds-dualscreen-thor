@@ -7,8 +7,9 @@ not establish physical Thor performance or complete-game coverage.
 The menu/graphics implementation and bounded emulator pass are complete.
 They include the final Hoenn Pokédex touch correction and repeated graphics-pool
 checks. [Validation](../VALIDATION.md) records the tested candidates, remaining
-late-game routes and hardware limits. Release acceptance must still identify
-and exercise the exact downloaded signed APK.
+late-game routes and hardware limits. The exact beta.1 production APK also
+passed the final emulator/save-export check, and the downloaded release bytes
+match that tested installation.
 
 ## Work order
 

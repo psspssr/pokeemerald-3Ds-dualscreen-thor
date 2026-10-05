@@ -1,13 +1,49 @@
 # Validation
 
-## Beta development checkpoint
+## Latest beta: 0.1.0-beta.1
+
+The [signed beta.1 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.1)
+was built and signed locally from the tagged source. [Normal CI](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37264346440)
+passed on the final code commit; only validation documentation changed before
+the tag. The hosted release runner could not start, so its unavailable run is
+recorded separately in the attached manifest. No automated-release success is
+claimed for this build.
+
+| Release identity | Value |
+|---|---|
+| Source | `11d366b94ac7f06334bc98041ed4fbcca0b524d4` |
+| Version / Android code | `0.1.0-beta.1` / **9** |
+| APK | `emerald-thor-0.1.0-beta.1-armeabi-v7a.apk` |
+| Size | 27,440,654 bytes |
+| SHA-256 | `cd5fd3ed553fa61e9d7f012b0110faafcc70e7dcb472112911e89c1399dce6a9` |
+| Engine/data ABI | `1e406ec1` |
+
+The downloaded three-file bundle matches the retained production bundle
+byte-for-byte. Signature, alignment, package and native/data checks passed,
+and the downloaded APK matches the installed, tested APK. The persistent
+release signing key is unchanged. A later automated retry recognizes the
+complete existing release and can verify it without replacing its bytes.
+
+That exact nondebuggable APK passed Continue, Bag/Party touch, the repaired
+Pokédex OK button, Settings, Home/resume, single-display fallback and first
+touch after reconnection. Installation preserved the save and both settings
+files. A normal save advanced counter 15→16; the real Android document picker
+exported the identical 128 KiB file. Original GBA Emerald loaded it in mGBA:
+runtime save counter 16, all 200 party bytes, trainer, map/position and the
+complete PC storage matched. QA originals were restored byte-for-byte.
+
+These are bounded emulator checks at 1920×1080 and 1240×1080. **Physical Thor
+lid behavior, audible audio and sustained performance remain unverified.**
+The implementation coverage and remaining late-game limits follow below.
+
+## Beta implementation and emulator coverage
 
 The candidate at `f7bf78f` imports upstream `c330c0a1aece` and uses engine/data
 ABI `1e406ec1`. Its native library SHA-256 is
 `705ebc0ddefd17b9a8b5ebf57093ef6cbd3b0375fe341487e62d59868945428f`.
-The nondebuggable, release-signed APK was installed without changing the save
-or either settings file. Release packaging will record its own source and
-artifact identity; the data ABI alone does not identify executable bytes.
+The nondebuggable, release-signed candidate was installed without changing the
+save or either settings file. The shipped release above has the same native
+library and game data; the data ABI alone does not identify executable bytes.
 Runtime coverage below spans the identified candidates, rather than implying
 that every earlier route was repeated after every change.
 

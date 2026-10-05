@@ -38,7 +38,7 @@ needed; the publisher alone gets `contents: write` on its `GITHUB_TOKEN`.
 
 ## Publish a reviewed source commit
 
-Use a strict SemVer tag, for example `v0.1.0-alpha.9`. The workflow derives
+Use a strict SemVer tag, for example `v0.1.0-beta.2`. The workflow derives
 Android `versionName` by removing `v`, and assigns `versionCode` as its
 `GITHUB_RUN_NUMBER + 1`. Code **1** belongs to the first manual release,
 `v0.1.0-alpha.1`; the first automated run uses code **2**. New runs increase
@@ -58,7 +58,7 @@ CLI sequence is below; publishing is the step that triggers the workflow:
 
 ```sh
 release_repo=psspssr/pokeemerald-3Ds-dualscreen-thor
-release_tag=v0.1.0-alpha.9
+release_tag=v0.1.0-beta.2
 release_commit=$(git rev-parse HEAD)
 release_notes=build/release-notes.md  # Prepare and review this file first.
 test -z "$(git status --porcelain)"
@@ -141,3 +141,22 @@ Useful references: [GitHub release events](https://docs.github.com/en/actions/re
 [Android versioning](https://developer.android.com/studio/publish/versioning),
 [apksigner](https://developer.android.com/tools/apksigner) and
 [zipalign](https://developer.android.com/tools/zipalign).
+
+## Beta.1 local production build
+
+The beta.1 hosted release run could not start. Its production APK was built
+and signed locally from the unchanged tag with the persistent release key.
+Normal CI passed on the final code commit; only validation documentation
+changed before the tag. The attached manifest records local provenance and
+links the normal CI and unavailable release run separately. This is not an
+automated-release success claim. Android code **9** remains reserved to release
+run **8**, and the release event workflow remains the default for future tags.
+
+The same package/signature, native-data, release-ID, tag/main-ancestry,
+no-overwrite and downloaded-byte checks apply to this bundle. A complete,
+matching upload can later be verified by the workflow's existing-release path.
+If a local upload is interrupted, resume with its **exact retained three-file
+bundle** through the publication helper. There is no Actions signing artifact
+for that local build; do not rebuild, regenerate the manifest, or replace
+published assets when retrying. Resolve hosted runner availability before
+expecting future automatic builds or deployments.

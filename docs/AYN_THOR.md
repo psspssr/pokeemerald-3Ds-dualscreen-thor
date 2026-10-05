@@ -114,7 +114,7 @@ filter to Sharp once; choosing Smooth afterward is respected. Fill still
 uses the entire panel. For equally sized pixel blocks, choose **Fit** and
 enable **Integer scaling**; this adds borders.
 
-The beta development build adds **Settings → Display → Voxel resolution**:
+**Settings → Display → Voxel resolution** offers:
 
 | Setting | Internal voxel picture |
 |---|---|
@@ -139,20 +139,17 @@ effect.
 For a fully sharp voxel view, turn **OPTION → 3D BLUR** off in the game.
 New configurations default to Off; a previously saved choice is respected.
 
-The released **0.1.0-alpha.7** has an optional voxel overworld; enable
-**OPTION → VOXEL 3D** in the game. Preview **0.1.0-alpha.8** at upstream `cdc77a3d2b01`
-also has **3D BATTLE**: enable VOXEL 3D, scroll the same options list and turn
+Enable the optional overworld through **OPTION → VOXEL 3D** in the game.
+For voxel battles, enable VOXEL 3D, scroll the same options list and turn
 on 3D BATTLE. Both start off. This draws voxel battle scenery behind the
 original 2D Pokémon, health bars, text and move animations, where the voxel
 world is available. **BATTLE SCENE** remains the original animation setting.
 These game options are separate from Android's Settings menu.
 
-The FPS counter is also optional in alpha.8:
-**OPTION → SHOW FPS**, off by default. Alpha.7's always-visible counter is
-removed by this upstream update.
+The FPS counter is optional: **OPTION → SHOW FPS**, off by default.
 
-Alpha.8 also uses upstream's native Party/Summary menus on the bottom
-screen. In Summary, tap a move to preview it and tap the selected row again
+Native Party/Summary menus use the bottom screen. In Summary, tap a move to
+preview it and tap the selected row again
 to confirm. While choosing where to move it, tap another row to preview the
 position and again to swap, or tap the fifth-row **Cancel** to abandon the
 reorder. When learning a new move, that fifth row is the proposed move;
@@ -160,8 +157,8 @@ use the header Cancel or B to leave without replacing a move.
 
 ## Screen scaling
 
-In alpha.8, dual-display **Fill** also expands the original GBA
-menu area. Full-screen Summary and PC views use the whole bottom panel;
+Dual-display **Fill** also expands the original GBA menu area.
+Full-screen Summary and PC views use the whole bottom panel;
 Party, Bag and Pokédex views use the full height beside their navigation
 column. Touch targets expand with the visible content. Map, battle commands
 and other menus that already fill their area keep their layout. Fit and

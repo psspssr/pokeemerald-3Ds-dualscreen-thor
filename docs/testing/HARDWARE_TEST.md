@@ -1,7 +1,8 @@
 # First Thor test and performance capture
 
-Use the published alpha.8 APK as the reference build while development moves
-on `dev`. CI runs on pushes to both `dev` and `main`, and on pull requests.
+Use the signed beta.1 APK and record its checksum from the release. Keep an
+exported save before comparing with alpha.8. CI runs on pushes to both `dev`
+and `main`, and on pull requests.
 Development pushes do not publish APK releases.
 
 ## Short device check
@@ -18,13 +19,20 @@ same saved location when comparing builds. Check:
    at normal speed after returning from fast-forward and sleep.
 6. Save normally, quit, relaunch and Continue. Export a copy before testing
    imports or restoring backups.
+7. Compare the same voxel scene at 1× and the new 2× default, with anti-aliasing
+   off first. Try 3×/4× and optional AA separately; record all selected settings.
+   Leave **3D BLUR** off when judging sharpness. Repeat a battle → Bag → Party
+   → battle sequence and check for corruption or a sudden drop in image quality.
+8. Check touch naming, PC Summary after using Bag, and Pokédex Search → Fire
+   → the visible OK button. After Settings and an import/export picker, the
+   first bottom-screen gesture must respond normally.
 
 For a longer pass, compare the same town, battle and voxel scene after 15–30
 minutes. Record visible stutter, audio breaks, heat and power-mode changes.
 An emulator run does not establish physical panel timing, thermals or battery
 consumption. The [lid signal boundary](../AYN_THOR.md#lid-and-sleep) still applies.
 
-## Optional diagnostics in development builds
+## Optional diagnostics
 
 Open **Settings → About → Export diagnostics** to save a JSON report through
 Android's document picker. Choose a new document in Downloads. The report

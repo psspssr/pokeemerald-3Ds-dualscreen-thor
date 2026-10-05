@@ -8,7 +8,7 @@ motion, visible keyboard focus and narrow screens are supported.
 From the repository root:
 
 ```sh
-# Reproducible local preview, pinned to the verified alpha.8 release metadata.
+# Reproducible local preview, pinned to the verified beta.1 release metadata.
 python3 tools/build_site.py --snapshot site/release-snapshot.json
 python3 -m http.server 8765 --bind 127.0.0.1 --directory build/site
 ```
