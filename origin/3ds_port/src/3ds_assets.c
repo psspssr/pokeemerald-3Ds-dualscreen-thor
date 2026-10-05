@@ -19,6 +19,7 @@
 
 #include "port_platform.h"
 #include "port_log.h"
+#include "port_prof.h"
 #include "3ds_assets.h"
 #include "3ds_data.h"
 #include "3ds_platform.h"
@@ -64,6 +65,10 @@ static bool sTried;
 static struct CtrAssetStats sStats;
 static u32 sBudget = CTR_ASSET_CACHE_BUDGET;
 static u32 sStamp;
+/* The payload table's lock, and the payloads the warm-up worker has claimed
+ * and is reading (see the payload cache below). */
+static CtrLock sLock;
+static volatile u8 *sWarming;
 
 static void *ReadWholeFile(const char *path, u32 *outSize)
 {
@@ -172,6 +177,7 @@ static bool LoadAssetMap(void)
         }
     }
 
+    CtrLock_Init(&sLock);
     sStats.entries = sEntryCount;
     sStats.pointerEntries = sPtrEntryCount;
     sStats.indexBytes = indexBytes + ptrBytes + sPathBlobSize
@@ -345,7 +351,22 @@ static s32 FindAssetIndexForSizedPointer(u32 ptr, u32 size, u32 *outOffset)
 
 /* ── Payload cache ──────────────────────────────────────────────────────── */
 
-static u8 *LoadPayload(u32 idx)
+/*
+ * The game asks for a payload the moment it needs it, in the middle of a
+ * frame: the scene loads of the intro and the title spent 11 ms of a frame
+ * in reads each, far more on a console's SD card, where each read also
+ * refills a 64 KiB buffer. All the payloads together are about 4 MiB, so a
+ * worker reads every one of them in the background from boot (WarmWorker),
+ * the pack's in its own order and in large runs. A payload the game asks for
+ * before the worker got to it is read on the spot as before, and one the
+ * worker is reading is waited for.
+ *
+ * sLock guards the payload table and the statistics. The game thread holds
+ * it while it reads a payload itself; the worker reads without it and only
+ * takes it to publish.
+ */
+
+static u8 *ReadPayload(u32 idx)
 {
     const char *path = GetAssetPathByIndex(idx);
     u32 expected = sEntries[idx].size;
@@ -355,7 +376,6 @@ static u8 *LoadPayload(u32 idx)
     file = CtrData_Open(path);
     if (file == NULL)
     {
-        ++sStats.errors;
         PORT_LOG("[ERROR] asset open failed: %s\n", path);
         return NULL;
     }
@@ -363,7 +383,6 @@ static u8 *LoadPayload(u32 idx)
     if (buffer == NULL)
     {
         fclose(file);
-        ++sStats.errors;
         PORT_LOG("[ERROR] asset alloc failed: %s (%lu bytes)\n", path, (unsigned long)expected);
         return NULL;
     }
@@ -371,42 +390,56 @@ static u8 *LoadPayload(u32 idx)
     {
         fclose(file);
         free(buffer);
-        ++sStats.errors;
         PORT_LOG("[ERROR] asset short read: %s\n", path);
         return NULL;
     }
     fclose(file);
+    return buffer;
+}
 
+/* Under sLock. */
+static void Publish(u32 idx, u8 *buffer)
+{
     sPayloads[idx].data = buffer;
-    sPayloads[idx].size = expected;
-    sStats.bytes += expected;
+    sPayloads[idx].size = sEntries[idx].size;
+    sPayloads[idx].stamp = sStamp;
+    sStats.bytes += sEntries[idx].size;
     ++sStats.loads;
     if (sStats.bytes > sStats.peakBytes)
         sStats.peakBytes = sStats.bytes;
-    return buffer;
 }
 
 static u8 *GetPayload(u32 idx)
 {
-    u8 *data = sPayloads[idx].data;
+    u8 *data;
 
+    CtrLock_Lock(&sLock);
+    while (sPayloads[idx].data == NULL && sWarming != NULL && sWarming[idx])
+    {
+        CtrLock_Unlock(&sLock);
+        CtrPlatform_SleepUs(200);
+        CtrLock_Lock(&sLock);
+    }
+    data = sPayloads[idx].data;
     if (data == NULL)
     {
-        /* A read off the card where the game or the renderer needs it, in
-         * the middle of a frame: on an Old 3DS the one kind of CPU spike a
-         * frame-time log cannot tell apart, so the slow ones are named. */
-        static unsigned sSlowLogged;
-        uint64_t start = CtrPlatform_Ticks();
-        float ms;
+        static unsigned sDemandLogged;
+        u64 start = CtrPlatform_Ticks();
 
         ++sStats.misses;
-        data = LoadPayload(idx);
-        ms = CtrPlatform_TickMs(CtrPlatform_Ticks() - start);
-        if (ms >= 1.0f && sSlowLogged < 96)
+        data = ReadPayload(idx);
+        if (data != NULL)
+            Publish(idx, data);
+        else
+            ++sStats.errors;
+        Port_ProfAdd(PORT_PROF_IO, (uint32_t)start);
+        /* The game waited for this one: worth knowing which, on hardware.
+         * Capped, so a run of them cannot flood the log. */
+        if (sDemandLogged < 96)
         {
-            ++sSlowLogged;
-            CtrLog_Write(CTR_LOG_FS, "asset read in frame: %s (%lu bytes) %.1f ms",
-                         GetAssetPathByIndex(idx), (unsigned long)sEntries[idx].size, ms);
+            ++sDemandLogged;
+            CtrLog_Write(CTR_LOG_FS, "asset read on demand: %s (%lu B, %.2f ms)", GetAssetPathByIndex(idx),
+                         (unsigned long)sEntries[idx].size, CtrPlatform_TickMs(CtrPlatform_Ticks() - start));
         }
     }
     else
@@ -415,7 +448,188 @@ static u8 *GetPayload(u32 idx)
     }
     if (data != NULL)
         sPayloads[idx].stamp = sStamp;
+    CtrLock_Unlock(&sLock);
     return data;
+}
+
+/* What the worker may fill the cache up to: never enough to make the
+ * collector evict what the game is using. */
+#define WARM_BUDGET_SHARE 2u
+/* One pack read covers neighbours up to this far apart, up to this much. */
+#define WARM_GAP (4u * 1024u)
+#define WARM_RUN (256u * 1024u)
+
+typedef struct
+{
+    u64 offset;
+    u32 size, idx, rank;
+} WarmEntry;
+
+/*
+ * What the game shows first is read first: the boot runs straight into the
+ * copyright screen, the intro and the title, and then the menus. The rest
+ * follows in the pack's (or the index's) order.
+ */
+static const char *const sWarmFirst[] = {
+    "graphics/intro/", "graphics/title_screen/", "graphics/rayquaza_scene/",
+    "graphics/pokemon/rayquaza/", "graphics/pokemon/groudon/", "graphics/pokemon/kyogre/",
+    "graphics/battle_anims/", "graphics/fonts/", "graphics/text_window/", "graphics/interface/",
+    "graphics/birch_speech/", "graphics/misc/",
+};
+#define WARM_RANKS (sizeof(sWarmFirst) / sizeof(sWarmFirst[0]))
+
+static u32 WarmRank(const char *path)
+{
+    for (u32 i = 0; i < WARM_RANKS; ++i)
+        if (strncmp(path, sWarmFirst[i], strlen(sWarmFirst[i])) == 0)
+            return i;
+    return WARM_RANKS;
+}
+
+static int CompareWarmEntries(const void *a, const void *b)
+{
+    const WarmEntry *x = a, *y = b;
+
+    if (x->rank != y->rank)
+        return x->rank < y->rank ? -1 : 1;
+    if (x->offset != y->offset)
+        return x->offset < y->offset ? -1 : 1;
+    return x->idx < y->idx ? -1 : x->idx > y->idx;
+}
+
+static bool WarmRoom(void)
+{
+    return sStats.bytes < sBudget / WARM_BUDGET_SHARE;
+}
+
+/* Claims the payloads [first, end) of the list that nobody holds yet. */
+static unsigned WarmClaim(const WarmEntry *list, unsigned first, unsigned end)
+{
+    unsigned claimed = 0;
+
+    CtrLock_Lock(&sLock);
+    for (unsigned i = first; i < end; ++i)
+        if (sPayloads[list[i].idx].data == NULL)
+        {
+            sWarming[list[i].idx] = 1;
+            ++claimed;
+        }
+    CtrLock_Unlock(&sLock);
+    return claimed;
+}
+
+static void WarmRelease(const WarmEntry *list, unsigned first, unsigned end)
+{
+    CtrLock_Lock(&sLock);
+    for (unsigned i = first; i < end; ++i)
+        sWarming[list[i].idx] = 0;
+    CtrLock_Unlock(&sLock);
+}
+
+/* The pack: runs of neighbouring payloads in one read each. */
+static void WarmPack(WarmEntry *list, unsigned count, u8 *run)
+{
+    unsigned first = 0;
+
+    qsort(list, count, sizeof(*list), CompareWarmEntries);
+    while (first < count && WarmRoom())
+    {
+        unsigned end = first + 1;
+        u64 start = list[first].offset, stop = start + list[first].size;
+
+        while (end < count && list[end].rank == list[first].rank
+               && list[end].offset >= stop && list[end].offset - stop <= WARM_GAP
+               && list[end].offset + list[end].size - start <= WARM_RUN)
+        {
+            stop = list[end].offset + list[end].size;
+            ++end;
+        }
+        if (WarmClaim(list, first, end) != 0)
+        {
+            bool ok = CtrData_ReadRange(start, run, (u32)(stop - start));
+
+            for (unsigned i = first; ok && i < end; ++i)
+            {
+                u32 idx = list[i].idx;
+                u8 *copy;
+
+                if (!sWarming[idx] || (copy = malloc(list[i].size ? list[i].size : 1)) == NULL)
+                    continue;
+                memcpy(copy, run + (list[i].offset - start), list[i].size);
+                CtrLock_Lock(&sLock);
+                if (sPayloads[idx].data == NULL)
+                    Publish(idx, copy), copy = NULL;
+                sWarming[idx] = 0;
+                CtrLock_Unlock(&sLock);
+                free(copy);
+            }
+            WarmRelease(list, first, end);
+        }
+        first = end;
+    }
+}
+
+static void WarmWorker(void *arg)
+{
+    WarmEntry *list = arg;
+    unsigned count = 0;
+    u8 *run = NULL;
+    u64 begin = CtrPlatform_Ticks();
+
+    for (u32 idx = 0; idx < sEntryCount; ++idx)
+        if (CtrData_Locate(GetAssetPathByIndex(idx), &list[count].offset, &list[count].size)
+            && list[count].size == sEntries[idx].size)
+        {
+            list[count].idx = idx;
+            list[count++].rank = WarmRank(GetAssetPathByIndex(idx));
+        }
+    if (count == sEntryCount && (run = malloc(WARM_RUN)) != NULL)
+        WarmPack(list, count, run);
+    else
+    {
+        /* RomFS or loose files: one file at a time. */
+        for (u32 idx = 0; idx < sEntryCount; ++idx)
+            list[idx] = (WarmEntry){0, sEntries[idx].size, idx, WarmRank(GetAssetPathByIndex(idx))};
+        qsort(list, sEntryCount, sizeof(*list), CompareWarmEntries);
+        count = 0;
+        for (u32 i = 0; i < sEntryCount && WarmRoom(); ++i)
+        {
+            u32 idx = list[i].idx;
+            WarmEntry one = list[i];
+            u8 *data;
+
+            if (WarmClaim(&one, 0, 1) == 0)
+                continue;
+            data = ReadPayload(idx);
+            CtrLock_Lock(&sLock);
+            if (data != NULL && sPayloads[idx].data == NULL)
+                Publish(idx, data), data = NULL;
+            sWarming[idx] = 0;
+            CtrLock_Unlock(&sLock);
+            free(data);
+        }
+    }
+    free(run);
+    free(list);
+    CtrLog_Write(CTR_LOG_FS, "assets warmed: %lu KiB of %lu payloads in %.0f ms (%s)",
+                 (unsigned long)(sStats.bytes >> 10), (unsigned long)sStats.loads,
+                 CtrPlatform_TickMs(CtrPlatform_Ticks() - begin), count ? "pack runs" : "file by file");
+}
+
+void CtrAssets_StartWarmup(void)
+{
+    WarmEntry *list;
+
+    if (!LoadAssetMap() || sWarming != NULL)
+        return;
+    sWarming = calloc(sEntryCount, 1);
+    list = malloc(sEntryCount * sizeof(*list));
+    if (sWarming == NULL || list == NULL
+        || !CtrPlatform_StartThread(WarmWorker, list, 16 * 1024, -2))
+    {
+        free(list);
+        CtrLog_Write(CTR_LOG_ERROR, "assets: no warm-up worker; payloads load on demand");
+    }
 }
 
 void CtrAssets_SetBudget(u32 bytes)
@@ -442,6 +656,7 @@ void CtrAssets_Collect(void)
     if (!sLoaded || sStats.bytes <= sBudget)
         return;
 
+    CtrLock_Lock(&sLock);
     for (i = 0; i < sEntryCount && sStats.bytes > sBudget; i++)
     {
         u32 age = sStamp - sPayloads[i].stamp;
@@ -454,6 +669,7 @@ void CtrAssets_Collect(void)
         sPayloads[i].size = 0;
         ++sStats.evictions;
     }
+    CtrLock_Unlock(&sLock);
 }
 
 /* ── Public bridge API ──────────────────────────────────────────────────── */
@@ -749,8 +965,16 @@ bool CtrAssets_PrefetchFind(const void *ptr, CtrAssetPrefetch *out)
     if (ptr == NULL || Port_ResolveMapAssetPointer(ptr) != ptr || !LoadAssetMap())
         return false;
     idx = FindAssetIndexForPointer((u32)ptr, &offset);
-    if (idx < 0 || sPayloads[idx].data != NULL)
+    if (idx < 0)
         return false;
+    /* In memory, or the warm-up worker is already reading it. */
+    CtrLock_Lock(&sLock);
+    if (sPayloads[idx].data != NULL || (sWarming != NULL && sWarming[idx]))
+    {
+        CtrLock_Unlock(&sLock);
+        return false;
+    }
+    CtrLock_Unlock(&sLock);
     out->index = idx;
     out->size = sEntries[idx].size;
     out->path = GetAssetPathByIndex((u32)idx);
@@ -780,18 +1004,21 @@ void CtrAssets_PrefetchAdopt(const CtrAssetPrefetch *request, void *payload)
 
     if (payload == NULL)
         return;
-    if (idx < 0 || (u32)idx >= sEntryCount || sPayloads[idx].data != NULL)
+    if (idx < 0 || (u32)idx >= sEntryCount || request->size != sEntries[idx].size)
     {
         free(payload);
         return;
     }
-    sPayloads[idx].data = payload;
-    sPayloads[idx].size = request->size;
-    sPayloads[idx].stamp = sStamp;
-    sStats.bytes += request->size;
-    ++sStats.loads;
-    if (sStats.bytes > sStats.peakBytes)
-        sStats.peakBytes = sStats.bytes;
+    /* Under the lock: the warm-up worker publishes too (Publish). */
+    CtrLock_Lock(&sLock);
+    if (sPayloads[idx].data != NULL)
+    {
+        CtrLock_Unlock(&sLock);
+        free(payload);
+        return;
+    }
+    Publish((u32)idx, payload);
+    CtrLock_Unlock(&sLock);
 }
 
 void Port_AssetPreload(void)

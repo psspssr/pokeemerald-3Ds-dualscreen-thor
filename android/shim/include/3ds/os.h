@@ -43,6 +43,10 @@ extern "C" {
 #define OS_DSPRAM_PADDR 0x1FF00000
 #define OS_DSPRAM_SIZE 0x80000
 
+/* Console address only. Android has no Luma/3DS shared configuration page;
+ * svcGetSystemInfo rejects that capability before upstream accesses it. */
+#define OS_SHAREDCFG_VADDR 0x1FF81000u
+
 #define OS_FCRAM_VADDR 0x30000000
 #define OS_FCRAM_PADDR 0x20000000
 #define OS_FCRAM_SIZE 0x10000000

@@ -3,7 +3,9 @@
  * 3ds/services/apt.h and ctrshim_apt.h for the order of hooks and listeners.
  */
 #include <3ds/services/apt.h>
+#include <3ds/result.h>
 #include <pthread.h>
+#include <stdatomic.h>
 
 #include "ctr_host.h"
 #include "ctrshim_apt.h"
@@ -20,6 +22,7 @@ typedef struct
 static aptHookCookie *sHooks;
 static bool sExited, sSleepAllowed = true;
 static volatile bool sSuspended;
+static atomic_uint sCpuTimeHint;
 
 static pthread_mutex_t sListenerLock = PTHREAD_MUTEX_INITIALIZER;
 static Listener sListeners[MAX_LISTENERS];
@@ -66,7 +69,17 @@ Result APT_SetAppCpuTimeLimit(u32 percent)
     /* Upstream requests a share of the 3DS system core before creating its
      * asset-streaming worker. Android's scheduler already runs those pthreads
      * across available cores; there is no separate reserved system core. */
-    (void)percent;
+    if (percent > 100)
+        return MAKERESULT(RL_USAGE, RS_INVALIDARG, RM_APT, RD_OUT_OF_RANGE);
+    atomic_store(&sCpuTimeHint, percent);
+    return 0;
+}
+
+Result APT_GetAppCpuTimeLimit(u32 *percent)
+{
+    if (!percent)
+        return MAKERESULT(RL_USAGE, RS_INVALIDARG, RM_APT, RD_INVALID_POINTER);
+    *percent = atomic_load(&sCpuTimeHint);
     return 0;
 }
 

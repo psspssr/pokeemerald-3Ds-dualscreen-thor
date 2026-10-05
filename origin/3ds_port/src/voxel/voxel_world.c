@@ -701,6 +701,29 @@ VoxelWeatherClass VoxelWorld_Weather(void)
 }
 
 /*
+ * The fog's own blend: the sprites come in at EVA 12 (4 under water) over a
+ * few frames and leave the same way, so the world's fog follows them.
+ */
+float VoxelWorld_FogDensity(void)
+{
+#ifdef PLATFORM_3DS
+    float density;
+
+    if (!gWeatherPtr->fogHSpritesCreated && !gWeatherPtr->fogDSpritesCreated)
+        return 0.0f;
+    density = (float)gWeatherPtr->currBlendEVA / 12.0f;
+    return density > 1.0f ? 1.0f : density;
+#else
+    return 0.0f;
+#endif
+}
+
+bool VoxelWorld_Underground(void)
+{
+    return gMapHeader.mapType == MAP_TYPE_UNDERGROUND;
+}
+
+/*
  * The fade the game has put on the background palettes, as one blend towards
  * a colour. The world's textures are baked from the tilesets' own palettes,
  * so a fade - which rewrites the shown palette every frame - never reaches

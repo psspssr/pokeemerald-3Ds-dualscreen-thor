@@ -46,6 +46,19 @@ const CtrTiming *CtrPlatform_GetTiming(void);
 void CtrPlatform_NoteBottom(float ms);
 void CtrPlatform_Diagnostic(uint32_t gameFrames, uint32_t aPresses, uint32_t checks);
 void CtrPlatform_ReportMemory(const char *stage);
+/*
+ * Threads and locks for the port's own workers, usable from game translation
+ * units. A CtrLock is a libctru LightLock. A thread is started detached, one
+ * priority step below the caller, on core (-2: the application's default).
+ */
+typedef int32_t CtrLock;
+void CtrLock_Init(CtrLock *lock);
+void CtrLock_Lock(CtrLock *lock);
+void CtrLock_Unlock(CtrLock *lock);
+bool CtrPlatform_StartThread(void (*entry)(void *), void *arg, unsigned stack, int core);
+void CtrPlatform_SleepUs(unsigned microseconds);
+/* The frame profiler's report and reset, at present (3ds_prof.c). */
+void CtrProf_EndFrame(float workMs, float waitMs, uint64_t frame);
 
 bool CtrFs_Init(void);
 void CtrFs_Shutdown(void);

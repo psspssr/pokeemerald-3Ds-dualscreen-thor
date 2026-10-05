@@ -36,6 +36,10 @@ static unsigned sPrimed;
 static float sRate;
 static bool sReady;
 static CtrAudioStats sStats;
+/* The sound engine's worker, at the end of this file. */
+static Thread sWorker;
+static LightEvent sKick, sIdle;
+static volatile bool sWorkerQuit;
 
 bool CtrAudio_Available(void) { return sReady; }
 CtrAudioStats *CtrAudio_Stats(void) { return &sStats; }
@@ -97,6 +101,15 @@ bool CtrAudio_Init(void)
 
 void CtrAudio_Shutdown(void)
 {
+    if (sWorker != NULL)
+    {
+        LightEvent_Wait(&sIdle);
+        sWorkerQuit = true;
+        LightEvent_Signal(&sKick);
+        threadJoin(sWorker, U64_MAX);
+        threadFree(sWorker);
+        sWorker = NULL;
+    }
     if (!sReady)
         return;
     sReady = false;
@@ -227,4 +240,110 @@ void CtrAudio_Queue(const float *interleaved, int frames)
     sStats.queued = queued + 1;
     CorrectDrift(queued + 1);
     sStats.submitMs = (float)((svcGetSystemTick() - start) * 1000.0 / SYSCLOCK_ARM11);
+}
+
+/* ── The sound engine's worker ─────────────────────────────────────────── */
+
+/*
+ * m4a mixes every voice in software, in floats, once a frame: on an Old 3DS
+ * that is milliseconds of the game thread's frame. On a core of its own it
+ * runs beside the next frame's game logic instead. The New 3DS has two cores
+ * the system leaves idle; the Old 3DS lends its system core for the share of
+ * time asked for here. Each frame waits for the previous mix before handing
+ * over the next, so the engine still advances exactly one frame per frame.
+ */
+#define CTR_AUDIO_SYSCORE_PERCENT 50
+/* On the system core the mix only gets that share of the time. If the game
+ * thread ends up waiting for it more than this on average, it mixes on its own
+ * thread again: never slower than without the worker. */
+#define CTR_AUDIO_WAIT_LIMIT_MS 1.0f
+#define CTR_AUDIO_WAIT_WINDOW 120
+static int sWorkerCore;
+static unsigned sKicks;
+static uint64_t sWaited;
+
+static RecursiveLock sSoundLock;
+static void (*sMix)(void);
+
+static void Worker(void *arg)
+{
+    (void)arg;
+    for (;;)
+    {
+        LightEvent_Wait(&sKick);
+        if (sWorkerQuit)
+            break;
+        RecursiveLock_Lock(&sSoundLock);
+        sMix();
+        RecursiveLock_Unlock(&sSoundLock);
+        LightEvent_Signal(&sIdle);
+    }
+}
+
+bool CtrAudio_StartWorker(void (*mix)(void))
+{
+    s32 priority = 0x30;
+    int core = 2;
+
+    if (sWorker != NULL)
+        return true;
+    sMix = mix;
+    RecursiveLock_Init(&sSoundLock);
+    LightEvent_Init(&sKick, RESET_ONESHOT);
+    LightEvent_Init(&sIdle, RESET_STICKY);
+    LightEvent_Signal(&sIdle);
+    svcGetThreadPriority(&priority, CUR_THREAD_HANDLE);
+    /* Above the game thread: it only ever waits on the mix it asked for. */
+    priority = priority > 0x18 ? priority - 1 : priority;
+    sWorker = threadCreate(Worker, NULL, 32 * 1024, priority, core, false);
+    if (sWorker == NULL && R_SUCCEEDED(APT_SetAppCpuTimeLimit(CTR_AUDIO_SYSCORE_PERCENT)))
+    {
+        core = 1;
+        sWorker = threadCreate(Worker, NULL, 32 * 1024, priority, core, false);
+    }
+    if (sWorker == NULL)
+    {
+        CtrLog_Write(CTR_LOG_AUDIO, "sound engine mixes on the game thread (no core to spare)");
+        return false;
+    }
+    sWorkerCore = core;
+    CtrLog_Write(CTR_LOG_AUDIO, "sound engine mixes on core %d", core);
+    return true;
+}
+
+bool CtrAudio_Kick(void)
+{
+    uint64_t start = svcGetSystemTick();
+
+    LightEvent_Wait(&sIdle);
+    sWaited += svcGetSystemTick() - start;
+    if (++sKicks == CTR_AUDIO_WAIT_WINDOW)
+    {
+        float waitMs = (float)(sWaited * 1000.0 / SYSCLOCK_ARM11 / sKicks);
+
+        sKicks = 0;
+        sWaited = 0;
+        if (sWorkerCore == 1 && waitMs > CTR_AUDIO_WAIT_LIMIT_MS)
+        {
+            /* The worker is idle and stays so: it is never kicked again. */
+            CtrLog_Write(CTR_LOG_AUDIO, "sound engine back on the game thread: it waited %.2f ms "
+                         "a frame for the system core", waitMs);
+            return false;
+        }
+    }
+    LightEvent_Clear(&sIdle);
+    LightEvent_Signal(&sKick);
+    return true;
+}
+
+void CtrAudio_LockSound(void)
+{
+    if (sWorker != NULL)
+        RecursiveLock_Lock(&sSoundLock);
+}
+
+void CtrAudio_UnlockSound(void)
+{
+    if (sWorker != NULL)
+        RecursiveLock_Unlock(&sSoundLock);
 }

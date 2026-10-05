@@ -60,6 +60,8 @@ void CtrPlatform_NoteBottom(float ms) { sTiming.bottomMs = ms; }
 
 bool CtrPlatform_Init(void)
 {
+    /* A New 3DS runs at 804 MHz with its L2 cache; an Old 3DS ignores this. */
+    osSetSpeedupEnable(true);
     gfxInitDefault();
     /* A New 3DS runs the application core at 804 MHz with its L2 cache when
      * asked; an Old 3DS ignores this. */
@@ -110,6 +112,25 @@ void CtrPlatform_ReportMemory(const char *stage)
     CtrLog_Write(CTR_LOG_BOOT, "memory %s: heap used=%u free=%u, linear free=%lu, VRAM free=%lu",
                  stage, (unsigned)info.uordblks, (unsigned)info.fordblks,
                  (unsigned long)linearSpaceFree(), (unsigned long)vramSpaceFree());
+}
+
+_Static_assert(sizeof(CtrLock) == sizeof(LightLock), "CtrLock is a LightLock");
+
+void CtrLock_Init(CtrLock *lock) { LightLock_Init((LightLock *)lock); }
+void CtrLock_Lock(CtrLock *lock) { LightLock_Lock((LightLock *)lock); }
+void CtrLock_Unlock(CtrLock *lock) { LightLock_Unlock((LightLock *)lock); }
+
+bool CtrPlatform_StartThread(void (*entry)(void *), void *arg, unsigned stack, int core)
+{
+    s32 priority = 0x30;
+
+    svcGetThreadPriority(&priority, CUR_THREAD_HANDLE);
+    return threadCreate(entry, arg, stack, priority < 0x3F ? priority + 1 : 0x3F, core, true) != NULL;
+}
+
+void CtrPlatform_SleepUs(unsigned microseconds)
+{
+    svcSleepThread((s64)microseconds * 1000);
 }
 
 void CtrPlatform_RequestExit(void) { sExit = true; }
@@ -181,6 +202,7 @@ void CtrPlatform_EndFrame(void)
     if (sTiming.workMs < 0) sTiming.workMs = 0;
     if (sTiming.workMs > sTiming.peakWorkMs) sTiming.peakWorkMs = sTiming.workMs;
     if (sTiming.workMs > 1000.0f / 60) ++sTiming.slowFrames;
+    CtrProf_EndFrame(sTiming.workMs, CtrVideo_GetStats()->waitMs, sFrames);
     sWaiting = false;
 }
 

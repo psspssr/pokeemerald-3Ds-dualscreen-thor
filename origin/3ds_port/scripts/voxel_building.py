@@ -81,14 +81,28 @@ SHADE_WOUND = 0.90
 
 # ── Art ─────────────────────────────────────────────────────────────────────
 
+_LAYOUTS = []
+# A metatile draws the same in every layout over the same tileset pair:
+# (primary, secondary, metatile, layer(s)) -> its subtiles, its image.
+_SUBTILES = {}
+_CELL_IMAGES = {}
+
+
+def _layouts_json():
+    """layouts.json, parsed once per process (LayoutArt only reads it)."""
+    if not _LAYOUTS:
+        _LAYOUTS.append(json.load(open(os.path.join(ROOT, "data", "layouts", "layouts.json"),
+                                       encoding="utf-8"))["layouts"])
+    return _LAYOUTS[0]
+
+
 class LayoutArt:
     """A layout's metatiles, composed the way the GBA composes them."""
 
     def __init__(self, layout_id):
         self.attrs = incbin_map(r"gMetatileAttributes_(\w+)\[\]\s*=\s*INCBIN_U16\(\"([^\"]+)\"\)")
         self.mts = incbin_map(r"gMetatiles_(\w+)\[\]\s*=\s*INCBIN_U16\(\"([^\"]+)\"\)")
-        layouts = json.load(open(os.path.join(ROOT, "data", "layouts", "layouts.json"),
-                                 encoding="utf-8"))["layouts"]
+        layouts = _layouts_json()
         entry = next(e for e in layouts if e["id"] == layout_id)
         self.layout_index = layouts.index(entry) + 1
         self.id = layout_id
@@ -108,7 +122,14 @@ class LayoutArt:
         return self.sm[(m - NUM_PRIMARY) * 8:(m - NUM_PRIMARY) * 8 + 8]
 
     def subtiles(self, m, layer):
-        """Four 8x8 blocks of (rgb, colour index), flips applied, row major."""
+        """Four 8x8 blocks of (rgb, colour index), flips applied, row major.
+        Shared between calls: callers only read them."""
+        key = (self.primary, self.secondary, m, layer)
+        if key not in _SUBTILES:
+            _SUBTILES[key] = self._subtiles(m, layer)
+        return _SUBTILES[key]
+
+    def _subtiles(self, m, layer):
         out = []
         for entry in self.entries(m)[layer * 4:layer * 4 + 4]:
             data = self.ts.subtile(entry & 0x3FF, (entry >> 12) & 0xF)
@@ -177,6 +198,12 @@ class LayoutArt:
     def cell_image(self, m, layers=(0, 1)):
         """A whole metatile as the ground renderer draws it (with `layers`
         (0,), its lower layer alone)."""
+        key = (self.primary, self.secondary, m, tuple(layers))
+        if key not in _CELL_IMAGES:
+            _CELL_IMAGES[key] = self._cell_image(m, layers)
+        return _CELL_IMAGES[key].copy()
+
+    def _cell_image(self, m, layers):
         img = Image.new("RGBA", (16, 16), (0, 0, 0, 255))
         px = img.load()
         low, high = self.subtiles(m, 0), self.subtiles(m, 1)

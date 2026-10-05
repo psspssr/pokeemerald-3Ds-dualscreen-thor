@@ -139,6 +139,7 @@ class MapEvents:
 
 
 _PAIRS = {}
+_ART_MEMO = {}    # (primary, secondary) -> Layout's foliage, treads, covers
 
 
 def pair_for(primary, secondary):
@@ -166,9 +167,10 @@ class Layout:
         self._memo = {}
         self._houses = None
         self._lamps = None
-        self._foliage = {}
-        self._treads = {}
-        self._covers = {}
+        # what a metatile's drawing says is the same in every layout over the
+        # same tilesets: shared by them
+        art = _ART_MEMO.setdefault((self.primary, self.secondary), ({}, {}, {}))
+        self._foliage, self._treads, self._covers = art
 
     # ── what the cartridge states ─────────────────────────────────────────
 

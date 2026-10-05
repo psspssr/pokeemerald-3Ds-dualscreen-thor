@@ -541,17 +541,75 @@ static const int8_t kCutFill[][2] = { { 0, 1 }, { -1, 1 }, { 1, 1 }, { -1, 0 }, 
 /* A cut tile's drawing, flat at its foot (the builder's lift), in the
  * relief's own grid: its quads meet the relief's at every lattice point and
  * leave no crack between them. */
-static void EmitCutGround(VoxelBuilder *b, int x, int y, float u0, float v0, float u1, float v1)
+/* Does the 4x4 pixel block (i, j) of a cut tile have rock in it? `rows` are
+ * the tile's background bits (VoxelRelief_CutVariant): a clear bit is rock. */
+static int CutRockPixels(const uint8_t *rows, int i, int j)
+{
+    int rock = 0;
+
+    for (int py = 4 * j; py < 4 * j + 4; ++py)
+    {
+        unsigned bits = (unsigned)rows[2 * py] | ((unsigned)rows[2 * py + 1] << 8);
+
+        for (int px = 4 * i; px < 4 * i + 4; ++px)
+            if (!((bits >> px) & 1u))
+                ++rock;
+    }
+    return rock;
+}
+
+static bool CutHasRock(const uint8_t *rows, int i, int j)
+{
+    return CutRockPixels(rows, i, j) > 0;
+}
+
+/*
+ * A cut tile's flat layer, at its foot. Where a block of the drawing has rock
+ * in it the layer is `gu0..` - the plain ground behind it - and where it is all
+ * background, the tile's own drawing (a shore's foam, a coast's edge): the
+ * rock the drawing carries, flat at the foot, was a second copy of the lifted
+ * rock, which the camera's perspective moves off it - a wedge stuck to the
+ * ground beside the mountain. With no rows or no ground, the whole tile.
+ */
+static void EmitCutGround(VoxelBuilder *b, int x, int y, float u0, float v0, float u1, float v1,
+                          const uint8_t *rows, const float *gnd, const int16_t *g, int floor)
 {
     const int n = VOXEL_RELIEF_SIDE - 1;
+    int lo = INT16_MAX, hi = INT16_MIN;
+    /* a mountain's rock, a level or more of it; a ledge's lip keeps its
+     * whole drawing flat under it, as it always had */
+    bool mountain;
 
+    for (int k = 0; g != NULL && k < VOXEL_RELIEF_SIDE * VOXEL_RELIEF_SIDE; ++k)
+    {
+        if (g[k] < lo) lo = g[k];
+        if (g[k] > hi) hi = g[k];
+    }
+    mountain = g != NULL && hi - lo >= 16;
     for (int j = 0; j < n; ++j)
         for (int i = 0; i < n; ++i)
         {
             float xa = x + i / (float)n, xb = x + (i + 1) / (float)n;
             float za = y + j / (float)n, zb = y + (j + 1) / (float)n;
-            float ua = u0 + (u1 - u0) * i / n, ub = u0 + (u1 - u0) * (i + 1) / n;
-            float va = v0 + (v1 - v0) * j / n, vb = v0 + (v1 - v0) * (j + 1) / n;
+            float ua, ub, va, vb;
+            int rock = rows != NULL ? CutRockPixels(rows, i, j) : 0;
+
+            /* a block that is mostly rock lying on the foot stays its own
+             * drawing: it is the flank itself there (EmitRelief leaves it to
+             * this layer). Anywhere the rock is lifted, its copy flat at the
+             * foot is a second outline beside the lifted one - a row of grey
+             * teeth along a flank's foot -, and the ground is drawn */
+            if (rows != NULL && gnd != NULL && rock > 0
+             && (rock < 12 || (mountain && !OnFloor(g, i, j, floor))))
+            {
+                ua = gnd[0] + (gnd[2] - gnd[0]) * i / n; ub = gnd[0] + (gnd[2] - gnd[0]) * (i + 1) / n;
+                va = gnd[1] + (gnd[3] - gnd[1]) * j / n; vb = gnd[1] + (gnd[3] - gnd[1]) * (j + 1) / n;
+            }
+            else
+            {
+                ua = u0 + (u1 - u0) * i / n; ub = u0 + (u1 - u0) * (i + 1) / n;
+                va = v0 + (v1 - v0) * j / n; vb = v0 + (v1 - v0) * (j + 1) / n;
+            }
 
             VoxelBuilder_Quad(b, &(VoxelVertex){xa, 0.0f, za, ua, va, SHADE_TOP},
                               &(VoxelVertex){xb, 0.0f, za, ub, va, SHADE_TOP},
@@ -565,7 +623,7 @@ static void EmitCutGround(VoxelBuilder *b, int x, int y, float u0, float v0, flo
  * drawn flat under it is that quad already, and the two would fight for
  * its depth. */
 static void EmitRelief(VoxelBuilder *b, int x, int y, const int16_t *g, const int16_t *s,
-                       int artY, int metatile, bool onFloor, int floor)
+                       int artY, int metatile, bool onFloor, int floor, const uint8_t *rows)
 {
     const int n = VOXEL_RELIEF_SIDE - 1;
     float u0, v0, u1, v1;
@@ -609,8 +667,18 @@ static void EmitRelief(VoxelBuilder *b, int x, int y, const int16_t *g, const in
             VoxelVertex p[4];
             static const int di[4] = { 0, 1, 1, 0 }, dj[4] = { 0, 0, 1, 1 };
 
+            float raise = 0.0f;
+
             if (onFloor && OnFloor(g, i, j, floor))
-                continue;
+            {
+                /* the flat layer under rock is plain ground (EmitCutGround):
+                 * rock on the foot is drawn, half a pixel over it */
+                int rock = rows != NULL ? CutRockPixels(rows, i, j) : 0;
+
+                if (rock == 0 || rock >= 12)
+                    continue;       /* all ground, or the flat layer is the rock itself */
+                raise = 0.5f / 16.0f;
+            }
 
             for (int k = 0; k < 4; ++k)
             {
@@ -623,7 +691,7 @@ static void EmitRelief(VoxelBuilder *b, int x, int y, const int16_t *g, const in
                 if (b->vertexFace)
                     shade = face[c * VOXEL_RELIEF_SIDE + a];
 #endif
-                p[k] = (VoxelVertex){ x + a / (float)n, h, y + c / (float)n + d,
+                p[k] = (VoxelVertex){ x + a / (float)n, h + raise, y + c / (float)n + d,
                                       u0 + (u1 - u0) * a / n, v0 + (v1 - v0) * c / n, shade };
             }
             VoxelBuilder_Quad(b, &p[0], &p[1], &p[2], &p[3]);
@@ -775,7 +843,8 @@ static void EmitSeamSkirt(VoxelBuilder *b, const VoxelMapInstance *inst, int x, 
  * level of it a level of the wall. Never the north edge, the back.
  */
 static void EmitCliffWalls(VoxelBuilder *b, const VoxelMapInstance *inst, int x, int y,
-                           const int16_t *g, const int16_t *s, int wall, int art, int artY)
+                           const int16_t *g, const int16_t *s, int wall, int art, int artY,
+                           unsigned sides)
 {
     static const int16_t kLevel[VOXEL_RELIEF_SIDE * VOXEL_RELIEF_SIDE];
     const int n = VOXEL_RELIEF_SIDE - 1, R = VOXEL_RELIEF_SIDE;
@@ -818,6 +887,12 @@ static void EmitCliffWalls(VoxelBuilder *b, const VoxelMapInstance *inst, int x,
                 ia = n * R + k; ib = n * R + k + 1; ic = k; id = k + 1;
             }
             if (g[ia] - o[ic] <= 0 && g[ib] - o[id] <= 0)
+                continue;
+            /* The edge column's pixels of this stretch that the tile clears
+             * are the ground beside the rock, not rock: no wall stands on
+             * them (a flank's sand corner hung from the rock as a flat
+             * yellow triangle) */
+            if (d < 2 && !((sides >> ((d == 0 ? 0u : 4u) + (unsigned)k)) & 1u))
                 continue;
             ta = g[ia] / 16.0f; tb = g[ib] / 16.0f;
             ba = (g[ia] > o[ic] ? o[ic] : g[ia]) / 16.0f;
@@ -942,7 +1017,9 @@ void VoxelMesh_EmitGroundRow(VoxelBuilder *builder, const VoxelMapInstance *inst
                 bool sign = VoxelSign_IsCell(inst, x, y);
                 float foot, u0, v0, u1, v1;
                 int ground = -1, art = -1, wall = -1;
-                int cut = sign ? -1 : VoxelRelief_Cut(inst, x, y, &foot, &ground, &wall);
+                unsigned sides = 0xFF;
+                const uint8_t *cutRows = NULL;
+                int cut = sign ? -1 : VoxelRelief_Cut(inst, x, y, &foot, &ground, &wall, &sides);
 
                 /*
                  * A cut tile (voxel_relief.h): the cell's own drawing lies
@@ -959,16 +1036,46 @@ void VoxelMesh_EmitGroundRow(VoxelBuilder *builder, const VoxelMapInstance *inst
                  */
                 if (cut == VOXEL_RELIEF_NO_VARIANT)
                 {
+                    const int16_t *north = VoxelWorld_GetInstanceAt(x, y - 1) == inst
+                                         ? VoxelRelief_Cell(inst, x, y - 1) : NULL;
+
+                    if ((sides & VOXEL_RELIEF_GOES_ON) && north != NULL)
+                    {
+                        /* the flank north of this top goes on under it, a row
+                         * on and a pixel down, its own drawing (its cut
+                         * variant if it has one) */
+                        float nf, a0, b0, a1, b1;
+                        int ng, nw, nart = -1;
+                        unsigned ns;
+                        int nc = VoxelRelief_Cut(inst, x, y - 1, &nf, &ng, &nw, &ns);
+
+                        if (nc >= 0 && nc < (int)VOXEL_CUTS
+                         && MetatileUV(builder, (int)(VOXEL_CUT_FIRST + (unsigned)nc), &a0, &b0, &a1, &b1))
+                            nart = (int)(VOXEL_CUT_FIRST + (unsigned)nc);
+                        builder->lift = -1.0f / 16.0f;
+                        builder->shift = builder->lift;
+                        EmitRelief(builder, x, y, north, VoxelRelief_Depth(inst, x, y - 1), y - 1, nart,
+                                   false, 0, NULL);
+                        builder->lift = 0.0f;
+                        builder->shift = 0.0f;
+                    }
                     if (ground >= 0 && MetatileUV(builder, ground, &u0, &v0, &u1, &v1))
                     {
                         /* under a cut tile's own run on (kCutFill), and two
                          * pixels past the cell all round: the floors beside
                          * it stand a pixel or two higher, and a ray between
-                         * them would find the clear colour */
-                        builder->lift = foot - 2.0f / 16.0f;
+                         * them would find the clear colour. Those of cells
+                         * side by side overlap: a hair apart, by parity, so
+                         * two drawings never share a plane */
+                        builder->lift = foot - (2.0f + 0.125f * (float)((x + y) & 1)) / 16.0f;
                         builder->shift = builder->lift;
+                        /* sunlit as the open ground it stands for: under
+                         * the terrain's own heights every ray is stopped,
+                         * and the fill came out as a shadowed olive patch */
+                        builder->lightingConstant = 1.0f;
                         VoxelMesh_Top(builder, (float)x, (float)y, 0.0f, -2.0f / 16.0f,
                                       u0, v0, u1, v1, SHADE_TOP);
+                        builder->lightingConstant = -1.0f;
                         builder->lift = 0.0f;
                         builder->shift = 0.0f;
                     }
@@ -984,7 +1091,27 @@ void VoxelMesh_EmitGroundRow(VoxelBuilder *builder, const VoxelMapInstance *inst
                 {
                     builder->lift = foot;
                     builder->shift = foot;
-                    EmitCutGround(builder, x, y, u0, v0, u1, v1);
+                    /*
+                     * Its flat layer: the tile's own drawing, or - when all
+                     * its background is the plain ground (flag 0x100) - that
+                     * ground itself. The rock the drawing carries, flat at
+                     * the foot, showed as a dark wedge on the sand wherever
+                     * the lifted rock did not cover it.
+                     */
+                    {
+                        unsigned vLayout = 0, vMetatile = 0;
+                        float gnd[4];
+
+                        if (ground >= 0 && VoxelRelief_CutVariant((unsigned)cut, &vLayout, &vMetatile, &cutRows)
+                         && MetatileUV(builder, ground, &gnd[0], &gnd[1], &gnd[2], &gnd[3]))
+                            EmitCutGround(builder, x, y, u0, v0, u1, v1, cutRows, gnd,
+                                          relief, (int)lroundf(foot * 16.0f));
+                        else
+                        {
+                            cutRows = NULL;
+                            EmitCutGround(builder, x, y, u0, v0, u1, v1, NULL, NULL, relief, 0);
+                        }
+                    }
                     /* and the ground behind it, run on under the rock beside
                      * it, a pixel under its own level: only ever seen through
                      * the clear background, never beside anything drawn */
@@ -999,21 +1126,38 @@ void VoxelMesh_EmitGroundRow(VoxelBuilder *builder, const VoxelMapInstance *inst
                             for (unsigned g = 0; n != NULL && g < VOXEL_RELIEF_SIDE * VOXEL_RELIEF_SIDE; ++g)
                                 if (n[g] > top)
                                     top = n[g];
+                            float nu0 = u0, nv0 = v0, nu1 = u1, nv1 = v1, nfoot;
+                            int nground, nwall;
+                            unsigned nsides;
+
                             if (n == NULL || top <= (int)lroundf(foot * 16.0f))
                                 continue;
-                            builder->lift = foot - 1.0f / 16.0f;
+                            /* what runs on under the neighbour is the ground
+                             * the neighbour itself stands on, if it has one of
+                             * its own: this tile's sea under the next tile's
+                             * sand was a bar of water across the beach */
+                            if (VoxelRelief_Cut(inst, nx, ny, &nfoot, &nground, &nwall, &nsides) != -1 && nground >= 0
+                             && !MetatileUV(builder, nground, &nu0, &nv0, &nu1, &nv1))
+                            {
+                                nu0 = u0; nv0 = v0; nu1 = u1; nv1 = v1;
+                            }
+                            /* a hair apart by side: two cut tiles may run
+                             * their grounds on under the same cell */
+                            builder->lift = foot - (1.0f + 0.125f * (float)k) / 16.0f;
                             builder->shift = builder->lift;
+                            builder->lightingConstant = 1.0f;
                             VoxelMesh_Top(builder, (float)nx, (float)ny, 0.0f, -2.0f / 16.0f,
-                                          u0, v0, u1, v1, SHADE_TOP);
+                                          nu0, nv0, nu1, nv1, SHADE_TOP);
+                            builder->lightingConstant = -1.0f;
                         }
                     builder->lift = 0.0f;
                     builder->shift = 0.0f;
                 }
                 EmitRelief(builder, x, y, relief, VoxelRelief_Depth(inst, x, y),
-                           sign ? y + 1 : y, art, cut >= 0, (int)lroundf(foot * 16.0f));
+                           sign ? y + 1 : y, art, cut >= 0, (int)lroundf(foot * 16.0f), cutRows);
                 if (wall >= 0)
                     EmitCliffWalls(builder, inst, x, y, relief, VoxelRelief_Depth(inst, x, y), wall,
-                                   art, sign ? y + 1 : y);
+                                   art, sign ? y + 1 : y, sides);
                 if (VoxelRelief_IsSlope(relief))
                 {
                     /* A signpost at the foot of a face stands on the ground

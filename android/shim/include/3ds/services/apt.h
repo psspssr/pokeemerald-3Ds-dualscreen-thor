@@ -50,9 +50,10 @@ void aptHook(aptHookCookie *cookie, aptHookFn callback, void *param);
 void aptUnhook(aptHookCookie *cookie);
 /* Reports a New 3DS: what a phone's CPU and memory compare to. */
 Result APT_CheckNew3DS(bool *out);
-/* Accept the 3DS system-core scheduling hint. Android schedules the app's
+/* Retain the 3DS system-core scheduling hint. Android schedules the app's
  * pthread workers itself; this does not impose a process CPU quota. */
 Result APT_SetAppCpuTimeLimit(u32 percent);
+Result APT_GetAppCpuTimeLimit(u32 *percent);
 
 #ifdef __cplusplus
 }

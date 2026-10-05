@@ -198,10 +198,20 @@ static unsigned sRayCount;
 static VoxelGpuVertex *sMotes;
 /* This frame's bloom strength, for the 2D compositor (CtrVoxel_Bloom). */
 static float sBloomStrength;
+/* The fog's drifting banks and the dark of a cave (FogSheets, MakeGloom). */
+static C3D_Tex sFogTex, sGloomTex;
+static VoxelGpuVertex *sFogSheets;
+static bool sHaveFog, sHaveGloom, sOwnsFog;
+static float sGloomAmount;
+#if CTR_VOXEL_LIGHTING
+static float sGloomX, sGloomY;
+#endif
 #if CTR_VOXEL_LIGHTING
 static void MakeDapple(void);
 static void MakeRays(void);
 static void MakeMotes(void);
+static void MakeFog(void);
+static void MakeGloom(void);
 static void FadeFor(bool sprites);
 #endif
 static VoxelVertex *sScratch;          /* chunk builder output, ordinary heap */
@@ -692,6 +702,31 @@ static void CameraMatrices(C3D_Mtx *projection, C3D_Mtx *view, bool fit)
                FVec3_New(0.0f, 1.0f, 0.0f), false);
 }
 
+bool CtrVoxel_ProjectPictureTile(float tileX, float tileY, float *screenX, float *screenY)
+{
+    C3D_Mtx projection, view;
+    float playerX, playerZ, x, y, z, vx, vy, vz, tanY;
+
+    if (!sReady)
+        return false;
+    VoxelEntities_GetPlayerWorldPos(&playerX, &playerZ);
+    CameraMatrices(&projection, &view, false);
+    /* A tile up in the air: seen from above, what stands a tile high is a
+     * tile further up the picture than the floor under it. */
+    x = playerX + 0.5f + tileX;
+    z = playerZ + 0.5f + tileY + 1.0f;
+    y = sCamera.ground + 1.0f;
+    vx = view.r[0].x * x + view.r[0].y * y + view.r[0].z * z + view.r[0].w;
+    vy = view.r[1].x * x + view.r[1].y * y + view.r[1].z * z + view.r[1].w;
+    vz = view.r[2].x * x + view.r[2].y * y + view.r[2].z * z + view.r[2].w;
+    if (vz > -VOXEL_NEAR)
+        return false;
+    tanY = tanf(C3D_AngleFromDegrees(sCamera.fov) * 0.5f);
+    *screenX = (vx / -vz / (tanY * (float)CTR_GAME_WIDTH / (float)CTR_GAME_HEIGHT) + 1.0f) * 0.5f * CTR_GAME_WIDTH;
+    *screenY = (1.0f - vy / -vz / tanY) * 0.5f * CTR_GAME_HEIGHT;
+    return true;
+}
+
 static void GrowRect(float *rect, float x, float z)
 {
     if (x < rect[0]) rect[0] = x;
@@ -1049,9 +1084,14 @@ static void StreamStart(void)
      * the application core, below the game's priority, the worker only ran
      * while the game waited for the display - and not at all through the
      * long frames of a warm-up, which is exactly when a new map's pages are
-     * wanted. A slice is 128 KiB read and graded: far inside 30%.
+     * wanted. A slice is 128 KiB read and graded: far inside 30%. The sound
+     * engine's mixer may already have asked for more of that core
+     * (CtrAudio_StartWorker): never lower it.
      */
-    if (R_SUCCEEDED(APT_SetAppCpuTimeLimit(30)))
+    u32 limit = 0;
+
+    if ((R_SUCCEEDED(APT_GetAppCpuTimeLimit(&limit)) && limit >= 30)
+        || R_SUCCEEDED(APT_SetAppCpuTimeLimit(30)))
         sStream.thread = threadCreate(StreamWorker, NULL, 16 * 1024, priority, 1, false);
     if (sStream.thread != NULL)
         sStream.systemCore = true;
@@ -1632,6 +1672,8 @@ bool CtrVoxel_Init(void)
     MakeDapple();
     MakeRays();
     MakeMotes();
+    MakeFog();
+    MakeGloom();
 #endif
 
     /* Not fatal: without models the houses fall back to the region path. */
@@ -1715,6 +1757,19 @@ void CtrVoxel_Shutdown(void)
     sRayCount = 0;
     linearFree(sMotes);
     sMotes = NULL;
+    if (sFogTex.data != NULL)
+    {
+        C3D_TexDelete(&sFogTex);
+        memset(&sFogTex, 0, sizeof(sFogTex));
+    }
+    if (sGloomTex.data != NULL)
+    {
+        C3D_TexDelete(&sGloomTex);
+        memset(&sGloomTex, 0, sizeof(sGloomTex));
+    }
+    linearFree(sFogSheets);
+    sFogSheets = NULL;
+    sHaveFog = sHaveGloom = sOwnsFog = false;
     for (unsigned i = 0; i < VOXEL_BUILDING_PAGES; ++i)
     {
         memset(&sPageSlots[i], 0, sizeof(sPageSlots[i]));
@@ -4603,12 +4658,83 @@ typedef struct
     float rays;                  /* the sun rays' strength at their brightest */
     float bloom;                 /* glow around the brightest parts (3ds_video.c) */
     float motes;                 /* the sunlit dust in the air, at its brightest */
+    float hazeRgb[3];            /* what the distance fades to */
+    float hazeStart, hazeRamp;   /* x the eye-to-player distance, see SetGrade */
 } VoxelLight;
+
+#if CTR_VOXEL_LIGHTING
+static VoxelLight LightMix(const VoxelLight *a, const VoxelLight *b, float t)
+{
+    VoxelLight out = *a;
+
+    for (int i = 0; i < 3; ++i)
+    {
+        out.sun[i] += (b->sun[i] - a->sun[i]) * t;
+        out.shade[i] += (b->shade[i] - a->shade[i]) * t;
+        out.hazeRgb[i] += (b->hazeRgb[i] - a->hazeRgb[i]) * t;
+    }
+    out.haze += (b->haze - a->haze) * t;
+    out.dappleLow += (b->dappleLow - a->dappleLow) * t;
+    out.dappleHigh += (b->dappleHigh - a->dappleHigh) * t;
+    out.rays += (b->rays - a->rays) * t;
+    out.bloom += (b->bloom - a->bloom) * t;
+    out.motes += (b->motes - a->motes) * t;
+    out.hazeStart += (b->hazeStart - a->hazeStart) * t;
+    out.hazeRamp += (b->hazeRamp - a->hazeRamp) * t;
+    return out;
+}
+
+/*
+ * The game's fog, as light. Outdoors a pale veil that closes in from much
+ * nearer than the clear-day haze. Under the ground there is no sun to break
+ * into dapples: the light goes cold and dim, and the distance sinks into a
+ * blue-black instead of whitening, so the far end of a tunnel is lost in the
+ * dark (the fog's drifting banks, FogSheets, stay pale in front of it). Both
+ * come in with the fog's own blend, so a fog that fades in or out takes the
+ * light with it.
+ */
+static VoxelLight FogLight(const VoxelLight *clear, bool cave)
+{
+    VoxelLight fog = *clear;
+
+    if (cave)
+    {
+        fog.sun[0] = 0.76f; fog.sun[1] = 0.80f; fog.sun[2] = 0.88f;
+        fog.shade[0] = 0.58f; fog.shade[1] = 0.64f; fog.shade[2] = 0.78f;
+        fog.haze = 0.86f;
+        fog.dappleLow = fog.dappleHigh = 1.0f;
+        fog.hazeRgb[0] = 0.10f; fog.hazeRgb[1] = 0.12f; fog.hazeRgb[2] = 0.17f;
+        fog.hazeStart = 0.86f;
+        fog.hazeRamp = 0.55f;
+        fog.rays = 0.0f;
+        fog.bloom = 0.0f;
+        fog.motes = 0.0f;
+    }
+    else
+    {
+        /* Fog glows: more bloom, and no dust or rays to see in it. */
+        fog.sun[0] = 0.95f; fog.sun[1] = 0.98f; fog.sun[2] = 1.00f;
+        fog.haze = 0.70f;
+        fog.dappleLow = 0.95f; fog.dappleHigh = 1.02f;
+        fog.rays = 0.0f;
+        fog.bloom = 0.18f;
+        fog.motes = 0.0f;
+        fog.hazeRgb[0] = 0.80f; fog.hazeRgb[1] = 0.83f; fog.hazeRgb[2] = 0.87f;
+        fog.hazeStart = 0.80f;
+        fog.hazeRamp = 0.65f;
+    }
+    return LightMix(clear, &fog, VoxelWorld_FogDensity());
+}
+#endif
 
 static VoxelLight LightFor(bool indoor)
 {
     VoxelLight light = {{1.00f, 0.99f, 0.95f}, {0.93f, 0.97f, 1.05f}, VOXEL_HAZE_MAX,
-                        0.96f, 1.04f, 0.11f, 0.07f, 0.85f};
+                        0.96f, 1.04f, 0.11f, 0.07f, 0.85f,
+                        {(VOXEL_HAZE_COLOUR & 255) / 255.0f,
+                         ((VOXEL_HAZE_COLOUR >> 8) & 255) / 255.0f,
+                         ((VOXEL_HAZE_COLOUR >> 16) & 255) / 255.0f},
+                        VOXEL_HAZE_START, VOXEL_HAZE_RAMP};
 
 #if CTR_VOXEL_LIGHTING
     if (!indoor)
@@ -4634,13 +4760,7 @@ static VoxelLight LightFor(bool indoor)
             light.motes = 0.0f;
             break;
         case VOXEL_WEATHER_FOG:
-            /* Fog glows: more bloom, and no dust to see in it. */
-            light.sun[0] = 0.95f; light.sun[1] = 0.98f; light.sun[2] = 1.00f;
-            light.haze = 0.52f;
-            light.dappleLow = 0.95f; light.dappleHigh = 1.02f;
-            light.rays = 0.0f;
-            light.bloom = 0.18f;
-            light.motes = 0.0f;
+            light = FogLight(&light, VoxelWorld_Underground());
             break;
         case VOXEL_WEATHER_PARTICLES:
             /* The weather's own ash or sand fills the air instead. */
@@ -4679,8 +4799,8 @@ static VoxelLight LightFor(bool indoor)
 static void SetGrade(const VoxelLight *light)
 {
     float eye = sCamera.distance / cosf(C3D_AngleFromDegrees(sCamera.pitch));
-    float fogStart = eye * VOXEL_HAZE_START;
-    float fogScale = light->haze / (eye * VOXEL_HAZE_RAMP);
+    float fogStart = eye * light->hazeStart;
+    float fogScale = light->haze / (eye * light->hazeRamp);
 
     /* Halved: the texture environment scales by two. */
     C3D_FVUnifSet(GPU_VERTEX_SHADER, sUniShadeTint,
@@ -5112,6 +5232,161 @@ static void DappleUniforms(int worldX, int worldZ)
     C3D_FVUnifSet(GPU_VERTEX_SHADER, sUniDappleV,
                   -s * sv, (c * VOXEL_SUN_DZ - s * VOXEL_SUN_DX) * sv, c * sv, v0 - floorf(v0));
 }
+
+/*
+ * The game's fog, in the scene instead of over it.
+ *
+ * On the GBA the fog is one 64x64 picture scrolled across the screen by
+ * twenty blended sprites. Laid flat over a 3D view it hid the world like a
+ * pane of frosted glass, and it moved with the screen instead of the ground.
+ * Here it is two banks of drifting mist lying over the ground: one low, about
+ * the player's knees, and one at chest height. Each is a single horizontal
+ * sheet around the camera, textured with soft tileable noise and blended in
+ * after everything else, depth tested but never written: a wall or a tree
+ * that rises through a bank parts it, a sprite stands in it to the height the
+ * bank reaches, and the banks thin and darken into the distance haze like
+ * the ground under them.
+ *
+ * The cost is two draws of 384 vertices built once at start-up, one texture
+ * read per covered pixel and a 16 KiB texture; the banks slide by moving the
+ * sheet, never by rewriting it. They come in and leave with the game's fog
+ * (VoxelWorld_FogDensity), and the compositor drops the flat sprites while
+ * they are up (CtrVoxel_DrawsFog).
+ */
+#define VOXEL_FOG_DIM 128
+#define VOXEL_FOG_GRID 8           /* cells along each side of a sheet */
+#define VOXEL_FOG_REACH 32.0f      /* tiles from the sheet's centre to its side */
+#define VOXEL_FOG_FADE 0.55f       /* ... share of that reach at which it starts to thin */
+#define VOXEL_FOG_SHEET_VERTICES (VOXEL_FOG_GRID * VOXEL_FOG_GRID * 6)
+
+static const struct
+{
+    float period;       /* tiles the pattern covers before it repeats */
+    float height;       /* tiles above the player's ground */
+    float driftX, driftZ; /* tiles per second */
+    float strength;     /* the most the bank covers, at full fog */
+} sFogBanks[2] = {
+    {12.0f, 0.30f, -0.55f, 0.00f, 0.58f},
+    {7.0f, 1.10f, -0.85f, -0.25f, 0.34f},
+};
+
+/*
+ * Wisps rather than a wash: four octaves of the dapples' noise, thresholded
+ * so that clear gaps open between the banks. A8: only coverage is stored,
+ * the colour is a constant of the frame.
+ */
+static void MakeFog(void)
+{
+    static const struct
+    {
+        int period;
+        float weight;
+    } octaves[] = {{4, 1.0f}, {8, 0.55f}, {16, 0.30f}, {32, 0.12f}};
+    uint8_t *texels;
+
+    sFogSheets = linearAlloc(2 * VOXEL_FOG_SHEET_VERTICES * sizeof(VoxelGpuVertex));
+    if (sFogSheets == NULL || !C3D_TexInit(&sFogTex, VOXEL_FOG_DIM, VOXEL_FOG_DIM, GPU_A8))
+    {
+        CtrLog_Write(CTR_LOG_ERROR, "VOXEL: no linear memory for the fog");
+        linearFree(sFogSheets);
+        sFogSheets = NULL;
+        return;
+    }
+    texels = sFogTex.data;
+    for (unsigned y = 0; y < VOXEL_FOG_DIM; ++y)
+        for (unsigned x = 0; x < VOXEL_FOG_DIM; ++x)
+        {
+            float n = 0.0f, total = 0.0f, t;
+
+            for (unsigned o = 0; o < sizeof(octaves) / sizeof(octaves[0]); ++o)
+            {
+                float scale = (float)octaves[o].period / VOXEL_FOG_DIM;
+
+                n += octaves[o].weight * DappleNoise((float)x * scale, (float)y * scale,
+                                                     octaves[o].period, o + 11);
+                total += octaves[o].weight;
+            }
+            t = (n / total - 0.32f) / 0.40f;
+            t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+            texels[CtrVideo_Texel(x, y, VOXEL_FOG_DIM)] =
+                (uint8_t)(t * t * (3.0f - 2.0f * t) * 255.0f + 0.5f);
+        }
+    C3D_TexSetFilter(&sFogTex, GPU_LINEAR, GPU_LINEAR);
+    C3D_TexSetWrap(&sFogTex, GPU_REPEAT, GPU_REPEAT);
+    C3D_TexFlush(&sFogTex);
+
+    /*
+     * The sheets: a grid around their own centre, the pattern in world tiles
+     * (so it repeats every `period` tiles across the sheet), and in the shade
+     * the coverage at that vertex, falling to nothing towards the rim so the
+     * sheet has no edge to see.
+     */
+    for (unsigned bank = 0; bank < 2; ++bank)
+    {
+        static VoxelVertex quad[VOXEL_FOG_SHEET_VERTICES];
+        float cell = 2.0f * VOXEL_FOG_REACH / VOXEL_FOG_GRID;
+        unsigned n = 0;
+
+        for (unsigned gz = 0; gz < VOXEL_FOG_GRID; ++gz)
+            for (unsigned gx = 0; gx < VOXEL_FOG_GRID; ++gx)
+            {
+                static const unsigned corners[6][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
+
+                for (unsigned k = 0; k < 6; ++k)
+                {
+                    float x = -VOXEL_FOG_REACH + (float)(gx + corners[k][0]) * cell;
+                    float z = -VOXEL_FOG_REACH + (float)(gz + corners[k][1]) * cell;
+                    float r = sqrtf(x * x + z * z) / VOXEL_FOG_REACH;
+                    float edge = (1.0f - r) / (1.0f - VOXEL_FOG_FADE);
+
+                    edge = edge < 0.0f ? 0.0f : edge > 1.0f ? 1.0f : edge;
+                    quad[n].x = x;
+                    quad[n].y = 0.0f;
+                    quad[n].z = z;
+                    quad[n].u = x / sFogBanks[bank].period;
+                    quad[n].v = z / sFogBanks[bank].period;
+                    quad[n].shade = edge * edge * (3.0f - 2.0f * edge);
+                    ++n;
+                }
+            }
+        Pack(quad, n, sFogSheets + bank * VOXEL_FOG_SHEET_VERTICES);
+    }
+    sHaveFog = true;
+}
+
+/*
+ * The dark of a cave: alpha rising from nothing round the centre to full at
+ * the rim, and full beyond it (clamped). Laid in black over the frame by the
+ * compositor, centred on the player (CtrVoxel_Gloom).
+ */
+#define VOXEL_GLOOM_DIM 64
+#define VOXEL_GLOOM_INNER 0.30f /* share of the radius left clear */
+#define VOXEL_GLOOM_SIZE 520.0f /* pixels across the ring, on the 400x240 view */
+#define VOXEL_GLOOM_MAX 0.62f   /* how dark the rim is, at full fog */
+
+static void MakeGloom(void)
+{
+    uint8_t *texels;
+
+    if (!C3D_TexInit(&sGloomTex, VOXEL_GLOOM_DIM, VOXEL_GLOOM_DIM, GPU_A8))
+        return;
+    texels = sGloomTex.data;
+    for (unsigned y = 0; y < VOXEL_GLOOM_DIM; ++y)
+        for (unsigned x = 0; x < VOXEL_GLOOM_DIM; ++x)
+        {
+            float dx = ((float)x + 0.5f) / (VOXEL_GLOOM_DIM * 0.5f) - 1.0f;
+            float dy = ((float)y + 0.5f) / (VOXEL_GLOOM_DIM * 0.5f) - 1.0f;
+            float t = (sqrtf(dx * dx + dy * dy) - VOXEL_GLOOM_INNER) / (1.0f - VOXEL_GLOOM_INNER);
+
+            t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+            texels[CtrVideo_Texel(x, y, VOXEL_GLOOM_DIM)] =
+                (uint8_t)(t * t * (3.0f - 2.0f * t) * 255.0f + 0.5f);
+        }
+    C3D_TexSetFilter(&sGloomTex, GPU_LINEAR, GPU_LINEAR);
+    C3D_TexSetWrap(&sGloomTex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
+    C3D_TexFlush(&sGloomTex);
+    sHaveGloom = true;
+}
 #endif
 
 static bool DapplesOn(const VoxelLight *light)
@@ -5264,16 +5539,16 @@ static void PrepareFades(void)
     sSpriteFade = FadeThen(none, sBrightObj, target);
 }
 
+/* What the distance fades to this frame (VoxelLight.hazeRgb). */
+static float sHazeRgb[3];
+
 /* The haze colour a sprite pass uses: the world's, faded as the world is. */
 static uint32_t SpriteHaze(void)
 {
-    const float haze[3] = {(VOXEL_HAZE_COLOUR & 255) / 255.0f,
-                           ((VOXEL_HAZE_COLOUR >> 8) & 255) / 255.0f,
-                           ((VOXEL_HAZE_COLOUR >> 16) & 255) / 255.0f};
     float rgb[3];
 
     for (int c = 0; c < 3; ++c)
-        rgb[c] = haze[c] + (sWorldFade.rgb[c] - haze[c]) * sWorldFade.amount;
+        rgb[c] = sHazeRgb[c] + (sWorldFade.rgb[c] - sHazeRgb[c]) * sWorldFade.amount;
     return FadeColour(1.0f, rgb);
 }
 
@@ -5297,9 +5572,117 @@ static void FadeTexEnv(const VoxelFade *fade)
 /* Environments 3 and 4 for what is drawn next: the world's or a sprite's. */
 static void FadeFor(bool sprites)
 {
-    HazeTexEnv(sprites ? SpriteHaze() : VOXEL_HAZE_COLOUR);
+    HazeTexEnv(sprites ? SpriteHaze() : FadeColour(1.0f, sHazeRgb));
     FadeTexEnv(sprites ? &sSpriteFade : &sWorldFade);
 }
+
+/* Outdoors and under the ground; a building keeps the game's own sprites. */
+bool CtrVoxel_DrawsFog(void)
+{
+    return sReady && sOwnsFog;
+}
+
+const C3D_Tex *CtrVoxel_Gloom(float *x, float *y, float *size, float *amount)
+{
+#if CTR_VOXEL_LIGHTING
+    if (!sReady || !sHaveGloom || sGloomAmount <= 0.0f)
+        return NULL;
+    *x = sGloomX;
+    *y = sGloomY;
+    *size = VOXEL_GLOOM_SIZE;
+    *amount = sGloomAmount;
+    return &sGloomTex;
+#else
+    (void)x;
+    (void)y;
+    (void)size;
+    (void)amount;
+    return NULL;
+#endif
+}
+
+#if CTR_VOXEL_LIGHTING
+/*
+ * The two banks (MakeFog), after the sprites. Each sheet is centred on the
+ * camera, moved in whole repeats of its pattern plus the drift, so the mist
+ * stays put on the ground as the player walks and only the wind moves it.
+ * The grade is the identity with the frame's haze kept, so the shade carries
+ * the coverage unchanged (alpha = texture x shade, doubled back) while the
+ * haze still sinks the far banks into the distance colour.
+ */
+static void DrawFogBanks(const C3D_Mtx *view, const VoxelLight *light, bool cave, float density)
+{
+    double seconds = (double)svcGetSystemTick() / SYSCLOCK_ARM11;
+    VoxelLight graded = *light;
+    uint32_t colour = cave ? 0xFFBFAB9Eu : 0xFFF2EBE6u; /* 0xAABBGGRR */
+    C3D_TexEnv *env;
+
+    for (int c = 0; c < 3; ++c)
+        graded.sun[c] = graded.shade[c] = 1.0f;
+    SetGrade(&graded);
+    C3D_TexBind(0, &sFogTex);
+    C3D_AlphaTest(false, GPU_ALWAYS, 0);
+    C3D_DepthTest(true, GPU_GREATER, GPU_WRITE_COLOR);
+    C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD,
+                   GPU_SRC_ALPHA, GPU_ONE_MINUS_SRC_ALPHA, GPU_ZERO, GPU_ONE);
+    BindVertices(sFogSheets);
+
+    for (unsigned bank = 0; bank < 2; ++bank)
+    {
+        float period = sFogBanks[bank].period;
+        float dx = (float)fmod(seconds * sFogBanks[bank].driftX, period);
+        float dz = (float)fmod(seconds * sFogBanks[bank].driftZ, period);
+        float strength = sFogBanks[bank].strength * density;
+        C3D_Mtx model;
+
+        Mtx_Copy(&model, view);
+        Mtx_Translate(&model, floorf(sCamera.targetX / period) * period + dx,
+                      sCamera.ground + sFogBanks[bank].height,
+                      floorf(sCamera.targetZ / period) * period + dz, true);
+        C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, sUniModelView, &model);
+
+        /* 0: the fog colour, coverage = texture x shade, doubled. */
+        env = C3D_GetTexEnv(0);
+        C3D_TexEnvInit(env);
+        C3D_TexEnvSrc(env, C3D_RGB, GPU_CONSTANT, GPU_CONSTANT, GPU_CONSTANT);
+        C3D_TexEnvFunc(env, C3D_RGB, GPU_REPLACE);
+        C3D_TexEnvSrc(env, C3D_Alpha, GPU_TEXTURE0, GPU_PRIMARY_COLOR, GPU_PRIMARY_COLOR);
+        C3D_TexEnvOpAlpha(env, GPU_TEVOP_A_SRC_ALPHA, GPU_TEVOP_A_SRC_R, GPU_TEVOP_A_SRC_ALPHA);
+        C3D_TexEnvFunc(env, C3D_Alpha, GPU_MODULATE);
+        C3D_TexEnvScale(env, C3D_Alpha, GPU_TEVSCALE_2);
+        C3D_TexEnvColor(env, colour);
+        /* 1: x the bank's strength. */
+        env = C3D_GetTexEnv(1);
+        C3D_TexEnvInit(env);
+        C3D_TexEnvSrc(env, C3D_Alpha, GPU_PREVIOUS, GPU_CONSTANT, GPU_CONSTANT);
+        C3D_TexEnvFunc(env, C3D_Alpha, GPU_MODULATE);
+        C3D_TexEnvColor(env, (uint32_t)(strength * 255.0f + 0.5f) << 24);
+        /* 2: through - the dapples' stage would modulate by this texture. */
+        C3D_TexEnvInit(C3D_GetTexEnv(2));
+        C3D_DrawArrays(GPU_TRIANGLES, (int)(bank * VOXEL_FOG_SHEET_VERTICES),
+                       VOXEL_FOG_SHEET_VERTICES);
+    }
+    C3D_DepthTest(true, GPU_GREATER, GPU_WRITE_ALL);
+    TerrainTexEnv(NULL);
+    SetGrade(light);
+}
+
+/* Where the player is on the logical surface, for the dark of a cave. */
+static void PlaceGloom(const C3D_Mtx *projection, const C3D_Mtx *view)
+{
+    C3D_FVec eye = Mtx_MultiplyFVec4(view, FVec4_New(sCamera.targetX, sCamera.ground + 1.0f,
+                                                      sCamera.targetZ, 1.0f));
+    C3D_FVec clip = Mtx_MultiplyFVec4(projection, eye);
+
+    sGloomX = CTR_GAME_WIDTH * 0.5f;
+    sGloomY = CTR_GAME_HEIGHT * 0.5f;
+    if (clip.w > 0.0001f)
+    {
+        sGloomX = (clip.x / clip.w + 1.0f) * 0.5f * CTR_GAME_WIDTH;
+        sGloomY = (1.0f - clip.y / clip.w) * 0.5f * CTR_GAME_HEIGHT;
+    }
+}
+#endif
 
 void CtrVoxel_Draw(C3D_RenderTarget *target, float eyeOffset)
 {
@@ -5310,18 +5693,36 @@ void CtrVoxel_Draw(C3D_RenderTarget *target, float eyeOffset)
     bool indoor = current != NULL && current->indoor;
     VoxelLight light = LightFor(indoor), unlit = LightFor(true);
     bool dapples = DapplesOn(&light);
+#if CTR_VOXEL_LIGHTING
+    float fog = !indoor && sHaveFog ? VoxelWorld_FogDensity() : 0.0f;
+    bool cave = fog > 0.0f && VoxelWorld_Underground();
+#endif
 
     sBloomStrength = 0.0f;
 
     /* Stereoscopy is V8; the first milestone renders one eye. */
     (void)eyeOffset;
+    sGloomAmount = 0.0f;
+    sOwnsFog = false;
     if (!sReady || sDrawCount == 0)
         return;
+#if CTR_VOXEL_LIGHTING
+    sOwnsFog = !indoor && sHaveFog;
+#endif
 
     sBloomStrength = light.bloom;
     C3D_FrameDrawOn(target);
 
-    /* The camera the frustum was cut from in the update (UpdateFrustum). */
+    /* The camera the frustum was cut from in the update (UpdateFrustum).
+     * The gloom is placed on the logical surface, before the fit to it. */
+#if CTR_VOXEL_LIGHTING
+    if (cave && sHaveGloom)
+    {
+        CameraMatrices(&projection, &view, false);
+        PlaceGloom(&projection, &view);
+        sGloomAmount = VOXEL_GLOOM_MAX * fog;
+    }
+#endif
     CameraMatrices(&projection, &view, true);
 
     C3D_BindProgram(&sProgram);
@@ -5334,6 +5735,7 @@ void CtrVoxel_Draw(C3D_RenderTarget *target, float eyeOffset)
 
     /* texture0 x graded colour (dappled), then the distance haze, then the fade. */
     PrepareFades();
+    memcpy(sHazeRgb, light.hazeRgb, sizeof(sHazeRgb));
     TerrainTexEnv(dapples ? &light : NULL);
     FadeFor(false);
     C3D_TexEnvInit(C3D_GetTexEnv(5));
@@ -5399,7 +5801,9 @@ void CtrVoxel_Draw(C3D_RenderTarget *target, float eyeOffset)
     }
 
     /* The reflections, cast shadows and the player's silhouette take no
-     * dapples; the unit stays bound for the sprites and the rays. */
+     * dapples; the unit stays bound for the sprites and the rays, and is
+     * released after them (ReleaseDappleUnit: never C3D_TexBind(1, NULL),
+     * which reads address 0xC on the console). */
     if (dapples)
         TerrainTexEnv(NULL);
 
@@ -5510,6 +5914,13 @@ void CtrVoxel_Draw(C3D_RenderTarget *target, float eyeOffset)
         C3D_DrawArrays(GPU_TRIANGLES, 0, sSpriteVertices);
     }
 #if CTR_VOXEL_LIGHTING
+    /* The fog's banks lie in the scene, so they go before the light in the
+     * air (motes, rays) that is added over everything. */
+    if (fog > 0.0f)
+    {
+        FadeFor(false);
+        DrawFogBanks(&view, &light, cave, fog);
+    }
     /* Before the rays, which leave the orthographic projection behind. */
     if (sMotes != NULL && light.motes > 0.005f)
         DrawMotes(&view, &light, &unlit);

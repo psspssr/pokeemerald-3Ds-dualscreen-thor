@@ -12,9 +12,12 @@
  * then the cut tiles (see VoxelRelief_Cut): u16 variants, u16 cells;
  *   variants x 36: u16 layout drawing the tileset, u16 metatile, u16 rows[16]
  *                  (bit set: background)
- *   cells x 12:    u16 layout, u8 x, u8 y, u16 variant, s16 foot (pixels),
+ *   cells x 14:    u16 layout, u8 x, u8 y, u16 variant, s16 foot (pixels),
  *                  u16 metatile of the ground behind it (0xFFFF: none),
- *                  u16 metatile its cliff walls are drawn with (0xFFFF: none)
+ *                  u16 metatile its cliff walls are drawn with (0xFFFF: none),
+ *                  u8 sides (bits 0-3: stretches of its west edge column, 4-7:
+ *                  of its east one, that have rock for a wall to hang from),
+ *                  u8 flags (1: its flat layer is the ground behind it, plain)
  *   and last u32 the table's offset, "CUTS".
  *
  * A point's depth is its height ((u, h, v + h)), so the file does not carry
@@ -77,7 +80,7 @@ static unsigned sLayoutIndexSize;
 static const uint8_t *sCutVariants, *sCutCells;
 static unsigned sCutVariantCount, sCutCellCount;
 #define CUT_VARIANT_BYTES 36
-#define CUT_CELL_BYTES 12
+#define CUT_CELL_BYTES 14
 
 /* floorf as a conversion and one correction: the library call it replaces was
  * made at every step of every shadow ray over a mountain. */
@@ -237,7 +240,7 @@ bool VoxelRelief_CutVariant(unsigned i, unsigned *layout, unsigned *metatile,
 }
 
 int VoxelRelief_Cut(const VoxelMapInstance *inst, int x, int y, float *foot, int *ground,
-                    int *wall)
+                    int *wall, unsigned *sides)
 {
     unsigned lo = 0, hi = sCutCellCount, key;
 
@@ -259,6 +262,7 @@ int VoxelRelief_Cut(const VoxelMapInstance *inst, int x, int y, float *foot, int
             *foot = (int16_t)U16(c + 6) / 16.0f;
             *ground = U16(c + 8) == 0xFFFFu ? -1 : (int)U16(c + 8);
             *wall = U16(c + 10) == 0xFFFFu ? -1 : (int)U16(c + 10);
+            *sides = (unsigned)c[12] | ((unsigned)c[13] << 8);
             return (int)U16(c + 4);
         }
         if (at < key)

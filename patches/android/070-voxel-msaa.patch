@@ -10,7 +10,7 @@
  #include <limits.h>
  #include <math.h>
  #include <stdio.h>
-@@ -5320,6 +5323,11 @@
+@@ -5712,6 +5715,11 @@
  
      sBloomStrength = light.bloom;
      C3D_FrameDrawOn(target);
@@ -20,9 +20,9 @@
 +    bool androidVoxelAa = CtrGpu_BeginVoxelAA(target);
 +#endif
  
-     /* The camera the frustum was cut from in the update (UpdateFrustum). */
-     CameraMatrices(&projection, &view, true);
-@@ -5397,6 +5405,10 @@
+     /* The camera the frustum was cut from in the update (UpdateFrustum).
+      * The gloom is placed on the logical surface, before the fit to it. */
+@@ -5799,6 +5807,10 @@
              C3D_DrawArrays(GPU_TRIANGLES, (int)first, (int)count);
          }
      }
@@ -32,4 +32,4 @@
 +#endif
  
      /* The reflections, cast shadows and the player's silhouette take no
-      * dapples; the unit stays bound for the sprites and the rays. */
+      * dapples; the unit stays bound for the sprites and the rays, and is

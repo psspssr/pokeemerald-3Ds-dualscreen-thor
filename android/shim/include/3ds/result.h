@@ -14,7 +14,8 @@
 #define R_DESCRIPTION(res) ((res) & 0x3FF)
 
 #define MAKERESULT(level, summary, module, description) \
-    ((((level) & 0x1F) << 27) | (((summary) & 0x3F) << 21) | (((module) & 0xFF) << 10) | ((description) & 0x3FF))
+    ((Result)((((u32)(level) & 0x1Fu) << 27) | (((u32)(summary) & 0x3Fu) << 21) \
+              | (((u32)(module) & 0xFFu) << 10) | ((u32)(description) & 0x3FFu)))
 
 enum
 {

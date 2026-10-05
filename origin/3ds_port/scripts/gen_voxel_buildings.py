@@ -351,6 +351,33 @@ def _inside(shape, x, y):
     return False
 
 
+def _inside_grid(shape, W, H):
+    """[[_inside(shape, x, y) for x in range(W)] for y in range(H)], asked only
+    within the shape's bounds (a pixel beyond them by more than one is out)."""
+    out = [[False] * W for _ in range(H)]
+    xs, ys = [], []
+    for part in shape:
+        if part[0] == "ellipse":
+            _, ex, ey, rx, ry = part
+            xs += [ex - abs(rx), ex + abs(rx)]
+            ys += [ey - abs(ry), ey + abs(ry)]
+        elif len(part) == 4 and not isinstance(part[0], (tuple, list)):
+            xs += [part[0], part[2]]
+            ys += [part[1], part[3]]
+        else:
+            xs += [p[0] for p in part]
+            ys += [p[1] for p in part]
+    if not xs:
+        return out
+    x0, x1 = max(0, int(math.floor(min(xs))) - 2), min(W, int(math.ceil(max(xs))) + 2)
+    y0, y1 = max(0, int(math.floor(min(ys))) - 2), min(H, int(math.ceil(max(ys))) + 2)
+    for y in range(y0, y1):
+        row = out[y]
+        for x in range(x0, x1):
+            row[x] = _inside(shape, x, y)
+    return out
+
+
 # ── Reuse: a tile modelled once is modelled everywhere ───────────────────
 #
 # A piece of furniture is modelled in the first room (in SPECS order) that
@@ -393,6 +420,7 @@ def reuse_pieces(layout):
     the gyms' statue stands in every gym. A pixel is drawn once: of two
     pieces drawn alike (two stools), the first placed takes it."""
     keys = cell_keys(layout)
+    drawn = {k for row in keys for k in row}
     placed, taken = [], set()
     rooms = {}
     candidates = []
@@ -411,12 +439,15 @@ def reuse_pieces(layout):
             if not exact and not p["loose"]:
                 continue
             w, h = p["size"]
+            first = p["keys"][0][0]
+            if exact and first not in drawn:
+                continue    # its first cell is drawn nowhere here
             loose = set() if exact else _loose_starts(p, layout, keys)
             for y in range(layout.h - h + 1):
                 for x in range(layout.w - w + 1):
                     if exact:
-                        if any(keys[y + j][x + i] != p["keys"][j][i]
-                               for j in range(h) for i in range(w)):
+                        if keys[y][x] != first or any(keys[y + j][x:x + w] != p["keys"][j]
+                                                      for j in range(h)):
                             continue
                     elif (x, y) not in loose or not _drawn_at(p, keys, x, y):
                         continue
@@ -561,13 +592,13 @@ def interior_specs(spec):
     # closes it off.
     match = [[any(f[x % 16, y % 16] == fpx[x, y] for f in floors) for x in range(W)]
              for y in range(H)]
-    shaped = [[any(_inside(pc["shape"], x, y) for pc in pieces) for x in range(W)]
-              for y in range(H)]
+    grids = [_inside_grid(pc["shape"], W, H) for pc in pieces]
+    shaped = [[any(g[y][x] for g in grids) for x in range(W)] for y in range(H)]
     ground = [[match[y][x] and not shaped[y][x] for x in range(W)] for y in range(H)]
     # The room's front corners: black in the drawing, the outside of a room
     # whose front wall the GBA never draws. Seen from the console's camera, a
     # black triangle on the floor is a hole; they are floor.
-    opened = [[_inside(room.get("open", ()), x, y) for x in range(W)] for y in range(H)]
+    opened = _inside_grid(room.get("open", ()), W, H)
     todo = [(x, y) for y in range(H) for x in range(W) if ground[y][x]]
     while todo:
         x, y = todo.pop()
@@ -587,7 +618,7 @@ def interior_specs(spec):
     for (x, y) in reused:
         owner[y][x] = -1
     for k, pc in enumerate(pieces):
-        inside = [[_inside(pc["shape"], x, y) for x in range(W)] for y in range(H)]
+        inside = _inside_grid(pc["shape"], W, H)
         # what the piece leaves: its `leave` colours where they run on out of
         # its shape - the wall round a machine's corners, not the machine's
         # own orange lamps inside its outline - and, but for a wall, the
@@ -954,8 +985,16 @@ def cell_heights(model):
     tops = [0.0] * (w * h)
     for (tri, shade, tag) in model.mesh.tris:
         pts = [p[:3] for p in tri]
+        # a cell the triangle lies wholly outside (by more than clip's EPS)
+        # clips to nothing
+        x0, x1 = min(p[0] for p in pts) - 2 * vb.EPS, max(p[0] for p in pts) + 2 * vb.EPS
+        z0, z1 = min(p[2] for p in pts) - 2 * vb.EPS, max(p[2] for p in pts) + 2 * vb.EPS
         for cy in range(h):
+            if z1 < cy * 16.0 or z0 > cy * 16.0 + 16:
+                continue
             for cx in range(w):
+                if x1 < cx * 16.0 or x0 > cx * 16.0 + 16:
+                    continue
                 piece = vb.clip(pts, 0, cx * 16.0, True)
                 for axis, val, keep in ((0, cx * 16.0 + 16, False), (2, cy * 16.0, True),
                                         (2, cy * 16.0 + 16, False)):
@@ -1018,6 +1057,9 @@ def _area_xz(poly):
                    poly[(i + 1) % len(poly)][0] * poly[i][2] for i in range(len(poly)))) / 2
 
 
+_EXISTS = {}    # blockdata path -> on disk: asked for every model
+
+
 def find_placements(model, layouts_json):
     """Every place in Hoenn the building stands, with the ground around it.
 
@@ -1063,7 +1105,9 @@ def find_placements(model, layouts_json):
         if not primary_only and entry.get("secondary_tileset") != ref.secondary:
             continue
         path = os.path.join(vb.ROOT, entry["blockdata_filepath"])
-        if not os.path.exists(path):
+        if path not in _EXISTS:
+            _EXISTS[path] = os.path.exists(path)
+        if not _EXISTS[path]:
             continue
         blocks = vb.read_u16(path)
         lw, lh = entry["width"], entry["height"]

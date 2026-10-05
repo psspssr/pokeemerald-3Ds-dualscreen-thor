@@ -13,7 +13,9 @@ Steps (each can be skipped when its output is already there):
 5. dist/Emerald3DS-v<version>-Windows.zip with the builder, the payload,
    README.txt and LICENSES/;
 6. the standalone dist/Emerald3DS.3dsx and dist/Emerald3DS.smdh (quick update
-   of the executable when the data ABI did not change);
+   of the executable when the data ABI did not change), and the HOME Menu
+   forwarder dist/Emerald3DS-Forwarder.cia (3ds_port/forwarder, needs makerom
+   and bannertool; --skip-cia leaves it out);
 7. dist/Emerald3DS-WebPayload.zip and dist/web-manifest.json for the web
    builder (tools/build_web_payload.py);
 8. tools/release_audit.py over every ZIP (and, with --rom, a scan for any run
@@ -43,6 +45,7 @@ import build_web_payload
 ROOT = Path(__file__).resolve().parents[1]
 PORT = ROOT / "3ds_port"
 DIST = ROOT / "dist"
+CIA_NAME = "Emerald3DS-Forwarder.cia"
 GENERATORS = ["gen_voxel_regions.py", "gen_voxel_sign_masks.py",
               "gen_voxel_relief.py", "gen_voxel_buildings.py", "gen_intro_margins.py"]
 VOXELGEN_FILES = ["src/voxel/voxel_regions.h"]
@@ -97,6 +100,7 @@ def main() -> None:
     ap.add_argument("--skip-make", action="store_true")
     ap.add_argument("--skip-recipe", action="store_true")
     ap.add_argument("--skip-exe", action="store_true")
+    ap.add_argument("--skip-cia", action="store_true", help="no HOME Menu forwarder (needs makerom, bannertool)")
     args = ap.parse_args()
 
     tag = "v" + args.version
@@ -142,7 +146,7 @@ def main() -> None:
     licenses = release / "LICENSES"
     licenses.mkdir()
     for rel in ("LICENSE-PORT.md", "NOTICE.md", "AI_DISCLOSURE.md"):
-        src = ROOT / rel
+        src = ROOT / rel if (ROOT / rel).exists() else ROOT / "public" / rel  # public/ in the workspace
         if src.exists():
             shutil.copy2(src, licenses / rel)
     for rel in ("3ds_port/src/voxel/NOTICE.md",):
@@ -160,13 +164,20 @@ def main() -> None:
     for name in ("Emerald3DS.3dsx", "Emerald3DS.smdh"):
         shutil.copy2(payload / name, DIST / name)
         standalone.append(DIST / name)
-    web_zip, web_manifest = build_web_payload.build(payload, args.version, DIST)
+    cia = None
+    if not args.skip_cia:
+        forwarder = PORT / "forwarder"
+        run((args.make.split() if args.make else ["make"]) + ["clean", "all"], cwd=forwarder)
+        cia = DIST / CIA_NAME
+        shutil.copy2(forwarder / "dist" / CIA_NAME, cia)
+    web_zip, web_manifest = build_web_payload.build(payload, args.version, DIST,
+                                                    cia_forwarder=CIA_NAME if cia else None)
 
     run([sys.executable, ROOT / "tools/release_audit.py", "--zip", archive, "--strict", "--rom", args.rom])
     run([sys.executable, ROOT / "tools/release_audit.py", "--zip", web_zip, "--strict", "--rom", args.rom,
          "--web-payload"])
     sums = DIST / "SHA256SUMS.txt"
-    assets = [archive] + standalone + [web_zip, web_manifest]
+    assets = [archive] + standalone + ([cia] if cia else []) + [web_zip, web_manifest]
     lines = ["%s  %s" % (sha256(path), path.name) for path in assets]
     for path in sorted(payload.glob("*")):
         if path.is_file():
