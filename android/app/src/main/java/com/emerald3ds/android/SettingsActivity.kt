@@ -108,6 +108,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             findPreference<Preference>("data_location")?.summary = files.dataDir.absolutePath
             findPreference<Preference>("about")?.summary = getString(R.string.pref_version, BuildConfig.VERSION_NAME)
             findPreference<ListPreference>("voxel_aa")?.let(VoxelAntiAliasing::configure)
+            findPreference<ListPreference>("voxel_resolution")?.let(VoxelResolution::configure)
         }
 
         override fun onResume() {
@@ -115,11 +116,14 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             requireActivity().findViewById<MaterialToolbar>(R.id.toolbar).title =
                 preferenceScreen.title ?: getString(R.string.settings_title)
             findPreference<ListPreference>("voxel_aa")?.let(VoxelAntiAliasing::configure)
+            findPreference<ListPreference>("voxel_resolution")?.let(VoxelResolution::configure)
         }
 
         override fun onDisplayPreferenceDialog(preference: Preference) {
             if (preference.key == "voxel_aa" && preference is ListPreference)
                 VoxelAntiAliasing.configure(preference)
+            if (preference.key == "voxel_resolution" && preference is ListPreference)
+                VoxelResolution.configure(preference)
             super.onDisplayPreferenceDialog(preference)
         }
 

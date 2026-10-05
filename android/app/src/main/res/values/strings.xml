@@ -42,6 +42,10 @@
     <string name="pref_filter">Image filtering</string>
     <string name="pref_keep_screen_on">Keep screen on</string>
     <string name="pref_voxel_aa">Voxel anti-aliasing</string>
+    <string name="pref_voxel_resolution">Voxel resolution</string>
+    <string name="pref_voxel_resolution_description">Draws finer voxel scenery while retaining the original pixel art. Higher levels use more GPU power and memory.</string>
+    <string name="pref_voxel_resolution_unknown">%1$s requested; support is checked when the game starts</string>
+    <string name="pref_voxel_resolution_unavailable">%1$s unavailable; using %2$s</string>
     <string name="pref_voxel_aa_description">Smooths voxel scenery edges without softening menus or Pokémon sprites. Higher levels use more graphics memory.</string>
     <string name="pref_voxel_aa_unknown">%1$s requested; support is checked when the game starts</string>
     <string name="pref_voxel_aa_unavailable">%1$s unavailable; using %2$s</string>

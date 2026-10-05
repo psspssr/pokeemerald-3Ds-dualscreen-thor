@@ -34,6 +34,13 @@
             app:title="@string/pref_filter"
             app:useSimpleSummaryProvider="true" />
         <ListPreference
+            app:defaultValue="1"
+            app:entries="@array/voxel_resolution_entries"
+            app:entryValues="@array/voxel_resolution_values"
+            app:iconSpaceReserved="false"
+            app:key="voxel_resolution"
+            app:title="@string/pref_voxel_resolution" />
+        <ListPreference
             app:defaultValue="0"
             app:entries="@array/voxel_aa_entries"
             app:entryValues="@array/voxel_aa_values"

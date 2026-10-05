@@ -271,7 +271,7 @@ JNIEXPORT void JNICALL
 Java_com_emerald3ds_android_NativeBridge_nativeSetLayout(JNIEnv *env, jclass cls, jintArray top,
                                                          jintArray bottom, jint filter, jint background,
                                                          jint topWindow, jint bottomWindow, jboolean expandBottomMenus,
-                                                         jint voxelAASamples)
+                                                         jint voxelAASamples, jint voxelScale)
 {
     CtrHostLayout layout;
 
@@ -285,6 +285,7 @@ Java_com_emerald3ds_android_NativeBridge_nativeSetLayout(JNIEnv *env, jclass cls
     layout.bottomWindow = bottomWindow;
     layout.expandBottomMenus = expandBottomMenus == JNI_TRUE;
     layout.voxelAASamples = voxelAASamples;
+    layout.voxelScale = voxelScale;
     CtrHost_SetLayout(&layout);
 }
 
@@ -294,6 +295,14 @@ Java_com_emerald3ds_android_NativeBridge_nativeVoxelAACapabilities(JNIEnv *env, 
     (void)env;
     (void)cls;
     return CtrHost_VoxelAACapabilities();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_emerald3ds_android_NativeBridge_nativeVoxelScaleCapabilities(JNIEnv *env, jclass cls)
+{
+    (void)env;
+    (void)cls;
+    return CtrHost_VoxelScaleCapabilities();
 }
 
 JNIEXPORT void JNICALL

@@ -276,6 +276,35 @@ static void TestVoxelAAConfiguration(void)
     CtrHost_SetLayout(&layout);
 }
 
+static void TestVoxelResolutionConfiguration(void)
+{
+    CtrHostLayout layout = {0}, observed;
+    assert(CtrHost_VoxelScaleCapabilities() == -1);
+    const int requests[] = {0, 1, 2, 3, 4, 5, -1, INT_MAX, INT_MIN};
+    for (unsigned i = 0; i < sizeof(requests) / sizeof(*requests); ++i)
+    {
+        layout.voxelScale = requests[i];
+        CtrHost_SetLayout(&layout);
+        CtrHost_GetLayout(&observed);
+        assert(observed.voxelScale == (requests[i] >= 1 && requests[i] <= 4 ? requests[i] : 1));
+    }
+    layout.voxelScale = 4;
+    CtrHost_SetLayout(&layout);
+    CtrHost_SetVoxelScaleCapabilities(2);
+    assert(CtrHost_VoxelScaleCapabilities() == 2);
+    CtrHost_GetLayout(&observed);
+    assert(observed.voxelScale == 4); /* A resource fallback preserves the request. */
+    CtrHost_SetVoxelScaleCapabilities(INT_MAX);
+    assert(CtrHost_VoxelScaleCapabilities() == 4);
+    CtrHost_SetVoxelScaleCapabilities(0);
+    assert(CtrHost_VoxelScaleCapabilities() == 1);
+    CtrHost_SetVoxelScaleCapabilities(-2);
+    assert(CtrHost_VoxelScaleCapabilities() == -1);
+    CtrHost_SetLayout(&(CtrHostLayout){0});
+    CtrHost_GetLayout(&observed);
+    assert(observed.voxelScale == 1); /* Backwards-compatible zero-initialized caller. */
+}
+
 static void TestAcceptRefuseAndStaleRequests(void)
 {
     PromptCall call;
@@ -373,6 +402,7 @@ int main(void)
 {
     TestBottomMenuExpansion();
     TestVoxelAAConfiguration();
+    TestVoxelResolutionConfiguration();
     TestDefaultsAndConfiguration();
     TestAcceptRefuseAndStaleRequests();
     TestMissingUiAndImmediateAnswers();
