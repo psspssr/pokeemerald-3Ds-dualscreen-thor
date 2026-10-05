@@ -13,8 +13,15 @@ match that tested installation.
 
 The beta.2 follow-up corrects battle sprite and text filtering. Its release
 workflow and 668 GLES assertions passed, followed by a gameplay check of the
-exact downloaded APK. [Validation](../VALIDATION.md#latest-beta-010-beta2)
+exact downloaded APK. [Validation](../VALIDATION.md#previous-beta-010-beta2)
 records the release identity, broader candidate tests and coverage limits.
+
+The beta.3 polish pass fixes controller releases inside Settings dialogs, PC
+initialization/cleanup failures and recovery of unfinished Pokémon or item
+moves. It passed 136 app tests, native sanitizer/conservation checks and
+ordinary plus deliberately failed PC reopening in the ARM emulator.
+[Validation](../VALIDATION.md#latest-beta-010-beta3) separates the published
+release from the unpublished build used to trigger those failure paths.
 
 ## Work order
 

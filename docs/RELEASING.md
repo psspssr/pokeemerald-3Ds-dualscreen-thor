@@ -1,9 +1,9 @@
 # Android releases
 
-Existing releases predate the [history cleanup](HISTORY.md). Their APKs and
-manifests remain unchanged, and original source IDs have an explicit mapping.
-Treat old workflow attempts as historical records and use new tags for future
-builds.
+Releases before beta.2 predate the [history cleanup](HISTORY.md). Their APKs
+and manifests remain unchanged, and original source IDs have an explicit
+mapping. Treat those old workflow attempts as historical records and use new
+tags for future builds.
 
 Publish a GitHub release to start [the release workflow](../.github/workflows/release.yml).
 It validates the tagged source, builds the playable ARMv7 app, signs it with the
@@ -53,7 +53,7 @@ needed; the publisher alone gets `contents: write` on its `GITHUB_TOKEN`.
 
 ## Publish a reviewed source commit
 
-Use a strict SemVer tag, for example `v0.1.0-beta.2`. The workflow derives
+Use a new strict SemVer tag, for example `v0.1.0-beta.4`. The workflow derives
 Android `versionName` by removing `v`, and assigns `versionCode` as its
 `GITHUB_RUN_NUMBER + 1`. Code **1** belongs to the first manual release,
 `v0.1.0-alpha.1`; the first automated run uses code **2**. New runs increase
@@ -73,7 +73,7 @@ CLI sequence is below; publishing is the step that triggers the workflow:
 
 ```sh
 release_repo=psspssr/pokeemerald-3Ds-dualscreen-thor
-release_tag=v0.1.0-beta.2
+release_tag=v0.1.0-beta.4
 release_commit=$(git rev-parse HEAD)
 release_notes=build/release-notes.md  # Prepare and review this file first.
 test -z "$(git status --porcelain)"

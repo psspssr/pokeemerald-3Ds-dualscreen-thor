@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.2">Download Android beta</a> ·
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.3">Download Android beta</a> ·
   <a href="https://psspssr.github.io/emerald-dual-screen-site/">Website</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#controls">Controls</a> ·
@@ -36,7 +36,7 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 
 ## Get started
 
-Download the signed **[0.1.0-beta.2 Android beta](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.2)** and install its ARMv7 APK. Matching game data is included.
+Download the signed **[0.1.0-beta.3 Android beta](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.3)** and install its ARMv7 APK. Matching game data is included.
 
 **Press L1 + R1 together** or keyboard **Escape** for Pause and Settings. Both Thor panels fill by default; choose **Fit** to preserve the original proportions. Phone layouts include on-screen controls. [Thor setup](docs/AYN_THOR.md).
 

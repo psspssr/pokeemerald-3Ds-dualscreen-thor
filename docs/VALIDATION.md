@@ -2,9 +2,72 @@
 
 The repository's [history cleanup](HISTORY.md) changed older commit IDs while
 keeping retained source snapshots identical. The source mapping covers releases
-from before that cleanup; beta.2 uses the current history.
+from before that cleanup; beta.2 and later use the current history.
 
-## Latest beta: 0.1.0-beta.2
+## Latest beta: 0.1.0-beta.3
+
+The [signed beta.3 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.3)
+passed all seven jobs in the
+[release workflow](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37313496017).
+[Normal CI](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37307890774)
+also passed on the tagged source. Downloaded asset hashes, signature, alignment,
+package and native/data checks passed. The signing identity is unchanged.
+
+| Release identity | Value |
+|---|---|
+| Source | `31b501b2cc9773d511fa2e1460bb788e2b474322` |
+| Version / Android code | `0.1.0-beta.3` / **11** |
+| APK | `emerald-thor-0.1.0-beta.3-armeabi-v7a.apk` |
+| Size | 27,440,654 bytes |
+| SHA-256 | `56463ac4807583b173b41db8ddcd10dae32aa4a94f9ff07bd7e4aaf9274c3aa0` |
+| Engine/data ABI | `bdbb1010` |
+
+This pass fixes three reproduced problems:
+
+- Controller shortcuts could miss their release inside a Settings preference
+  dialog or event dialog, leaving the next press unresponsive. Real dialog tests
+  now cover consumed key and joystick releases, including dialog recreation.
+- Failed PC initialization could read uninitialized state or free an already
+  freed move buffer. Storage state starts cleared, and cleanup clears the
+  buffer pointer.
+- Failure to reopen the PC after Summary or box naming could lose an unfinished
+  Pokémon or item move. A fixed, allocation-free checkpoint restores the move,
+  including swaps, mail and full bags. Completed earlier actions and box labels
+  remain intact. An acknowledgement message explains the recovery.
+
+**136 Android instrumentation tests** and release/harness lint passed, as did
+**109 tooling tests** and the full ARM link. The PC regressions reproduced
+three initialization/cleanup failures and three conservation failures before
+the fixes. Afterward, six initialization groups, seven carry-recovery groups
+and two real-font message-bound checks passed with ASan/UBSan. SDK coverage
+remains 321 identifiers with no missing APIs; imported `origin/` is unchanged.
+
+The normal production candidate passed carried Pokémon Summary/return/place,
+item Give/Take/naming/bag return, naming cancellation and the first controller
+shortcut after a Settings preference dialog, on 1920×1080 and 1240×1080 emulator
+displays. The released native library has identical code/data sections; only its GNU
+build ID differs. A focused GLES check also passed resolution changes,
+anti-aliasing, suspend/resume and mixed CPU/GPU updates; no renderer change was
+needed in this pass.
+
+A separate, unpublished QA build deliberately failed PC window allocation
+while reopening an unfinished move. Both Pokémon and item recovery displayed
+the complete notice and allowed the PC to reopen. A subsequent normal save
+preserved every party and box Pokémon byte from the original fixture. The
+item case retained a completed Give while undoing the unfinished Take, without
+loss or duplication. This injected failure is absent from production builds.
+
+The exact downloaded beta.3 APK passed cold start/Continue, both Thor-size
+displays, ordinary PC Summary/return and the first physical MENU press after
+releasing it inside the image-filtering preference dialog. Installation
+preserved the save and both settings files. No save was written during this
+final smoke test.
+
+Physical Thor visual quality, lid behavior, audible audio and sustained
+performance still need the [hardware pass](testing/HARDWARE_TEST.md). These
+bounded emulator checks do not establish full-game completion.
+
+## Previous beta: 0.1.0-beta.2
 
 The [signed beta.2 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.2)
 was built, signed and uploaded by the successful

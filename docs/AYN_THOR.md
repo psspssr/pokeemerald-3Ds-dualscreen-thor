@@ -158,6 +158,11 @@ position and again to swap, or tap the fifth-row **Cancel** to abandon the
 reorder. When learning a new move, that fifth row is the proposed move;
 use the header Cancel or B to leave without replacing a move.
 
+If a memory error prevents the PC from reopening after Summary or box naming,
+the game restores the unfinished Pokémon or item move and shows a message.
+Earlier completed moves, box names and wallpapers stay intact. Acknowledge
+the message and reopen the PC to retry. Save normally in-game to keep progress.
+
 ## Screen scaling
 
 Dual-display **Fill** also expands the original GBA menu area.

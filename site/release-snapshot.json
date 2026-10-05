@@ -6,29 +6,29 @@
   },
   "releases": [
     {
-      "tag_name": "v0.1.0-beta.2",
-      "published_at": "2026-10-05T09:43:16Z",
+      "tag_name": "v0.1.0-beta.3",
+      "published_at": "2026-10-05T13:00:11Z",
       "draft": false,
       "prerelease": true,
-      "html_url": "https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.2",
+      "html_url": "https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.3",
       "assets": [
         {
           "name": "build-info.json",
           "state": "uploaded",
           "size": 1797,
-          "browser_download_url": "https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/download/v0.1.0-beta.2/build-info.json"
+          "browser_download_url": "https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/download/v0.1.0-beta.3/build-info.json"
         },
         {
-          "name": "emerald-thor-0.1.0-beta.2-armeabi-v7a.apk",
+          "name": "emerald-thor-0.1.0-beta.3-armeabi-v7a.apk",
           "state": "uploaded",
           "size": 27440654,
-          "browser_download_url": "https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/download/v0.1.0-beta.2/emerald-thor-0.1.0-beta.2-armeabi-v7a.apk"
+          "browser_download_url": "https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/download/v0.1.0-beta.3/emerald-thor-0.1.0-beta.3-armeabi-v7a.apk"
         },
         {
           "name": "SHA256SUMS",
           "state": "uploaded",
           "size": 190,
-          "browser_download_url": "https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/download/v0.1.0-beta.2/SHA256SUMS"
+          "browser_download_url": "https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/download/v0.1.0-beta.3/SHA256SUMS"
         }
       ]
     }
