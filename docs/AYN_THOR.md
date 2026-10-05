@@ -108,11 +108,26 @@ change the assignment of two physical displays.
 
 ## Game graphics and Summary menus
 
-Preview **0.1.0-alpha.8** uses **Settings → Display → Image filtering →
-Sharp pixels** by default. Upgrading an older preview switches its Linear
+The app uses **Settings → Display → Image filtering → Sharp pixels** by
+default. Upgrading an older preview switches its Linear
 filter to Sharp once; choosing Smooth afterward is respected. Fill still
 uses the entire panel. For equally sized pixel blocks, choose **Fit** and
 enable **Integer scaling**; this adds borders.
+
+The beta development build adds **Settings → Display → Voxel resolution**:
+
+| Setting | Internal voxel picture |
+|---|---|
+| 1× — Original | 400×240; lowest GPU cost |
+| **2× — Sharp (default)** | **800×480** |
+| 3× — High | 1200×720 |
+| 4× — Ultra | 1600×960 |
+
+This draws finer 3D geometry while retaining the original pixel art. Existing
+resolution choices are preserved. Higher levels use more GPU time and memory;
+choose 1× if a scene runs slowly. Unsupported allocations fall back to a lower
+level, but this does not automatically detect a low frame rate. Settings shows
+when a saved request cannot be used on the current device.
 
 **Settings → Display → Voxel anti-aliasing** offers Off, 2× and 4× on supported
 GPUs. It starts off, smooths voxel scenery before sprites and menus are drawn,
@@ -120,6 +135,9 @@ and leaves classic 2D rendering alone. Higher settings can reduce performance.
 Unsupported levels are omitted; a saved setting from another device falls
 back to a supported lower level. This is separate from the game's voxel blur
 effect.
+
+For a fully sharp voxel view, turn **OPTION → 3D BLUR** off in the game.
+New configurations default to Off; a previously saved choice is respected.
 
 The released **0.1.0-alpha.7** has an optional voxel overworld; enable
 **OPTION → VOXEL 3D** in the game. Preview **0.1.0-alpha.8** at upstream `cdc77a3d2b01`

@@ -1,5 +1,49 @@
 # Validation
 
+## Beta development checkpoint
+
+This is a development candidate, not a published beta. The combined candidate
+at `03b48fc` imports upstream `c330c0a1aece` and uses engine/data ABI `91b37e30`.
+Its nondebuggable, release-signed APK was installed without changing the save
+or either settings file. The resolution default is being finalized separately;
+the final release will record its own source and artifact identity.
+
+| Local check | Result |
+|---|---|
+| Android app/input/storage/display tests | 133 passed; harness and release lint passed |
+| Build, updater, saves, overlays and website tooling | 105 passed |
+| Production GLES pixel checks | 370 assertions passed |
+| GPU host checks | 21 passed |
+| ARM game build and SDK coverage | Full link passed; 321 identifiers, no missing APIs |
+| Native regressions | Gameplay, assets, menu geometry, save layout and real thread/shutdown checks passed |
+
+The menu pass fixes stale Bag-grid selection state, shop metatiles, naming
+touch input, Contest/Pokéblock/berry layouts, Contest graphics and hidden
+hearts leaking into the wider picture. Related source tests also repaired
+evolution/transition graphics, drought palettes, Battle Factory backgrounds,
+Mirage Tower/fossil buffers and Spinda spots. Later facilities have host-side
+coverage; they have not all been reached during a natural playthrough.
+
+Actual Android 11 playtesting reproduced an intermittent secondary-window
+input freeze after Settings and the document picker. Keeping controller focus
+on the main activity passed three repetitions, cold start, display recreation,
+held-controller input and a five-minute gap between secondary touches. The
+combined nondebuggable candidate also passed the previously failing picker
+route and the first touch after recreation. This is bounded evidence, not a
+claim about every firmware version.
+
+Matched menu builds were played through protagonist naming on all three
+keyboard pages, all three centered starter previews and cancellation,
+Pokéblock feeding, HM replacement refusal and a complete Contest. The final
+candidate's corrected Condition palette and hidden Contest hearts were
+checked again. Higher-resolution voxel world/battle comparisons, the remaining
+menu replay and final save/export acceptance are still in progress.
+
+The original QA saves and settings remain protected. Physical Thor lid
+behavior, audible audio, sustained performance, thermals and battery use still
+need the [hardware pass](testing/HARDWARE_TEST.md). Existing releases retain
+the historical validation below.
+
 ## Latest preview: 0.1.0-alpha.8
 
 The [signed alpha.8 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.8)

@@ -105,7 +105,9 @@ class VoxelResolutionTest {
         fail("Resolution request $scale did not reach the native layout")
     }
 
-    @Test fun originalDefaultAndResourceFallbackPreserveStoredRequest() {
+    @Test fun sharpDefaultAndResourceFallbackPreserveStoredRequest() {
+        assertEquals(2, AppSettings.load(context).voxelScale)
+        preferences.edit().putString("voxel_resolution", "1").commit()
         assertEquals(1, AppSettings.load(context).voxelScale)
         preferences.edit().putString("voxel_resolution", "4").commit()
         ActivityScenario.launch(SettingsActivity::class.java).use { scenario ->
