@@ -25,7 +25,7 @@ void gpuC2DFlush(void)
 {
     if(!used) return;
     GPU_BOUND_TEXTURES[0]=batchTexture;
-    if(!gpuUseProgram(true)) { used=0; CtrHost_SetState(CTR_HOST_EXITING); return; }
+    if(!gpuUseProgram(GPU_PROGRAM_C2D)) { used=0; CtrHost_SetState(CTR_HOST_EXITING); return; }
     glBindVertexArray(vao); glBindBuffer(GL_ARRAY_BUFFER,vbo);
     glBufferData(GL_ARRAY_BUFFER,used*sizeof(*vertices),vertices,GL_STREAM_DRAW);
     for(int i=0;i<4;i++) glEnableVertexAttribArray(i);
@@ -39,6 +39,7 @@ void C2D_Flush(void) { gpuC2DFlush(); }
 void C2D_Prepare(void)
 {
     gpuC2DFlush();
+    gpuC2DProgram=true;
     for(int i=0;i<6;i++) C3D_TexEnvInit(&gpuEnvs[i]);
     C3D_CullFace(GPU_CULL_NONE); C3D_DepthTest(false,GPU_ALWAYS,GPU_WRITE_COLOR); C3D_AlphaTest(true,GPU_GREATER,0);
     C3D_AlphaBlend(GPU_BLEND_ADD,GPU_BLEND_ADD,GPU_SRC_ALPHA,GPU_ONE_MINUS_SRC_ALPHA,GPU_ONE,GPU_ONE_MINUS_SRC_ALPHA);
@@ -65,6 +66,19 @@ void C2D_ViewReset(void) { Mtx_Identity(&view); }
 void C2D_ViewRestore(const C3D_Mtx *matrix) { view=*matrix; }
 void C2D_ViewTranslate(float x,float y) { Mtx_Translate(&view,x,y,0,true); }
 void C2D_ViewScale(float x,float y) { Mtx_Scale(&view,x,y,1); }
+
+/* Raw Citro3D draws can reuse Citro2D's prepared projection/vertex shader.
+ * Keep that public path separate from our CPU-baked 2D vertex batches. */
+bool gpuC2DTransform(float out[12])
+{
+    if(!vertices || sceneWidth<=0 || sceneHeight<=0) return false;
+    for(unsigned i=0;i<2;i++) {
+        out[4*i]=view.r[i].x; out[4*i+1]=view.r[i].y;
+        out[4*i+2]=view.r[i].z; out[4*i+3]=view.r[i].w;
+    }
+    out[8]=sceneWidth; out[9]=sceneHeight; out[10]=sceneTilt?1.0f:0.0f; out[11]=0;
+    return true;
+}
 
 static Vertex2D vertex(float x,float y,float depth,float u,float v,C2D_Tint tint)
 {
