@@ -42,7 +42,7 @@ Download the signed **[0.1.0-alpha.8 Android preview](https://github.com/psspssr
 
 Bring your progress through **Settings → Import save / Export save**. Standard Emerald GBA and emulator `.sav` files are supported; save states are not. Restart after importing and save normally in-game. Export your save before replacing a development APK, which uses a different signing key. [Save details](docs/BUILDING.md#engine-only-build-and-data-packs).
 
-**Sharp pixels are the default.** Choose optional **voxel anti-aliasing** in Settings → Display, with Off, 2× and 4× available where supported. Enable voxel scenery and battles in the game’s **OPTION** menu; **SHOW FPS** is there too and starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
+**Sharp pixels are the default.** Settings → Display offers **1×–4× voxel resolution**, starting at **2× Sharp** for new settings. Choose 1× for lighter rendering or 3×/4× for more detail; optional anti-aliasing smooths voxel edges. Existing quality choices are preserved. Enable voxel scenery and battles in **OPTION**; set **3D BLUR → OFF** if an older setup still looks soft. **SHOW FPS** starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
 
 ## Compatibility
 
@@ -84,31 +84,26 @@ Fast-forward requires enabling it and choosing **2×, 4× or 8×** in Settings. 
 
 ## See it in action
 
-<p align="center">
-  <a href="docs/images/classic-town.png"><img src="docs/images/classic-town.png" width="960" alt="Classic 2D Oldale Town and its Pokémon Center beside the bottom-screen Hoenn map and touch menu"></a>
-  <br><em>Classic 2D Hoenn, with your map and menus always within reach.</em>
-</p>
-
 <table>
   <tr>
-    <td width="50%"><a href="docs/images/classic-route.png"><img src="docs/images/classic-route.png" width="480" alt="Original 2D Route 101 with trees, tall grass and ledges, with voxel rendering disabled"></a></td>
-    <td width="50%"><a href="docs/images/voxel-world.png"><img src="docs/images/voxel-world.png" width="480" alt="The optional voxel view of Littleroot Town beside the same bottom-screen touch menu"></a></td>
+    <td width="50%"><a href="docs/images/classic-route-beta.png"><img src="docs/images/classic-route-beta.png" width="480" alt="Route 102 in the original 2D view, with voxel rendering disabled"></a></td>
+    <td width="50%"><a href="docs/images/voxel-sharp-2x.png"><img src="docs/images/voxel-sharp-2x.png" width="480" alt="Route 102 with detailed voxel trees and terrain at 2× Sharp resolution"></a></td>
   </tr>
   <tr>
     <td align="center"><strong>The original 2D look</strong></td>
-    <td align="center"><strong>Optional voxel overworld</strong><br>Toggle in OPTION → VOXEL 3D.</td>
+    <td align="center"><strong>Sharper voxel scenery</strong></td>
   </tr>
   <tr>
-    <td width="50%"><a href="docs/images/battle.png"><img src="docs/images/battle.png" width="480" alt="A wild Pokémon battle with move choices on the bottom touch screen"></a></td>
-    <td width="50%"><a href="docs/images/party-summary.png"><img src="docs/images/party-summary.png" width="480" alt="Torchic's party summary beside the overworld in Professor Birch's lab"></a></td>
+    <td width="50%"><a href="docs/images/voxel-battle-beta.png"><img src="docs/images/voxel-battle-beta.png" width="480" alt="A wild Poochyena encounter against the voxel Route 102 scenery"></a></td>
+    <td width="50%"><a href="docs/images/thor-battle-touch.png"><img src="docs/images/thor-battle-touch.png" width="480" alt="Torchic's move selector filling the 1240×1080 bottom display"></a></td>
   </tr>
   <tr>
+    <td align="center"><strong>Battles in the overworld</strong></td>
     <td align="center"><strong>Touch battle commands</strong></td>
-    <td align="center"><strong>Your party at a glance</strong></td>
   </tr>
 </table>
 
-Emulator screenshots from the Android port. Some gallery images show earlier previews. [Screenshot notes](docs/images/README.md) · [Portrait phone layout](docs/images/portrait-controls.png).
+Actual Android emulator captures at Thor panel sizes. [4× Ultra detail](docs/images/voxel-ultra-4x.png) · [Touch naming keyboard](docs/images/thor-touch-keyboard.png) · [Phone layout](docs/images/portrait-controls.png) · [Screenshot notes](docs/images/README.md).
 
 ## Project guides
 

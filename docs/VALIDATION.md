@@ -2,11 +2,12 @@
 
 ## Beta development checkpoint
 
-This is a development candidate, not a published beta. The combined candidate
-at `03b48fc` imports upstream `c330c0a1aece` and uses engine/data ABI `91b37e30`.
-Its nondebuggable, release-signed APK was installed without changing the save
-or either settings file. The resolution default is being finalized separately;
-the final release will record its own source and artifact identity.
+The candidate at `86aad4c` imports upstream `c330c0a1aece` and uses engine/data
+ABI `91b37e30`. Its native library SHA-256 is
+`56237a52b8c5b030aa21c6828432cbd2feac877bc9202cb0aed3a1d75709b2db`.
+The nondebuggable, release-signed APK was installed without changing the save
+or either settings file. Release packaging will record its own source and
+artifact identity; the data ABI alone does not identify executable bytes.
 
 | Local check | Result |
 |---|---|
@@ -15,7 +16,7 @@ the final release will record its own source and artifact identity.
 | Production GLES pixel checks | 370 assertions passed |
 | GPU host checks | 21 passed |
 | ARM game build and SDK coverage | Full link passed; 321 identifiers, no missing APIs |
-| Native regressions | Gameplay, assets, menu geometry, save layout and real thread/shutdown checks passed |
+| Native regressions | 21 suites passed, including gameplay, assets, menu geometry, save layout and real thread/shutdown checks |
 
 The menu pass fixes stale Bag-grid selection state, shop metatiles, naming
 touch input, Contest/Pokéblock/berry layouts, Contest graphics and hidden
@@ -34,17 +35,46 @@ claim about every firmware version.
 
 Matched menu builds were played through protagonist naming on all three
 keyboard pages, all three centered starter previews and cancellation,
-Pokéblock feeding, HM replacement refusal and a complete Contest. The final
-candidate's corrected Condition palette and hidden Contest hearts were
-checked again. Higher-resolution voxel world/battle comparisons, the remaining
-menu replay and final save/export acceptance are still in progress.
+Pokéblock feeding, HM replacement refusal and a complete five-appeal Contest.
+The later nondebuggable candidate also passed corrected Condition colors,
+hidden Contest hearts, Shop buy/sell cancellation, Bag-to-PC Summary/Mark,
+deposit/withdrawal, touch box naming, a natural capture and touch Pokémon
+naming. A normal save reloaded at the same PC with the expected party.
 
-The original QA saves and settings remain protected. Physical Thor lid
+Natural Route 102 play covered classic/voxel switching, 1×–4× resolution,
+anti-aliasing, battle Bag/Party, an animated attack, knockout, EXP and field
+return. Actual screenshots were inspected at every quality level. New or
+missing resolution preferences now start at **2× Sharp**, with AA off;
+explicit stored choices remain unchanged. During short, stationary software
+emulator samples, 1× averaged 58.5 presentations/s and 2× 55.2; 3×/4× cost
+more. These measurements informed the default but do not predict Thor rates.
+The renderer lowers quality after resource/allocation failure, not low FPS.
+
+This playtest exposed the console's 6 MiB graphics-backing limit: some menu
+and battle transitions fell back to slower tile drawing or unfiltered zoom.
+Android now has a bounded, on-demand 16 MiB quota. Sanitizer tests cover
+exhaustion, fragmentation, bank offsets, repeated reuse and real heap failure;
+the new APK's repeated-scene acceptance is tracked separately from the older
+comparison captures.
+
+A normal in-game save advanced counter 19→20, produced a valid 128 KiB raw
+Emerald save, and exported byte-for-byte through Android's document picker.
+Original GBA Emerald loaded that export in mGBA, with all 400 party bytes
+unchanged. Returning from the picker retained working Party/Map touch input.
+Import validation now rejects corrupt active sectors before replacing the
+current save or backup; a corrupt pending import can be quarantined and retried.
+
+Coverage is deliberately bounded. Frontier challenge menus, link desks,
+the NPC Berry Blender, ribbon/painting details, every Pokédex search filter,
+and every storage-item route were not played in this pass. Source-level tests
+cover the repaired Frontier/asset paths. No full-game completion is claimed.
+
+The original QA saves and settings are restored after each owned run. Physical Thor lid
 behavior, audible audio, sustained performance, thermals and battery use still
 need the [hardware pass](testing/HARDWARE_TEST.md). Existing releases retain
 the historical validation below.
 
-## Latest preview: 0.1.0-alpha.8
+## Previous preview: 0.1.0-alpha.8
 
 The [signed alpha.8 release](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-alpha.8)
 passed all seven [release workflow jobs](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37239789444).

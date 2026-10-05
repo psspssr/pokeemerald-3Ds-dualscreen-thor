@@ -13,7 +13,29 @@ used to validate alpha.8. Supported anti-aliasing choices are Off, 2× and 4×;
 fast-forward offers 2×, 4× and 8×. Fast-forward was enabled for the screenshot.
 Optional features still start off.
 
-## Gameplay gallery
+## Beta gameplay captures
+
+The beta gallery shows separate 1920×1080 and 1240×1080 emulator displays,
+with Fill scaling and the FPS counter off. These are actual captures, not
+upscaled or retouched artwork. The 2× and 4× images use the same Route 102
+save and camera; ambient animation and NPCs continue between captures.
+
+| Image | Scene |
+|---|---|
+| [Classic route](classic-route-beta.png) | Route 102 with voxel rendering disabled. |
+| [2× Sharp](voxel-sharp-2x.png) | Voxel Route 102 at 800×480 internal resolution, blur and anti-aliasing off. |
+| [4× Ultra](voxel-ultra-4x.png) | The same view at 1600×960 internal resolution. |
+| [Voxel battle](voxel-battle-beta.png) | Natural wild Poochyena encounter on Route 102. |
+| [Battle touch screen](thor-battle-touch.png) | Torchic's move selector filling the lower panel. |
+| [Touch keyboard](thor-touch-keyboard.png) | Protagonist name entered by finger on the lower panel. |
+
+World and battle captures use the beta candidate at `03b48fc`, engine/data
+ABI `91b37e30`. The keyboard uses an earlier candidate with the same naming
+overlay; it is identified separately from the final build. Later memory-budget
+and default-preference fixes do not make these exact released-APK captures.
+See [validation](../VALIDATION.md) for the released artifact's acceptance.
+
+## Earlier gallery
 
 The gallery uses the combined landscape layout. The portrait image shows the
 phone layout with on-screen controls. Some images are from earlier previews:

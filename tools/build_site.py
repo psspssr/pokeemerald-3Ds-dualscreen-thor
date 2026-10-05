@@ -30,6 +30,10 @@ MEDIA = {
     "classic-route.png": "docs/images/classic-route.png",
     "voxel-world.png": "docs/images/voxel-world.png",
     "battle.png": "docs/images/battle.png",
+    "classic-route-beta.png": "docs/images/classic-route-beta.png",
+    "voxel-sharp-2x.png": "docs/images/voxel-sharp-2x.png",
+    "voxel-battle-beta.png": "docs/images/voxel-battle-beta.png",
+    "thor-battle-touch.png": "docs/images/thor-battle-touch.png",
     "portrait-controls.png": "docs/images/portrait-controls.png",
     "app-icon.png": "android/app/src/main/res/drawable-nodpi/ic_launcher_art.png",
 }
