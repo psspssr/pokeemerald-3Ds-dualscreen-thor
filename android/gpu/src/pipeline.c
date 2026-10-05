@@ -6,17 +6,19 @@ typedef struct {
     C3D_TexEnv stages[6];
     DVLE_s *vertex;
     unsigned alphaFunc;
-    bool citro2d,alpha;
+    unsigned mode;
+    bool alpha;
 } ProgramKey;
 typedef struct {
     ProgramKey key;
     GLuint program;
-    GLint uniforms,colors,alphaRef;
+    GLint uniforms,colors,alphaRef,c2dTransform;
     C3D_FVec uniformValues[C3D_FVUNIF_COUNT];
     u32 colorValues[6];
     int alphaValue;
+    float transformValues[12];
     unsigned samplerMask;
-    bool uniformsUploaded,colorsUploaded,alphaUploaded;
+    bool uniformsUploaded,colorsUploaded,alphaUploaded,transformUploaded;
     unsigned long used;
 } CachedProgram;
 static CachedProgram programs[96];
@@ -30,6 +32,23 @@ static const char *vertex2d=
     "out vec4 v_color;out vec4 v_tex0;out vec4 v_tex1;out vec4 v_tex2;out float v_blend;\n"
     "void main(){gl_Position=vec4(position,1);v_color=color;v_tex0=vec4(uv,0,1);"
     "v_tex1=vec4(0);v_tex2=vec4(0);v_blend=blend;}\n";
+
+/* Citro2D's public vertex registers: position, texture coordinates,
+ * procedural coordinates and byte-valued color. New upstream batches call
+ * Citro3D directly after preparing this state instead of using our baked VBO. */
+static const char *vertex2dRaw=
+    "#version 300 es\nprecision highp float;\n"
+    "layout(location=0) in vec3 position;layout(location=1) in vec4 uv;"
+    "layout(location=2) in vec4 procedural;layout(location=3) in vec4 color;"
+    "uniform vec4 c2dTransform[3];"
+    "out vec4 v_color;out vec4 v_tex0;out vec4 v_tex1;out vec4 v_tex2;\n"
+    "void main(){vec4 p=vec4(position.xy,0,1);"
+    "vec2 q=vec2(dot(c2dTransform[0],p),dot(c2dTransform[1],p));"
+    "vec2 s=c2dTransform[2].xy;vec2 clip=c2dTransform[2].z>0.5?"
+    "vec2(1.0-2.0*q.y/s.y,2.0*q.x/s.x-1.0):"
+    "vec2(2.0*q.x/s.x-1.0,1.0-2.0*q.y/s.y);"
+    "gl_Position=vec4(clip,position.z,1);v_color=color/255.0;"
+    "v_tex0=uv;v_tex1=procedural;v_tex2=vec4(0);}\n";
 
 static void append(char *buffer,size_t capacity,size_t *used,const char *format,...)
 {
@@ -90,8 +109,9 @@ static unsigned combineInputs(unsigned function)
 }
 static unsigned programSamplers(const ProgramKey *key)
 {
-    unsigned mask=key->citro2d?1:0;
-    for(int i=key->citro2d?4:0;i<6;i++) {
+    bool baked=key->mode==GPU_PROGRAM_C2D;
+    unsigned mask=baked?1:0;
+    for(int i=baked?4:0;i<6;i++) {
         const C3D_TexEnv *env=&key->stages[i];
         unsigned sources[]={env->srcRgb,env->srcAlpha};
         unsigned count[]={combineInputs(env->funcRgb),combineInputs(env->funcAlpha)};
@@ -105,19 +125,20 @@ static unsigned programSamplers(const ProgramKey *key)
 static GLuint makeProgram(ProgramKey *key)
 {
     char code[32768]; size_t used=0;
+    bool baked=key->mode==GPU_PROGRAM_C2D;
     append(code,sizeof(code),&used,"#version 300 es\nprecision highp float;\n"
         "in vec4 v_color;in vec4 v_tex0;in vec4 v_tex1;in vec4 v_tex2;\n"
         "uniform sampler2D tex0;uniform sampler2D tex1;uniform sampler2D tex2;"
         "uniform vec4 c[6];uniform float alphaRef;out vec4 outputColor;\n");
-    if(key->citro2d) append(code,sizeof(code),&used,"in float v_blend;\n");
+    if(baked) append(code,sizeof(code),&used,"in float v_blend;\n");
     append(code,sizeof(code),&used,"void main(){vec4 p=v_color;\n");
     /* Do not rely on the driver to remove unused texture() expressions:
      * some retain those fetches, samplers and texture bindings as active. */
     unsigned samplers=programSamplers(key);
     for(unsigned unit=0;unit<3;unit++) if(samplers&(1u<<unit))
         append(code,sizeof(code),&used,"vec4 t%u=texture(tex%u,v_tex%u.xy);\n",unit,unit,unit);
-    if(key->citro2d) append(code,sizeof(code),&used,"p=vec4(mix(t0.rgb,v_color.rgb,v_blend),t0.a*v_color.a);\n");
-    for(int i=key->citro2d?4:0;i<6;i++) {
+    if(baked) append(code,sizeof(code),&used,"p=vec4(mix(t0.rgb,v_color.rgb,v_blend),t0.a*v_color.a);\n");
+    for(int i=baked?4:0;i<6;i++) {
         C3D_TexEnv *env=&key->stages[i];
         char rgbArgs[3][160],alphaArgs[3][160],rgb[1200],alpha[1200];
         for(int j=0;j<3;j++) {
@@ -133,18 +154,21 @@ static GLuint makeProgram(ProgramKey *key)
     }
     append(code,sizeof(code),&used,"outputColor=p;}\n");
     if(used>=sizeof(code)) { GPU_LOG("fragment shader too large"); return 0; }
-    const char *source=key->citro2d?vertex2d:key->vertex->source;
+    const char *source=key->mode==GPU_PROGRAM_C2D?vertex2d:
+        key->mode==GPU_PROGRAM_C2D_RAW?vertex2dRaw:key->vertex->source;
     GLuint vertex=gpuCompile(GL_VERTEX_SHADER,source),fragment=gpuCompile(GL_FRAGMENT_SHADER,code);
     GLuint result=gpuLink(vertex,fragment); glDeleteShader(vertex); glDeleteShader(fragment); return result;
 }
 
-GLuint gpuUseProgram(bool citro2d)
+GLuint gpuUseProgram(unsigned mode)
 {
+    float transform[12];
+    if(mode==GPU_PROGRAM_C2D_RAW && !gpuC2DTransform(transform)) return 0;
     ProgramKey key={0};
     memcpy(key.stages,gpuEnvs,sizeof(gpuEnvs));
-    for(int i=0;i<6;i++) { key.stages[i].color=0; if(citro2d && i<4) memset(&key.stages[i],0,sizeof(C3D_TexEnv)); }
-    key.citro2d=citro2d; key.alpha=gpuAlphaEnabled; key.alphaFunc=gpuAlphaEnabled?gpuAlphaFunc:0;
-    key.vertex=citro2d?NULL:gpuProgram->vertexShader->dvle;
+    for(int i=0;i<6;i++) { key.stages[i].color=0; if(mode==GPU_PROGRAM_C2D && i<4) memset(&key.stages[i],0,sizeof(C3D_TexEnv)); }
+    key.mode=mode; key.alpha=gpuAlphaEnabled; key.alphaFunc=gpuAlphaEnabled?gpuAlphaFunc:0;
+    key.vertex=mode==GPU_PROGRAM_TRANSLATED?gpuProgram->vertexShader->dvle:NULL;
     CachedProgram *cache=NULL,*oldest=&programs[0];
     for(unsigned i=0;i<sizeof(programs)/sizeof(*programs);i++) {
         if(programs[i].program && !memcmp(&key,&programs[i].key,sizeof(key))) { cache=&programs[i]; break; }
@@ -158,6 +182,7 @@ GLuint gpuUseProgram(bool citro2d)
         glUseProgram(cache->program);
         cache->uniforms=glGetUniformLocation(cache->program,"u"); cache->colors=glGetUniformLocation(cache->program,"c");
         cache->alphaRef=glGetUniformLocation(cache->program,"alphaRef");
+        cache->c2dTransform=glGetUniformLocation(cache->program,"c2dTransform");
         const char *samplers[]={"tex0","tex1","tex2"};
         for(int unit=0;unit<3;unit++) {
             GLint location=glGetUniformLocation(cache->program,samplers[unit]);
@@ -181,7 +206,12 @@ GLuint gpuUseProgram(bool citro2d)
         glUniform1f(cache->alphaRef,gpuAlphaRef/255.f);
         cache->alphaValue=gpuAlphaRef; cache->alphaUploaded=true;
     }
-    if(!citro2d && cache->uniforms>=0) {
+    if(mode==GPU_PROGRAM_C2D_RAW && cache->c2dTransform>=0 &&
+       (!cache->transformUploaded || memcmp(cache->transformValues,transform,sizeof(transform)))) {
+        glUniform4fv(cache->c2dTransform,3,transform);
+        memcpy(cache->transformValues,transform,sizeof(transform)); cache->transformUploaded=true;
+    }
+    if(mode==GPU_PROGRAM_TRANSLATED && cache->uniforms>=0) {
         /* Upstream often changes only a model/lighting register between
          * draws. Compare actual values, including direct register writes,
          * against this linked program's last upload. A prefix upload avoids

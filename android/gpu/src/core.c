@@ -13,6 +13,7 @@ C3D_TexEnv gpuEnvs[6];
 C3D_AttrInfo gpuAttrs;
 C3D_BufInfo gpuBuffers;
 shaderProgram_s *gpuProgram;
+bool gpuC2DProgram;
 bool gpuAlphaEnabled;
 GPU_TESTFUNC gpuAlphaFunc;
 int gpuAlphaRef;
@@ -25,7 +26,10 @@ static GLint scissorBox[4];
 static GLfloat blendColor[4];
 static GLenum blendEquations[2]={GL_FUNC_ADD,GL_FUNC_ADD};
 static GLenum blendFactors[4]={GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA};
-static GLuint drawVao,drawVbo[12];
+static GLuint drawVao,drawVbo[12],drawEbo;
+static C3D_FVec fixedAttributes[12];
+static u16 *indexStaging;
+static size_t indexCapacity;
 static C3D_AttrInfo drawAttributes;
 static C3D_BufInfo drawBufferLayout;
 static bool drawLayoutValid;
@@ -46,7 +50,11 @@ bool C3D_Init(size_t size)
     frameQueue=(gxCmdQueue_s){.maxEntries=32};
     GX_BindQueue(&frameQueue);
     for(int i=0;i<6;i++) C3D_TexEnvInit(&gpuEnvs[i]);
-    if(!drawVao) { glGenVertexArrays(1,&drawVao); glGenBuffers(12,drawVbo); drawLayoutValid=false; }
+    if(!drawVao) {
+        glGenVertexArrays(1,&drawVao); glGenBuffers(12,drawVbo); glGenBuffers(1,&drawEbo);
+        for(unsigned i=0;i<12;i++) fixedAttributes[i]=FVec4_New(0,0,0,1);
+        drawLayoutValid=false;
+    }
     gpuApplyState(); return true;
 }
 void C3D_Fini(void)
@@ -57,6 +65,9 @@ void C3D_Fini(void)
     while(gpuTargets) C3D_RenderTargetDelete(gpuTargets->target);
     while(gpuTextures) C3D_TexDelete(gpuTextures->tex);
     glDeleteVertexArrays(1,&drawVao); glDeleteBuffers(12,drawVbo); drawVao=0; drawLayoutValid=false;
+    glDeleteBuffers(1,&drawEbo); drawEbo=0;
+    free(indexStaging); indexStaging=NULL; indexCapacity=0;
+    gpuC2DProgram=false;
 }
 void gpuApplyState(void)
 {
@@ -110,17 +121,30 @@ void C3D_StencilOp(GPU_STENCILOP fail,GPU_STENCILOP zfail,GPU_STENCILOP pass)
 C3D_TexEnv *C3D_GetTexEnv(int index) { gpuC2DFlush(); return (unsigned)index<6?&gpuEnvs[index]:NULL; }
 void C3D_SetTexEnv(int index,C3D_TexEnv *env) { gpuC2DFlush(); if((unsigned)index<6 && env) gpuEnvs[index]=*env; }
 void C3D_DirtyTexEnv(C3D_TexEnv *env) { (void)env; gpuC2DFlush(); }
-void C3D_BindProgram(shaderProgram_s *program) { gpuC2DFlush(); gpuProgram=program; }
+void C3D_BindProgram(shaderProgram_s *program) { gpuC2DFlush(); gpuProgram=program; gpuC2DProgram=false; }
 void C3D_UpdateUniforms(GPU_SHADER_TYPE type) { (void)type; /* Uploaded at each draw, including direct write pointers. */ }
-void AttrInfo_Init(C3D_AttrInfo *info) { memset(info,0,sizeof(*info)); }
+void AttrInfo_Init(C3D_AttrInfo *info) { memset(info,0,sizeof(*info)); info->flags[1]=0xfffu<<16; }
 int AttrInfo_AddLoader(C3D_AttrInfo *info,int reg,GPU_FORMATS format,int count)
 {
-    if(!info || info->attrCount>=12 || reg<0 || reg>=16 || count<1 || count>4) return -1;
+    if(!info || info->attrCount<0 || info->attrCount>=12 || reg>=16 || count<1 || count>4 || (unsigned)format>3) return -1;
     int index=info->attrCount++;
+    if(reg<0) reg=index;
     info->flags[index/8]|=(u32)(format|((count-1)<<2))<<((index%8)*4);
+    info->flags[1]=(info->flags[1]&~(0xf0000000u|(1u<<(index+16))))|((u32)index<<28);
     info->permutation|=(u64)reg<<(index*4); return index;
 }
-int AttrInfo_AddFixed(C3D_AttrInfo *info,int reg) { (void)info; (void)reg; return -1; }
+int AttrInfo_AddFixed(C3D_AttrInfo *info,int reg)
+{
+    if(!info || info->attrCount<0 || info->attrCount>=12 || reg>=16) return -1;
+    int index=info->attrCount++;
+    if(reg<0) reg=index;
+    info->flags[1]=(info->flags[1]&~0xf0000000u)|((u32)index<<28);
+    info->permutation|=(u64)reg<<(index*4); return index;
+}
+C3D_FVec *C3D_FixedAttribGetWritePtr(int id)
+{ gpuC2DFlush(); return (unsigned)id<12?&fixedAttributes[id]:NULL; }
+void C3D_FixedAttribSet(int id,float x,float y,float z,float w)
+{ C3D_FVec *value=C3D_FixedAttribGetWritePtr(id); if(value) *value=FVec4_New(x,y,z,w); }
 C3D_AttrInfo *C3D_GetAttrInfo(void) { gpuC2DFlush(); return &gpuAttrs; }
 void C3D_SetAttrInfo(C3D_AttrInfo *info) { gpuC2DFlush(); gpuAttrs=*info; }
 void BufInfo_Init(C3D_BufInfo *info) { memset(info,0,sizeof(*info)); }
@@ -157,6 +181,7 @@ static bool configureVertexLayout(void)
         for(int a=0;a<buffer->count;a++) {
             unsigned index=(buffer->permutation>>(a*4))&15;
             if(index>=(unsigned)gpuAttrs.attrCount) return false;
+            if(gpuAttrs.flags[1]&(1u<<(index+16))) return false;
             unsigned format=(gpuAttrs.flags[index/8]>>((index%8)*4))&15;
             unsigned reg=(gpuAttrs.permutation>>(index*4))&15;
             unsigned components=(format>>2)+1,type=format&3;
@@ -168,26 +193,69 @@ static bool configureVertexLayout(void)
     drawAttributes=gpuAttrs; drawBufferLayout=gpuBuffers; drawLayoutValid=true;
     return true;
 }
-void C3D_DrawArrays(GPU_Primitive_t primitive,int first,int count)
+static bool prepareDraw(int first,int count)
 {
-    if(first<0 || count<=0 || !gpuTarget || !gpuProgram || !gpuProgram->vertexShader) return;
-    if((unsigned)gpuBuffers.bufCount>12 || (unsigned)gpuAttrs.attrCount>12) return;
-    for(int b=0;b<gpuBuffers.bufCount;b++) if(!gpuBuffers.buffers[b].data) return;
+    if(first<0 || count<=0 || !gpuTarget) return false;
+    if((unsigned)gpuBuffers.bufCount>12 || (unsigned)gpuAttrs.attrCount>12) return false;
+    for(int b=0;b<gpuBuffers.bufCount;b++) if(!gpuBuffers.buffers[b].data) return false;
     gpuC2DFlush();
-    if(!gpuUseProgram(false)) { CtrHost_SetState(CTR_HOST_EXITING); return; }
+    if(!gpuC2DProgram && (!gpuProgram || !gpuProgram->vertexShader)) return false;
+    if(!gpuUseProgram(gpuC2DProgram?GPU_PROGRAM_C2D_RAW:GPU_PROGRAM_TRANSLATED)) {
+        CtrHost_SetState(CTR_HOST_EXITING); return false;
+    }
     glBindVertexArray(drawVao);
     /* The VAO retains bindings to these fixed VBO names. A different CPU
      * pointer, first/count or new vertex bytes only replaces their storage;
      * it does not change the layout. 2D/presentation use separate VAOs. */
-    if(!vertexLayoutMatches() && !configureVertexLayout()) return;
+    if(!vertexLayoutMatches() && !configureVertexLayout()) return false;
+    for(int a=0;a<gpuAttrs.attrCount;a++) if(gpuAttrs.flags[1]&(1u<<(a+16))) {
+        unsigned reg=(gpuAttrs.permutation>>(a*4))&15;
+        C3D_FVec value=fixedAttributes[a];
+        glVertexAttrib4f(reg,value.x,value.y,value.z,value.w);
+    }
     for(int b=0;b<gpuBuffers.bufCount;b++) {
         C3D_BufCfg *buffer=&gpuBuffers.buffers[b];
+        if(buffer->stride<=0 || (size_t)first+(size_t)count>PTRDIFF_MAX/(size_t)buffer->stride) return false;
         glBindBuffer(GL_ARRAY_BUFFER,drawVbo[b]);
         glBufferData(GL_ARRAY_BUFFER,(size_t)count*buffer->stride,(const char *)buffer->data+(size_t)first*buffer->stride,GL_STREAM_DRAW);
     }
     gpuApplyState();
+    return true;
+}
+void C3D_DrawArrays(GPU_Primitive_t primitive,int first,int count)
+{
+    if(!prepareDraw(first,count)) return;
     GLenum mode=primitive==GPU_TRIANGLE_STRIP?GL_TRIANGLE_STRIP:primitive==GPU_TRIANGLE_FAN?GL_TRIANGLE_FAN:GL_TRIANGLES;
     glDrawArrays(mode,0,count);
+}
+void C3D_DrawElements(GPU_Primitive_t primitive,int count,int type,const void *indices)
+{
+    if(count<=0 || !indices || (type!=C3D_UNSIGNED_BYTE && type!=C3D_UNSIGNED_SHORT) ||
+       (size_t)count>PTRDIFF_MAX/sizeof(u16)) return;
+    unsigned low=65535,high=0;
+    for(int i=0;i<count;i++) {
+        u16 value;
+        if(type==C3D_UNSIGNED_SHORT) memcpy(&value,(const u8 *)indices+(size_t)i*2,2);
+        else value=((const u8 *)indices)[i];
+        if(value<low) low=value;
+        if(value>high) high=value;
+    }
+    if((size_t)count>indexCapacity) {
+        u16 *next=realloc(indexStaging,(size_t)count*sizeof(*next));
+        if(!next) { GPU_LOG("index staging allocation failed"); return; }
+        indexStaging=next; indexCapacity=(size_t)count;
+    }
+    for(int i=0;i<count;i++) {
+        u16 value;
+        if(type==C3D_UNSIGNED_SHORT) memcpy(&value,(const u8 *)indices+(size_t)i*2,2);
+        else value=((const u8 *)indices)[i];
+        indexStaging[i]=(u16)(value-low);
+    }
+    if(!prepareDraw((int)low,(int)(high-low+1))) return;
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,drawEbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,(size_t)count*sizeof(*indexStaging),indexStaging,GL_STREAM_DRAW);
+    GLenum mode=primitive==GPU_TRIANGLE_STRIP?GL_TRIANGLE_STRIP:primitive==GPU_TRIANGLE_FAN?GL_TRIANGLE_FAN:GL_TRIANGLES;
+    glDrawElements(mode,count,GL_UNSIGNED_SHORT,0);
 }
 
 bool C3D_FrameBegin(u8 flags)

@@ -207,6 +207,7 @@ static void presentationSampling(C3D_RenderTarget *restore)
 
 #include "bottom_content_checks.inc"
 #include "voxel_msaa_checks.inc"
+#include "indexed_checks.inc"
 
 int main(int argc,char **argv)
 {
@@ -504,6 +505,7 @@ int main(int argc,char **argv)
     assert(gpuTestPresentCount()==before+5);
     glBindFramebuffer(GL_FRAMEBUFFER,gpuTestScreenFramebuffer(GFX_BOTTOM));
     pixel(100,100,255,0,0,255); pixel(100,280,0,0,255,255);
+    indexedChecks(&program,target);
     presentationRectangles(target);
     presentationSampling(target);
     bottomContentChecks(target);
