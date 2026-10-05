@@ -160,11 +160,10 @@ links the normal CI and unavailable release run separately. This is not an
 automated-release success claim. Android code **9** remains reserved to release
 run **8**, and the release event workflow remains the default for future tags.
 
-The same package/signature, native-data, release-ID, tag/main-ancestry,
-no-overwrite and downloaded-byte checks apply to this bundle. A complete,
-matching upload can later be verified by the workflow's existing-release path.
-If a local upload is interrupted, resume with its **exact retained three-file
-bundle** through the publication helper. There is no Actions signing artifact
-for that local build; do not rebuild, regenerate the manifest, or replace
-published assets when retrying. Resolve hosted runner availability before
-expecting future automatic builds or deployments.
+The bundle passed package/signature, native-data, release-ID, tag/main-ancestry,
+no-overwrite and downloaded-byte checks when published. Its original source
+identity predates the [history cleanup](HISTORY.md), so do not rerun its old
+release event against the rewritten tag. The APK and manifest remain unchanged
+and can still be checked using their published checksums and signing identity.
+There is no Actions signing artifact for that local build. Keep its retained
+three-file bundle unchanged and use new tags for future releases.

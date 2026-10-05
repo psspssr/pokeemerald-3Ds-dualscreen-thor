@@ -25,15 +25,18 @@ save and camera; ambient animation and NPCs continue between captures.
 | [Classic route](classic-route-beta.png) | Route 102 with voxel rendering disabled. |
 | [2× Sharp](voxel-sharp-2x.png) | Voxel Route 102 at 800×480 internal resolution, blur and anti-aliasing off. |
 | [4× Ultra](voxel-ultra-4x.png) | The same view at 1600×960 internal resolution. |
-| [Voxel battle](voxel-battle-beta.png) | Natural wild Poochyena encounter on Route 102. |
+| [Voxel battle](voxel-battle-beta.png) | Natural Wurmple encounter on Route 101 with Sharp sprites and text. |
 | [Battle touch screen](thor-battle-touch.png) | Torchic's move selector filling the lower panel. |
 | [Touch keyboard](thor-touch-keyboard.png) | Protagonist name entered by finger on the lower panel. |
 
-World and battle captures use the beta candidate at `03b48fc`, engine/data
-ABI `91b37e30`. The keyboard uses an earlier candidate with the same naming
-overlay; it is identified separately from the final build. Later memory-budget
-and default-preference fixes do not make these exact released-APK captures.
-See [validation](../VALIDATION.md) for the released artifact's acceptance.
+The battle and battle-touch images come from the exact signed **beta.2** APK,
+with Sharp pixels, 2× voxel resolution, anti-aliasing Off and 3D blur Off.
+[Capture hashes and release identity](beta2-battle-captures.json).
+
+The classic route and voxel-world images use the earlier candidate at
+`03b48fc`, engine/data ABI `91b37e30`. The keyboard uses an earlier candidate
+with the same naming overlay. These older images are distinct from the exact
+released-APK captures. See [validation](../VALIDATION.md) for coverage.
 
 ## Earlier gallery
 

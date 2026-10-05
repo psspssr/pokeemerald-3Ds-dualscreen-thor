@@ -1,0 +1,33 @@
+{
+  "release": "v0.1.0-beta.2",
+  "source_commit": "b4c601580ba645a40347bea1e6be4bea99ae0e49",
+  "apk_sha256": "61c5df62c1c1d98507a23ec072eb00d63b8819c2daf0237fe5140da109ea3c60",
+  "engine_abi": "a5a48bd1",
+  "environment": "Android 11 emulator running the exact released ARMv7 APK; separate 1920x1080 and 1240x1080 displays. These are not physical Thor photos.",
+  "settings": "Fill, Sharp pixels, 2x voxel resolution, anti-aliasing Off, 3D blur Off, voxel scenery and battles On.",
+  "method": "Unmodified screen captures during ordinary gameplay from a normal save; no image generation or retouching.",
+  "images": [
+    {
+      "file": "voxel-battle-beta.png",
+      "source_capture": "release-gallery-top.png",
+      "pixels": [
+        1920,
+        1080
+      ],
+      "sha256": "5e561fde75cc6614049e34abe5694d5bdd1c4a73f2cc570cafb3662d1a8ddfac",
+      "description": "Natural Route 101 Wurmple encounter with Sharp battle sprites and HUD.",
+      "pixel_edits": false
+    },
+    {
+      "file": "thor-battle-touch.png",
+      "source_capture": "release-gallery-bottom.png",
+      "pixels": [
+        1240,
+        1080
+      ],
+      "sha256": "ec68ac39bab944dbf2fe0c995d009c31b0c55bdbf3ecde84f78a346c2fd48231",
+      "description": "Torchic move selector filling the lower touch display.",
+      "pixel_edits": false
+    }
+  ]
+}

@@ -11,6 +11,11 @@ late-game routes and hardware limits. The exact beta.1 production APK also
 passed the final emulator/save-export check, and the downloaded release bytes
 match that tested installation.
 
+The beta.2 follow-up corrects battle sprite and text filtering. Its release
+workflow and 668 GLES assertions passed, followed by a gameplay check of the
+exact downloaded APK. [Validation](../VALIDATION.md#latest-beta-010-beta2)
+records the release identity, broader candidate tests and coverage limits.
+
 ## Work order
 
 1. **Record the baseline.** Preserve normal saves and settings, then inspect

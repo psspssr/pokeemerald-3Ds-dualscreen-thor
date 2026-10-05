@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.1">Download Android beta</a> ·
+  <a href="https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.2">Download Android beta</a> ·
   <a href="https://psspssr.github.io/emerald-dual-screen-site/">Website</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#controls">Controls</a> ·
@@ -36,13 +36,13 @@ An Android port of [ZallaxDev's Pokémon Emerald 3Ds Dual Screen](https://github
 
 ## Get started
 
-Download the signed **[0.1.0-beta.1 Android beta](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.1)** and install its ARMv7 APK. Matching game data is included.
+Download the signed **[0.1.0-beta.2 Android beta](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.2)** and install its ARMv7 APK. Matching game data is included.
 
 **Press L1 + R1 together** or keyboard **Escape** for Pause and Settings. Both Thor panels fill by default; choose **Fit** to preserve the original proportions. Phone layouts include on-screen controls. [Thor setup](docs/AYN_THOR.md).
 
 Bring your progress through **Settings → Import save / Export save**. Standard Emerald GBA and emulator `.sav` files are supported; save states are not. Restart after importing and save normally in-game. Export your save before replacing a development APK, which uses a different signing key. [Save details](docs/BUILDING.md#engine-only-build-and-data-packs).
 
-**Sharp pixels are the default.** Settings → Display offers **1×–4× voxel resolution**, starting at **2× Sharp** for new settings. Choose 1× for lighter rendering or 3×/4× for more detail; optional anti-aliasing smooths voxel edges. Existing quality choices are preserved. Enable voxel scenery and battles in **OPTION**; set **3D BLUR → OFF** if an older setup still looks soft. **SHOW FPS** starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
+**Sharp pixels are the default**, including Pokémon sprites and battle text. Settings → Display offers **1×–4× voxel resolution**, starting at **2× Sharp** for new settings. Choose 1× for lighter rendering or 3×/4× for more detail; optional anti-aliasing smooths voxel edges. Existing quality choices are preserved. Enable voxel scenery and battles in **OPTION**; set **3D BLUR → OFF** if an older setup still looks soft. **SHOW FPS** starts off. [Display options](docs/AYN_THOR.md#game-graphics-and-summary-menus).
 
 ## Compatibility
 
@@ -94,7 +94,7 @@ Fast-forward requires enabling it and choosing **2×, 4× or 8×** in Settings. 
     <td align="center"><strong>Sharper voxel scenery</strong></td>
   </tr>
   <tr>
-    <td width="50%"><a href="docs/images/voxel-battle-beta.png"><img src="docs/images/voxel-battle-beta.png" width="480" alt="A wild Poochyena encounter against the voxel Route 102 scenery"></a></td>
+    <td width="50%"><a href="docs/images/voxel-battle-beta.png"><img src="docs/images/voxel-battle-beta.png" width="480" alt="A wild encounter with crisp Pokémon sprites and text against voxel scenery"></a></td>
     <td width="50%"><a href="docs/images/thor-battle-touch.png"><img src="docs/images/thor-battle-touch.png" width="480" alt="Torchic's move selector filling the 1240×1080 bottom display"></a></td>
   </tr>
   <tr>

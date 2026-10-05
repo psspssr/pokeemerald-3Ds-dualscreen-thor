@@ -1,10 +1,62 @@
 # Validation
 
-The repository's [history cleanup](HISTORY.md) changed commit IDs while keeping
-every retained source snapshot identical. Release identities below preserve the
-original build records; the linked mapping identifies their rewritten commits.
+The repository's [history cleanup](HISTORY.md) changed older commit IDs while
+keeping retained source snapshots identical. The source mapping covers releases
+from before that cleanup; beta.2 uses the current history.
 
-## Latest beta: 0.1.0-beta.1
+## Latest beta: 0.1.0-beta.2
+
+The [signed beta.2 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.2)
+was built, signed and uploaded by the successful
+[release workflow](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37291904878).
+[Normal CI](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37289678524)
+also passed on the exact tagged source. The downloaded APK, manifest and
+checksums match the published asset digests; signature, alignment, package and
+packaged native/data verification passed. The signing identity is unchanged.
+
+| Release identity | Value |
+|---|---|
+| Source | `b4c601580ba645a40347bea1e6be4bea99ae0e49` |
+| Version / Android code | `0.1.0-beta.2` / **10** |
+| APK | `emerald-thor-0.1.0-beta.2-armeabi-v7a.apk` |
+| Size | 27,440,654 bytes |
+| SHA-256 | `61c5df62c1c1d98507a23ec072eb00d63b8819c2daf0237fe5140da109ea3c60` |
+| Engine/data ABI | `a5a48bd1` |
+
+Overlay 098 makes the intermediate battle image follow **Sharp / Smooth**.
+Previously, linear sampling blurred sprites and labels before the final Sharp
+upscale. Cached battles and transitions now follow a changed preference after
+resuming. Battle geometry, classic resolution and graphics allocation sizes
+are unchanged; terrain anti-aliasing, shadows, bloom and optional blur remain
+separate.
+
+The GLES suite passes **668 assertions**, including the actual patched battle
+composition, transparent sprite edges, separate UI, cached filter changes,
+allocation retry, transition margins and voxel resolution/AA combinations.
+Omitting 098 reproduces 457 blended pixels in Sharp mode. Actual shadow and
+bloom images remain identical when the battle filter changes.
+
+The production candidate passed natural classic and voxel encounters on
+1920×1080 and 1240×1080 emulator displays, live Sharp→Smooth→Sharp changes,
+1×–4× voxel resolution, Off/2×/4× AA, attacks, HP updates, touch Bag/Party and
+return to the field. The sampled player-name region falls from 82 classic or
+216 voxel colors to its four unblended colors. Dialogue stays crisp. The
+original healthbox bounce is preserved; fractional Fill scaling still gives
+unequal physical pixel widths. The released native library differs from that
+candidate only in its GNU build ID, with identical code and data sections.
+
+The exact downloaded APK was installed without changing the save or either
+settings file. Cold start and Continue, a natural voxel battle, live filter
+changes, a touch-selected attack with an HP update, and return to the field
+passed. The [battle screenshots](images/README.md) are unmodified captures from
+that released APK at both Thor panel sizes. QA originals were restored
+byte-for-byte with their original ownership and modes. No full-game playthrough
+is claimed.
+
+Physical Thor visual quality, lid behavior, audible audio and sustained
+performance still need the [hardware pass](testing/HARDWARE_TEST.md).
+
+## Previous beta: 0.1.0-beta.1
 
 The [signed beta.1 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.1)
 was built and signed locally from the tagged source. [Normal CI](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/actions/runs/37264346440)
@@ -25,8 +77,8 @@ claimed for this build.
 The downloaded three-file bundle matches the retained production bundle
 byte-for-byte. Signature, alignment, package and native/data checks passed,
 and the downloaded APK matches the installed, tested APK. The persistent
-release signing key is unchanged. A later automated retry recognizes the
-complete existing release and can verify it without replacing its bytes.
+release signing key is unchanged. Its original source identity predates the
+history cleanup; use the linked source mapping and new tags for future builds.
 
 That exact nondebuggable APK passed Continue, Bag/Party touch, the repaired
 Pokédex OK button, Settings, Home/resume, single-display fallback and first
