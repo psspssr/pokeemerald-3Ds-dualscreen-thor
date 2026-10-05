@@ -1,0 +1,15 @@
+--- a/3ds_port/src/3ds_settings.c
++++ b/3ds_port/src/3ds_settings.c
+@@ -27,9 +27,9 @@
+ static const int sZooms[] = {90, 100, 110, 120};
+ #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
+ static int sPitch = 2, sZoom = 1;
+-/* The HD-2D tilt-shift blur over the voxel picture (3ds_video.c): on unless
+- * turned off. */
+-static bool sVoxelBlur = true;
++/* Android keeps voxel scenery sharp unless tilt-shift blur is selected.
++ * Explicit stored choices still take precedence when settings are loaded. */
++static bool sVoxelBlur = false;
+ /* Battles in front of the voxel world rather than the GBA's scenery
+  * (3ds_video.c, RenderBattleWorld): off unless turned on. */
+ static bool sVoxelBattle = false;
