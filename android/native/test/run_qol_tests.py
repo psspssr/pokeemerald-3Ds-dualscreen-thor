@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix="emerald-qol-test-") as directory:
     # The comparison implementation comes from the pinned original game, not
     # a duplicate approximation of escape odds written for the test.
     original = subprocess.run(["git", "show", "HEAD:src/battle_script_commands.c"],
-                              cwd=ROOT / "build/upstream", check=True, capture_output=True, text=True).stdout
+                              cwd=TREE, check=True, capture_output=True, text=True).stdout
     original = function(original, "static void Cmd_jumpifplayerran(void)")
     original = original.replace("Cmd_jumpifplayerran(void)", "Cmd_jumpifplayerran_original(void)")
     extracted = function((TREE / "src/battle_util.c").read_text(), "bool8 TryRunFromBattle(u8 battler)")

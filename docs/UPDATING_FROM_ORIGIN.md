@@ -17,9 +17,10 @@ changing the series refreshes affected sources and invalidates configuration.
 
 ## Current upstream pin
 
-Alpha.8 and current `main`/`dev` import upstream `cdc77a3d2b01`. It adds optional
-voxel battle scenery and upstream's native Party/Summary touch menus. An
-upstream import does not alter an existing release.
+The beta development branch imports upstream `c330c0a1aece` (0.2.0), including
+voxel terrain relief, improved sprite occlusion, map-banner clipping and
+background asset/audio work. Alpha.8 still contains `cdc77a3d2b01`; an upstream
+import does not alter an existing release.
 
 During this update, upstream supplied the Summary asset fix and touch handlers,
 so the older Android selector implementation was removed. The remaining
@@ -27,6 +28,13 @@ so the older Android selector implementation was removed. The remaining
 visible fifth-row Cancel work while reordering moves. The fifth row remains
 the new move in the learning selector. Review overlapping upstream fixes this
 way on future updates: retain only Android changes that are still needed.
+
+The 0.2.0 import also replaces the old Android map-banner overlay with the
+upstream implementation. Its indexed drawing and fixed attributes are covered
+by the Android GLES tests. Asset regressions exercise the actual game routines
+with both external stubs and embedded data: resolve a resource before taking
+an offset or reading a color, and use its real byte size for heap buffers.
+Keep those checks when rebasing or retiring a corresponding overlay.
 
 ## Preview and import
 

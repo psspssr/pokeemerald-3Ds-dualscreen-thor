@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
+TREE = Path(os.environ.get("EMERALD_TEST_TREE", ROOT / "build/upstream")).resolve()
 
 
 def function(source, signature):
@@ -30,7 +31,7 @@ def function(source, signature):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=ROOT / "build/upstream/src/pokemon_summary_screen.c")
+    parser.add_argument("--source", type=Path, default=TREE / "src/pokemon_summary_screen.c")
     parser.add_argument("--case", choices=("all", "sliding"), default="all")
     args = parser.parse_args()
     source = args.source.read_text()

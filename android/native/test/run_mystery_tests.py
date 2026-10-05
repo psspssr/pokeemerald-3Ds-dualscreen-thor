@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
-TREE = ROOT / "build/upstream"
+TREE = Path(os.environ.get("EMERALD_TEST_TREE", ROOT / "build/upstream")).resolve()
 CC = os.environ.get("CC", "cc")
 flags = ["-D_GNU_SOURCE", "-DPORTABLE", "-DMODERN=1", "-DPORT_BRIDGE", "-DPLATFORM_3DS",
          "-I" + str(ROOT / "android/native/include"), "-I" + str(ROOT / "android/host/include"),

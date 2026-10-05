@@ -128,14 +128,17 @@ static void gridTest(void)
 }
 static void reelsTest(void)
 {
-    for (unsigned column = 0; column < 20; column++) {
+    for (unsigned column = 0; column < 22; column++) {
+        unsigned sourceColumn = column < 20 ? column : column == 20 ? 0 : 19;
+        unsigned destinationColumn = column < 20 ? column : column == 20 ? 30 : 0;
         memset(reelMap, 0xa5, sizeof(reelMap));
         u16 expected[ARRAY_COUNT(reelMap)]; memcpy(expected, reelMap, sizeof(expected));
-        for (unsigned row = 4; row < 15; row++) expected[row * 32 + column] = reels[(row - 4) * 20 + column];
-        LoadReelTimeWindowTilemap(column, column);
+        for (unsigned row = 4; row < 15; row++)
+            expected[row * 32 + destinationColumn] = reels[(row - 4) * 20 + sourceColumn];
+        LoadReelTimeWindowTilemap(destinationColumn, sourceColumn);
         assert(!memcmp(expected, reelMap, sizeof(expected)));
     }
-    puts("PASS actual Reel Time window: all220 tilemap cells and untouched surroundings");
+    puts("PASS actual Reel Time window: all220 cells, independent source/destination columns and guards");
 }
 static void contestTest(void)
 {
