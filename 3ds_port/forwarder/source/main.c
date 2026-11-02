@@ -1,4 +1,4 @@
-// HOME Menu forwarder for Pokémon Emerald 3Ds Dual Screen.
+// HOME Menu forwarder for Emerald 3DS.
 //
 // Installed once as a CIA, it starts sdmc:/3ds/emerald3ds/Emerald3DS.3dsx, so
 // updating the game only ever replaces the 3DSX. It asks Luma3DS's hb:ldr to
@@ -126,7 +126,7 @@ int main(void)
     {
         gfxInitDefault();
         consoleInit(GFX_TOP, NULL);
-        printf("\n Pokemon Emerald 3Ds Dual Screen\n\n");
+        printf("\n Emerald 3DS\n\n");
         printf(" %s\n", why);
         if (res != -1)
             printf("\n Error 0x%08lX\n", (unsigned long)res);

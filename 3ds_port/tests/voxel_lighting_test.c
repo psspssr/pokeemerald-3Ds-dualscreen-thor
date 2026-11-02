@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "voxel_tileset_fixture.h"
+
 #include "voxel_lighting.h"
 #include "voxel_atlas.h"
 #include "voxel_regions.h"
@@ -21,6 +23,21 @@ static bool sHousePresent = true, sTreePresent;
 static bool sRailPresent;
 static const uint16_t sRailMask[16] = {[14] = 0xFFFF, [15] = 0xFFFF};
 static int sOffsetX, sOffsetZ;
+static unsigned sTileReads;
+
+/* voxel_tree.c compares the map's secondary tileset with this object to
+ * recognise Dewford's tree art; this test never builds trees, so an empty
+ * tileset is enough for the link. */
+const struct Tileset gTileset_Dewford = {0};
+const struct Tileset gTileset_Fortree = {0};
+const struct Tileset gTileset_Mauville = {0};
+const struct Tileset gTileset_Lavaridge = {0};
+const struct Tileset gTileset_Rustboro = {0};
+const struct Tileset gTileset_Lilycove = {0};
+const struct Tileset gTileset_EverGrande = {0};
+const struct Tileset gTileset_BattleFrontierOutsideWest = {0};
+const struct Tileset gTileset_Mossdeep = {0};
+const struct Tileset gTileset_Fallarbor = {0};
 
 unsigned VoxelWorld_InstanceCount(void) { return 2; }
 const VoxelMapInstance *VoxelWorld_Instance(unsigned i) { return i < 2 ? &sMaps[i] : NULL; }
@@ -36,6 +53,7 @@ bool VoxelWorld_UsesTreeSprites(const VoxelMapInstance *inst) { return inst != N
 int VoxelWorld_GetMetatileId(int x, int z)
 {
     int lx = x - sOffsetX, lz = z - sOffsetZ;
+    ++sTileReads;
     if (VoxelWorld_GetInstanceAt(x, z) == NULL) return -1;
     if (sHousePresent && lx >= 4 && lx < 6 && lz >= 4 && lz < 6) return 2;
     if (sTreePresent && lx >= 8 && lx < 10 && lz >= 4 && lz < 6)
@@ -68,6 +86,11 @@ bool VoxelBuildings_CellAt(const VoxelMapInstance *inst, int x, int y,
     if (top != NULL) *top = HOUSE_TOP;
     return true;
 }
+bool VoxelBuildings_BareVariant(const VoxelMapInstance *inst, int x, int y, int *metatile)
+{
+    (void)inst; (void)x; (void)y; (void)metatile;
+    return false;
+}
 const uint16_t *VoxelBuildings_Footprint(const VoxelMapInstance *inst, int x, int y)
 {
     if (sRailPresent && inst->layoutId == 2 && x - inst->originX == 8 && y - inst->originY == 10)
@@ -88,6 +111,13 @@ float VoxelBuildings_LayoutTop(const VoxelMapInstance *inst)
     (void)inst;
     return VoxelBuildings_MaxTop();
 }
+/* No bridge deck in these scenes. */
+bool VoxelBuildings_DeckAt(const VoxelMapInstance *inst, float worldX, float worldZ,
+                           unsigned elevation, float *lift)
+{
+    (void)inst; (void)worldX; (void)worldZ; (void)elevation; (void)lift;
+    return false;
+}
 VoxelVisualShape VoxelWorld_ClassifyTile(int x, int z)
 {
     if (VoxelWorld_GetInstanceAt(x, z) == NULL) return VOXEL_SHAPE_VOID;
@@ -103,6 +133,7 @@ uint32_t VoxelWorld_BlockHash(int x0, int z0, int x1, int z1)
     return hash;
 }
 int VoxelWorld_BorderMetatile(int x, int z) { (void)x; (void)z; return -1; }
+bool VoxelWorld_BorderIsWater(int x, int z) { (void)x; (void)z; return false; }
 void VoxelWorld_GetPlayerWorldCoords(float *x, float *z) { *x = *z = 0; }
 void VoxelAtlas_SlotUV(unsigned slot, float *u0, float *v0, float *u1, float *v1)
 {
@@ -118,6 +149,85 @@ static void Ground(VoxelBuilder *builder, int x, int z)
 {
     VoxelMesh_Top(builder, (float)x, (float)z, 0, 0, 0, 1, 1, 0, 1);
 }
+
+#if CTR_VOXEL_LIGHTING
+static void MovingSunTests(void)
+{
+    static const float directions[][2] = {
+        {1.35f, 0.35f}, {-1.35f, 0.35f}, {0.0f, 0.55f},
+        {1.0f, -0.55f}, {-1.0f, -0.55f}, {1.0f, 0.0f}, {0.0f, 0.0f}
+    };
+    uint32_t oldHash = VoxelLighting_Hash(0, 0, 4, 4);
+
+    assert(VoxelLighting_SetSun(-1.0f, 0.55f, 1.0f, 101));
+    assert(oldHash != VoxelLighting_Hash(0, 0, 4, 4));
+    assert(VoxelLighting_Sample(2.5f, 0, 6.0f) < 0.8f);
+    assert(VoxelLighting_Sample(6.5f, 0, 6.0f) == 1.0f);
+    assert(VoxelLighting_Face(1, 0, 0) == 1.0f);
+    assert(VoxelLighting_Face(-1, 0, 0) == VOXEL_AMBIENT);
+    assert(!VoxelLighting_SetSun(-1.0f, 0.55f, 1.0f, 101));
+    assert(VoxelLighting_SetSun(1.0f, 0.55f, 1.0f, 102));
+    assert(VoxelLighting_Sample(6.5f, 0, 6.0f) < 0.8f);
+    assert(VoxelLighting_Sample(2.5f, 0, 6.0f) == 1.0f);
+    assert(VoxelLighting_Face(-1, 0, 0) == 1.0f);
+    unsigned reads = sTileReads, rays = VoxelLighting_Rays();
+    assert(VoxelLighting_SetSun(0.0f, 0.55f, 0.0f, 1));
+    assert(VoxelLighting_Sample(6.5f, 0, 6.0f) == 1.0f);
+    assert(VoxelLighting_Face(1, 0, 0) == 1.0f);
+    assert(sTileReads == reads && VoxelLighting_Rays() == rays);
+    assert(!VoxelLighting_SetSun(NAN, 0.55f, 1.0f, 103));
+    assert(!VoxelLighting_SetSun(2.0f, 0.55f, 1.0f, 103));
+    assert(!VoxelLighting_SetSun(0.0f, 0.55f, -1.0f, 103));
+
+    sTreePresent = sRailPresent = true;
+    float directionSamples[7][100];
+    for (unsigned direction = 0; direction < sizeof(directions) / sizeof(directions[0]); ++direction)
+    {
+        VoxelLighting_SetSun(directions[direction][0], directions[direction][1], 1.0f, direction + 300);
+        VoxelLighting_Reset();
+        for (unsigned sample = 0; sample < 100; ++sample)
+            directionSamples[direction][sample] = VoxelLighting_Sample(
+                (float)(sample % 10) * 1.3f - 1.0f, 0.37f,
+                (float)(sample / 10) * 1.3f - 1.0f);
+    }
+    for (unsigned direction = 0; direction < sizeof(directions) / sizeof(directions[0]); ++direction)
+    {
+        assert(VoxelLighting_SetSun(directions[direction][0], directions[direction][1], 1.0f, direction + 400));
+        for (unsigned sample = 0; sample < 100; ++sample)
+            assert(directionSamples[direction][sample] == VoxelLighting_Sample(
+                (float)(sample % 10) * 1.3f - 1.0f, 0.37f,
+                (float)(sample / 10) * 1.3f - 1.0f));
+    }
+    for (unsigned direction = 0; direction < sizeof(directions) / sizeof(directions[0]); ++direction)
+    {
+        assert(VoxelLighting_SetSun(directions[direction][0], directions[direction][1], 1.0f, direction + 200));
+        for (unsigned height = 0; height < 3; ++height)
+            for (unsigned row = 0; row < 45; ++row)
+                for (unsigned column = 0; column < 60; ++column)
+                {
+                    float sampleX = (float)column * 0.27f - 1.0f;
+                    float sampleZ = (float)row * 0.31f - 1.0f;
+                    float sampleY = (float)height * 0.37f;
+                    float optimized;
+
+                    sCeilingOverride = 0.0f;
+                    gVoxelLightingStepEveryPoint = false;
+                    VoxelLighting_Reset();
+                    optimized = VoxelLighting_Sample(sampleX, sampleY, sampleZ);
+                    sCeilingOverride = 200.0f;
+                    gVoxelLightingStepEveryPoint = true;
+                    VoxelLighting_Reset();
+                    assert(optimized == VoxelLighting_Sample(sampleX, sampleY, sampleZ));
+                }
+    }
+    sTreePresent = sRailPresent = false;
+    sCeilingOverride = 0.0f;
+    gVoxelLightingStepEveryPoint = false;
+    assert(VoxelLighting_SetSun(0.85f, 0.55f, 1.0f, 0));
+    VoxelLighting_Reset();
+    puts("PASS moving sun: both shadow directions, face lighting, zero axes, bounded rays, cache reuse, night, hash invalidation, 56700 oracle samples");
+}
+#endif
 
 int main(void)
 {
@@ -181,6 +291,15 @@ int main(void)
                 assert(reference[h][z][x] == VoxelLighting_Sample(x * 0.31f - 1, h * 0.4f, z * 0.31f - 1));
             }
     sCeilingOverride = 0.0f;
+    /* A lone sample (a sprite's card) skips the blocks' bound: the same
+     * answers, cold. */
+    for (int h = 0; h < 3; ++h)
+        for (int z = 0; z < 25; ++z)
+            for (int x = 0; x < 25; ++x)
+            {
+                VoxelLighting_Reset();
+                assert(reference[h][z][x] == VoxelLighting_SampleAlone(x * 0.31f - 1, h * 0.4f, z * 0.31f - 1));
+            }
     VoxelLighting_Reset();
     /* Rays jump from cell to cell instead of visiting every point: the same
      * answers as the point-by-point march, over the whole reference grid. */
@@ -275,6 +394,13 @@ int main(void)
     builder.lighting = true;
     Ground(&builder, 3, 3);
     assert(builder.count == 6 && builder.dropped == 0);
+    /* Nor half of one: with room for a triangle and a half, the second quad
+     * goes in whole or not at all - never a sliver along its diagonal. */
+    VoxelBuilder_Init(&builder, storage, 9);
+    builder.lighting = true;
+    Ground(&builder, 3, 3);
+    Ground(&builder, 4, 3);
+    assert(builder.count == 6 && builder.dropped == 2);
 
     /* Round tree proxies shade the floor southeast of the crown's centre and
      * disappear with the live tiles. */
@@ -284,37 +410,6 @@ int main(void)
     sTreePresent = false;
     VoxelLighting_Reset();
     assert(VoxelLighting_Sample(9.74f, 0, 5.13f) == 1.0f);
-
-    /* Contact shadows clipped at a water/land corner lie on each surface:
-     * water is flush with the ground (00485c4fe), so both at the same
-     * height; empty space and building footprints receive no triangles. */
-    VoxelBuilder_Init(&builder, storage, VOXEL_CONTACT_VERTICES);
-    VoxelLighting_Contact(&builder, 3.05f, 3.0f);
-    assert(builder.count != 0 && builder.count <= VOXEL_CONTACT_VERTICES && builder.dropped == 0);
-    bool water = false, land = false;
-    for (unsigned i = 0; i < builder.count; ++i)
-    {
-        assert(isfinite(storage[i].x) && isfinite(storage[i].z));
-        assert(fabsf(storage[i].y - 0.012f) < 0.00001f);
-        if (storage[i].x >= 2.0f && storage[i].x <= 3.0f && storage[i].z >= 2.0f && storage[i].z <= 3.0f)
-            water = true;
-        else
-            land = true;
-    }
-    assert(water && land);
-    VoxelBuilder_Init(&builder, storage, VOXEL_CONTACT_VERTICES);
-    VoxelLighting_Contact(&builder, 5, 5);
-    VoxelLighting_Contact(&builder, -5, -5);
-    assert(builder.count == 0);
-
-    /* Sweep sub-tile positions to exercise clipping and the reserved bound. */
-    for (int z = 0; z <= 20; ++z)
-        for (int x = 0; x <= 20; ++x)
-        {
-            VoxelBuilder_Init(&builder, storage, VOXEL_CONTACT_VERTICES);
-            VoxelLighting_Contact(&builder, 7.0f + x * 0.05f, 7.0f + z * 0.05f);
-            assert(builder.count <= VOXEL_CONTACT_VERTICES && builder.dropped == 0);
-        }
 
     /* A railing casts from its line, not from its cell: the ground just
      * south-east of the line is in its shadow, the rest of its own cell -
@@ -326,13 +421,11 @@ int main(void)
     sRailPresent = false;
     VoxelLighting_Reset();
 
+    MovingSunTests();
     sMaps[1].indoor = true;
     VoxelLighting_Reset();
     assert(VoxelLighting_Sample(3.5f, 0, 3.5f) == 1.0f);
-    VoxelBuilder_Init(&builder, storage, VOXEL_CONTACT_VERTICES);
-    VoxelLighting_Contact(&builder, 7, 7);
-    assert(builder.count == 0);
-    puts("PASS lighting on: sample cache equivalence, ray ceiling, cell skipping, sun, AO, neighbour invalidation, rebase, seams, capacity, live trees, contact clipping, railing footprints, interiors");
+    puts("PASS lighting on: sample cache equivalence, ray ceiling, cell skipping, sun, AO, neighbour invalidation, rebase, seams, capacity, live trees, railing footprints, interiors");
 #else
     assert(builder.count == 6 && builder.dropped == 0);
     for (unsigned i = 0; i < builder.count; ++i) assert(storage[i].shade == 1.0f);

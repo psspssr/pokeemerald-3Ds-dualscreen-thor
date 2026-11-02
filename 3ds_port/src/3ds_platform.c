@@ -1,20 +1,21 @@
 #include <3ds.h>
 #include <stdlib.h>
 #include <malloc.h>
+#include <unistd.h>
 #include <string.h>
 #include "3ds_platform.h"
+#include "3ds_daynight.h"
 #include "3ds_data.h"
 #include "3ds_audio.h"
 #include "3ds_video.h"
 #include "3ds_assets.h"
+#include "3ds_local.h"
+#include "3ds_bottom.h"
 #include "voxel/ctr_voxel.h"
-/* The bottom-screen diagnostic overlay: off, and no longer toggled by SELECT.
- * The figures it showed are still logged periodically to the SD card. */
-static bool sOverlay = false;
 
 static CtrPlatformHooks sHooks;
 static aptHookCookie sAptHook;
-static bool sInitialized, sExit, sReset, sWaiting;
+static bool sInitialized, sExit, sWaiting;
 static uint64_t sFrames, sStart, sLastFrame, sFrameMs;
 static uint64_t sWorkStart, sLastTick, sExitStart;
 static CtrTiming sTiming;
@@ -22,11 +23,22 @@ static CtrTiming sTiming;
 static void Lifecycle(APT_HookType type, void *parameter)
 {
     (void)parameter;
-    if (type == APTHOOK_ONSUSPEND || type == APTHOOK_ONSLEEP)
+    if (type == APTHOOK_ONSLEEP)
+    {
+        CtrLog_Write(CTR_LOG_BOOT, "suspend/sleep");
+        /* The lid closed in a link: it ends for everyone. The game finds the
+         * link lost when it wakes, as the others already have. */
+        LocalLink_LeaveBeforeSleep();
+    }
+    else if (type == APTHOOK_ONSUSPEND)
         CtrLog_Write(CTR_LOG_BOOT, "suspend/sleep");
     else if (type == APTHOOK_ONRESTORE || type == APTHOOK_ONWAKEUP)
     {
+        if (type == APTHOOK_ONWAKEUP)
+            LocalLink_AfterWake();
+        CtrDayNight_Resume();
         CtrInput_Clear();
+        CtrBottom_OnResume();
         sLastFrame = CtrPlatform_Milliseconds();
         sLastTick = sExitStart = 0;
         CtrLog_Write(CTR_LOG_BOOT, "resume");
@@ -38,6 +50,11 @@ static void Lifecycle(APT_HookType type, void *parameter)
 uint64_t CtrPlatform_Milliseconds(void)
 {
     return svcGetSystemTick() / (SYSCLOCK_ARM11 / 1000);
+}
+
+int64_t CtrPlatform_WallSeconds(void)
+{
+    return (int64_t)time(NULL);
 }
 
 uint64_t CtrPlatform_Ticks(void)
@@ -60,9 +77,12 @@ void CtrPlatform_NoteBottom(float ms) { sTiming.bottomMs = ms; }
 
 bool CtrPlatform_Init(void)
 {
-    /* A New 3DS runs at 804 MHz with its L2 cache; an Old 3DS ignores this. */
-    osSetSpeedupEnable(true);
-    gfxInitDefault();
+    /* The bottom screen at RGB565 from the start: its frame buffers live in
+     * the linear heap, and gfxInitDefault made them BGR8 (450 KiB) before
+     * CtrLog_Init turned the screen to 565, which never shrinks them. The
+     * top screen stays BGR8: at 565 the top screen came out garbled on a
+     * New 3DS from the first frame (Azahar showed it fine). */
+    gfxInit(GSP_BGR8_OES, GSP_RGB565_OES, false);
     /* A New 3DS runs the application core at 804 MHz with its L2 cache when
      * asked; an Old 3DS ignores this. */
     osSetSpeedupEnable(true);
@@ -81,6 +101,8 @@ bool CtrPlatform_Init(void)
         return false;
     }
     CtrSettings_Load();
+    CtrScenario_Init();
+    CtrProf_LogIdentity();
     if (!CtrData_Init())
         CtrPlatform_ShowDataError(CtrData_ErrorTitle(), CtrData_ErrorDetail());
     if (!CtrVideo_Init())
@@ -88,10 +110,12 @@ bool CtrPlatform_Init(void)
         CtrLog_Write(CTR_LOG_ERROR, "platform init: GPU video failed");
         return false;
     }
-    CtrLog_SetOverlay(sOverlay);
     /* A console without dumped DSP firmware still plays; it just plays silent.
      * CtrAudio_Init says so in the log and the game is left running. */
     CtrAudio_Init();
+    /* The radio of the emulated Wireless Adapter; idle until a link counter
+     * starts a session. */
+    LocalLink_Init();
     return true;
 }
 
@@ -104,14 +128,23 @@ void CtrPlatform_SetHooks(const CtrPlatformHooks *hooks)
 }
 
 /* Free memory in the two pools a 3DSX actually competes for: the application
- * heap newlib allocates from, and the linear heap the GPU can address. */
+ * heap newlib allocates from, and the linear heap the GPU can address.
+ * mallinfo's free is only what the arena holds now; the heap still grows by
+ * sbrk up to fake_heap_end (__system_allocateHeaps), so the room it really
+ * has left is both. */
+extern char *fake_heap_end;
+
 void CtrPlatform_ReportMemory(const char *stage)
 {
     struct mallinfo info = mallinfo();
+    char *top = sbrk(0);
+    size_t grow = top != (char *)-1 && top < fake_heap_end ? (size_t)(fake_heap_end - top) : 0;
 
-    CtrLog_Write(CTR_LOG_BOOT, "memory %s: heap used=%u free=%u, linear free=%lu, VRAM free=%lu",
+    CtrLog_Write(CTR_LOG_BOOT, "memory %s: heap used=%u free=%u, linear free=%lu, VRAM free=%lu, "
+                 "heap room=%lu KiB (%lu KiB past the arena)",
                  stage, (unsigned)info.uordblks, (unsigned)info.fordblks,
-                 (unsigned long)linearSpaceFree(), (unsigned long)vramSpaceFree());
+                 (unsigned long)linearSpaceFree(), (unsigned long)vramSpaceFree(),
+                 (unsigned long)((info.fordblks + grow) >> 10), (unsigned long)(grow >> 10));
 }
 
 _Static_assert(sizeof(CtrLock) == sizeof(LightLock), "CtrLock is a LightLock");
@@ -125,7 +158,22 @@ bool CtrPlatform_StartThread(void (*entry)(void *), void *arg, unsigned stack, i
     s32 priority = 0x30;
 
     svcGetThreadPriority(&priority, CUR_THREAD_HANDLE);
-    return threadCreate(entry, arg, stack, priority < 0x3F ? priority + 1 : 0x3F, core, true) != NULL;
+    priority = priority < 0x3F ? priority + 1 : 0x3F;
+    /* The system core needs a share of it for the application first; one
+     * already asked for (the sound engine's, the voxel streams') is kept. */
+    if (core == 1)
+    {
+        u32 limit = 0;
+
+        if ((R_SUCCEEDED(APT_GetAppCpuTimeLimit(&limit)) && limit >= 30)
+            || R_SUCCEEDED(APT_SetAppCpuTimeLimit(30)))
+        {
+            if (threadCreate(entry, arg, stack, priority, 1, true) != NULL)
+                return true;
+        }
+        core = -2;
+    }
+    return threadCreate(entry, arg, stack, priority, core, true) != NULL;
 }
 
 void CtrPlatform_SleepUs(unsigned microseconds)
@@ -134,7 +182,6 @@ void CtrPlatform_SleepUs(unsigned microseconds)
 }
 
 void CtrPlatform_RequestExit(void) { sExit = true; }
-void CtrPlatform_RequestReset(void) { sReset = true; }
 
 bool CtrPlatform_BeginFrame(void)
 {
@@ -144,8 +191,10 @@ bool CtrPlatform_BeginFrame(void)
     CtrInput_Scan();
     const CtrInput *input = CtrInput_Get();
     /* Leave START and SELECT individually available to ReadKeys. Only the
-     * deliberate one-second chord exits the game. */
-    if ((input->physicalHeld & (CTR_KEY_START | CTR_KEY_SELECT)) == (CTR_KEY_START | CTR_KEY_SELECT))
+     * deliberate one-second chord exits the game; with A and B as well it is
+     * the game's soft reset, which may be held longer. */
+    if ((input->physicalHeld & (CTR_KEY_START | CTR_KEY_SELECT | CTR_KEY_A | CTR_KEY_B))
+        == (CTR_KEY_START | CTR_KEY_SELECT))
     {
         if (!sExitStart) sExitStart = CtrPlatform_Milliseconds();
         if (CtrPlatform_Milliseconds() - sExitStart >= 1000)
@@ -155,18 +204,202 @@ bool CtrPlatform_BeginFrame(void)
         }
     }
     else sExitStart = 0;
-    if (input->resetDown)
-        CtrPlatform_RequestReset();
-    if (sReset)
-    {
-        sReset = false;
-        CtrLog_Write(CTR_LOG_BOOT, "logical reset");
-        if (sHooks.reset)
-            sHooks.reset();
-        else
-            CTR_UNIMPLEMENTED("reset hook");
-    }
     return true;
+}
+
+/*
+ * Fast-forward (CtrSettings_SpeedHalves). Each game frame earns two halves;
+ * a frame is presented and waits for the display once `speed` halves have
+ * been earned, the others run back to back: at 2x one frame in two is shown,
+ * at 1.5x two in three. Only
+ * a presented frame ticks the sound engine (CtrPlatform_SoundTick), so music
+ * and effects keep their speed while the game runs faster; a frame hidden by
+ * real-time pacing (below) ticks it too, as it stands for real time. A frame is also
+ * presented as soon as one more hidden frame and the present would no longer
+ * fit in the display's frame: the game then runs as fast as the console
+ * allows (an Old 3DS less than a New 3DS at 804 MHz) and the picture and the
+ * sound stay at 60 Hz.
+ */
+#define FRAME_MS (1000.0f / 60)
+static bool sSoundTick = true;
+static unsigned sEarned;
+/* Real-time pacing's hidden frame (PaceBehind): never two in a row. */
+static unsigned sHidden;
+static uint64_t sShownTick;
+static float sPresentMs = 4.0f;
+
+/*
+ * Real-time pacing (OPTIONS' REAL-TIME PACING, key audio_clock), with the
+ * sound engine on the DSP's clock (3ds_audio.c). A frame the console takes
+ * longer than the display's over - an Old 3DS drawing a town, a New 3DS in
+ * 3D with a town streaming in - used to slow the game by that much. Paced,
+ * the game keeps the display's time instead: when it has fallen a whole
+ * frame behind the clock, the next frame runs hidden, as fast-forward's do,
+ * and the picture skips a step while the game and the music do not. Never
+ * two hidden frames in a row, so the picture keeps at least half the rate;
+ * and a long gap - the HOME menu, sleep, a map load - is let go rather than
+ * caught up, which would be a burst of hidden frames.
+ */
+#define PACE_KEY "audio_clock"
+#define PACE_HZ 59.8261f           /* the LCD's refresh */
+#define PACE_LET_GO_FRAMES 4.0f
+static bool sPace;
+/* A battle's party menu, summary or bag up (the top screen held over the
+ * battle, which waits under it): hidden frames there too (PaceUpdate). */
+static bool sPaceMenus;
+static uint64_t sPaceStart;
+static float sPaceFrames;
+/* This frame went through pacing, not fast-forward (FrameShown): a frame it
+ * hides still ticks the sound engine, which otherwise (no worker on the DSP's
+ * clock) would slow by exactly the frames pacing hides. */
+static bool sPacedFrame;
+
+/* Whether the game is a frame behind the clock, counting this frame as run. */
+static bool PaceBehind(uint64_t now)
+{
+    float elapsed;
+
+    if (sPaceStart == 0)
+    {
+        sPaceStart = now;
+        sPaceFrames = 0.0f;
+    }
+    sPaceFrames += 1.0f;
+    elapsed = (float)((now - sPaceStart) * (double)PACE_HZ / SYSCLOCK_ARM11);
+    if (elapsed - sPaceFrames > PACE_LET_GO_FRAMES || elapsed < sPaceFrames - 1.0f)
+    {
+        /* Too far behind to catch up, or ahead (a timer change): start over. */
+        sPaceStart = now;
+        sPaceFrames = 0.0f;
+        return false;
+    }
+    return elapsed - sPaceFrames >= 1.0f;
+}
+
+/* The setting, read once a frame; the sound engine follows it. The field
+ * only (and a battle's menus, below): the voxel world is what costs the
+ * frame there, and a battle's own timing (its intro's slides, its cries) is
+ * best left as the GBA's. */
+static void PaceUpdate(void)
+{
+    bool setting = CtrSettings_GetInt(PACE_KEY, 1) != 0;
+    bool on = setting && !CtrVideo_InBattle();
+    /* Nothing of the battle's own runs under its menus, only theirs: there
+     * the game keeps the display's time too, a slow redraw of the bottom
+     * screen's view costing the picture a step and not the game. The sound
+     * engine stays on the game's frames, as in the rest of the battle: a
+     * hidden frame ticks it (sPacedFrame), so the music keeps its tempo. */
+    bool menus = setting && CtrVideo_InBattle() && CtrVideo_TopHeld();
+
+    if (on != sPace)
+    {
+        sPace = on;
+        sPaceStart = 0;
+        CtrAudio_SetClock(on);
+    }
+    if (menus != sPaceMenus)
+    {
+        sPaceMenus = menus;
+        sPaceStart = 0;
+    }
+}
+
+/*
+ * The battle scene's speed (CtrSettings_BattleSpeedHalves): while the battle
+ * itself is on screen, its own speed paces the frames; the bag, the party and
+ * the summary a battle opens, and the field, keep the overworld's SPEED. The
+ * game reports the scene once a frame (CtrGame_WaitFrame). A link session
+ * plays at 1x for everyone and a measured scenario is recorded at 1x, so
+ * neither takes the battle's keys or speed.
+ */
+#define BADGE_MS 2000
+static bool sBattleScene;
+static uint64_t sBadgeUntil;
+
+void CtrPlatform_SetBattleScene(bool on)
+{
+    sBattleScene = on;
+}
+
+bool CtrPlatform_BattleSpeedKeys(void)
+{
+    return sBattleScene && !LocalLink_InSession() && !CtrScenario_Active();
+}
+
+void CtrPlatform_StepBattleSpeed(int direction, bool wrap)
+{
+    CtrSettings_StepBattleSpeed(direction, wrap);
+    /* Shown even at an end of the range, so the press is answered. */
+    sBadgeUntil = CtrPlatform_Milliseconds() + BADGE_MS;
+}
+
+int CtrPlatform_BattleSpeedBadge(void)
+{
+    int halves;
+
+    if (!CtrPlatform_BattleSpeedKeys())
+        return 0;
+    halves = CtrSettings_BattleSpeedHalves();
+    return CtrPlatform_Milliseconds() < sBadgeUntil ? halves : 0;
+}
+
+static bool FrameShown(uint64_t now)
+{
+    /* In a local wireless session everyone plays at the same speed: the link
+     * code times out on a partner that runs slower. */
+    unsigned speed = LocalLink_InSession() ? 2
+                   : CtrPlatform_BattleSpeedKeys() ? CtrSettings_BattleSpeedHalves()
+                   : CtrSettings_SpeedHalves();
+    float since = sShownTick ? (now - sShownTick) * 1000.0f / SYSCLOCK_ARM11 : FRAME_MS;
+
+    sPacedFrame = (sPace || sPaceMenus) && speed <= 2;
+    if (sPacedFrame)
+    {
+        bool behind = PaceBehind(now);
+
+        if (behind && sHidden == 0)
+        {
+            sHidden = 1;
+            return false;
+        }
+        sHidden = 0;
+        return true;
+    }
+    sEarned += 2;
+    if (speed <= 2 || since + sTiming.gameMs + sPresentMs > FRAME_MS)
+    {
+        sEarned = 0;
+        return true;
+    }
+    if (sEarned >= speed)
+    {
+        sEarned -= speed;
+        return true;
+    }
+    return false;
+}
+
+bool CtrPlatform_SoundTick(void)
+{
+    return sSoundTick;
+}
+
+/*
+ * No HOME Menu in a local wireless session, as the GBA link games' own 3DS
+ * releases have it: the link would go on without this system. A press is
+ * refused, and a sign shows that it was (CtrVideo_ShowNoHome).
+ */
+static void UpdateHomeAllowed(void)
+{
+    bool allowed = !LocalLink_InSession();
+
+    if (allowed != aptIsHomeAllowed())
+    {
+        aptSetHomeAllowed(allowed);
+        CtrLog_Write(CTR_LOG_BOOT, "HOME button %s", allowed ? "allowed" : "blocked (local wireless)");
+    }
+    if (!allowed && aptCheckHomePressRejected())
+        CtrVideo_ShowNoHome();
 }
 
 void CtrPlatform_EndFrame(void)
@@ -174,7 +407,13 @@ void CtrPlatform_EndFrame(void)
     if (sWaiting)
         return;
     sWaiting = true;
+    UpdateHomeAllowed();
     uint64_t endStart = svcGetSystemTick();
+    /* This frame's game work, for FrameShown (set again below). */
+    sTiming.gameMs = (endStart - sWorkStart) * 1000.0f / SYSCLOCK_ARM11;
+    PaceUpdate();
+    bool shown = FrameShown(endStart);
+    sSoundTick = shown || sPacedFrame;
     if (sHooks.audioFrame)
         sHooks.audioFrame();
     /* Latch the logical frame BEFORE GPU reads its registers/OAM/palette.
@@ -183,13 +422,20 @@ void CtrPlatform_EndFrame(void)
         sHooks.vblank();
     uint64_t presentStart = svcGetSystemTick();
     /* Before the present, which reads them: its DROP line is about the frame
-     * that just ran, and the voxel builds after FrameEnd estimate the next. */
-    sTiming.gameMs = (endStart - sWorkStart) * 1000.0f / SYSCLOCK_ARM11;
+     * that just ran, and the voxel builds after FrameEnd estimate the next
+     * (gameMs is already this frame's, from above). */
     sTiming.vblankMs = (presentStart - endStart) * 1000.0f / SYSCLOCK_ARM11;
     /* FrameEnd(0) also flushes the console's linear LCD buffer. Calling
      * gfxFlushBuffers here would flush BOTH screens again, not just bottom. */
-    if (sHooks.videoPresent)
+    if (sHooks.videoPresent && shown)
+    {
         sHooks.videoPresent();
+        /* The present's own work, without its wait for the display. */
+        sPresentMs = (svcGetSystemTick() - presentStart) * 1000.0f / SYSCLOCK_ARM11
+                     - CtrVideo_GetStats()->waitMs;
+        if (sPresentMs < 0) sPresentMs = 0;
+        sShownTick = svcGetSystemTick();
+    }
     ++sFrames;
     uint64_t now = CtrPlatform_Milliseconds();
     sFrameMs = now - sLastFrame;
@@ -206,77 +452,22 @@ void CtrPlatform_EndFrame(void)
     sWaiting = false;
 }
 
-void CtrPlatform_Diagnostic(uint32_t frames, uint32_t aPresses, uint32_t checks)
-{
-    const CtrInput *input = CtrInput_Get();
-    if (sFrames % 30 != 0 || !sOverlay) return;
-    const CtrVideoStats *video = CtrVideo_GetStats();
-    const struct CtrAssetStats *assets = CtrAssets_GetStats();
-    const CtrAudioStats *audio = CtrAudio_Stats();
-    const CtrVoxelStats *voxel = CtrVoxel_GetStats();
-    char text[1020];
-    snprintf(text, sizeof(text),
-        "Pokemon Emerald 3Ds Dual Screen\n"
-        "FPS: %5.1f FRAME: %-10lu\n"
-        "Frame:%6.2f Work:%6.2f ms\n"
-        "Peak:%6.2f Slow:%-8lu\n"
-        "CPU:%6.2f ms GPU:%6.2f ms\n"
-        "Assets:%4lu/%lu  %lu/%lu KiB\n"
-        "Hit:%-7lu Miss:%-7lu\n"
-        "Evict:%-5lu Err:%-5lu Peak:%lu KiB\n"
-        "Tiles:%4lu Upload:%4lu Verr:%lu\n"
-        "Audio:%s q%lu/%d u:%-4lu d:%lu\n"
-        "Mix:%5.2f Sub:%4.2f ms V:%-2lu\n"
-        "Song:%-4lu Peak:%-5lu %.0f Hz\n"
-        "Held:%03x Down:%03x Touch:%d\n"
-        "Voxel:%-7s atl%lu msh%lu ch%lu/%lu gap%lu\n"
-        "Vtx:%-6lu spr%-5lu drop%lu\n"
-        "Lin:%4lu Vram:%4lu KiB\n"
-        "Voxel err:%lu\n"
-        "Mesh:%5.1f Peak:%6.1f ms\n"
-        "Elapsed:%llu s\n"
-        "SELECT: overlay  X: reset\n"
-        "START+SELECT 1s: exit",
-        video->fps, (unsigned long)frames,
-        sTiming.frameMs, sTiming.workMs, sTiming.peakWorkMs, (unsigned long)sTiming.slowFrames,
-        video->cpuMs, video->gpuMs,
-        (unsigned long)assets->loads, (unsigned long)assets->entries,
-        (unsigned long)(assets->bytes >> 10), (unsigned long)(assets->budget >> 10),
-        (unsigned long)assets->hits, (unsigned long)assets->misses,
-        (unsigned long)assets->evictions, (unsigned long)assets->errors,
-        (unsigned long)(assets->peakBytes >> 10),
-        (unsigned long)video->tiles, (unsigned long)video->uploads, (unsigned long)video->errors,
-        CtrAudio_Available() ? "on " : "off",
-        (unsigned long)audio->queued, CTR_AUDIO_TARGET_DEPTH,
-        (unsigned long)audio->underruns, (unsigned long)audio->drops,
-        audio->mixMs, audio->submitMs, (unsigned long)audio->voices,
-        (unsigned long)audio->song, (unsigned long)audio->peak, audio->rateHz,
-        input->held, input->down, input->touchActive,
-        CtrVoxel_Status(),
-        (unsigned long)voxel->atlasRebuilds, (unsigned long)voxel->meshRebuilds,
-        (unsigned long)voxel->visibleChunks, (unsigned long)voxel->chunks,
-        (unsigned long)voxel->chunksMissing,
-        (unsigned long)voxel->vertices, (unsigned long)voxel->spriteUpdates,
-        (unsigned long)voxel->dropped,
-        voxel->linearFree >> 10, voxel->vramFree >> 10,
-        (unsigned long)voxel->errors,
-        voxel->meshMs, voxel->meshPeakMs,
-        (unsigned long long)((sLastFrame - sStart) / 1000));
-    (void)aPresses; (void)checks;
-    CtrLog_DrawOverlay(text);
-}
-
 void CtrPlatform_Shutdown(void)
 {
     if (!sInitialized)
         return;
     sInitialized = false;
+    /* The last segment and what the GPU's memory holds, before it is freed. */
+    CtrProf_Close();
+    CtrAssets_StopWarmup();
     CtrSettings_Shutdown();
     if (sHooks.shutdown)
         sHooks.shutdown();
+    LocalLink_Shutdown();
     CtrVideo_Shutdown();
     CtrAudio_Shutdown();
     CtrLog_Write(CTR_LOG_BOOT, "clean shutdown, platform frames=%llu", (unsigned long long)sFrames);
+    CtrScenario_Close();
     aptUnhook(&sAptHook);
     CtrFs_Shutdown();
     CtrLog_Close();
@@ -292,7 +483,7 @@ void CtrPlatform_ShowDataError(const char *title, const char *detail)
     consoleInit(GFX_TOP, &console);
     consoleSelect(&console);
     consoleClear();
-    printf("\x1b[2;2HPokemon Emerald 3Ds Dual Screen\n\n\x1b[31m %s\x1b[0m\n\n", title);
+    printf("\x1b[2;2HEmerald 3DS\n\n\x1b[31m %s\x1b[0m\n\n", title);
     for (const char *line = detail; line && *line;)
     {
         const char *end = strchr(line, '\n');
@@ -359,7 +550,7 @@ void Port_ProfBegin(void)
 {
     if (sProfFrames >= 600)
     {
-        char text[256];
+        char text[256] = "";   /* no bucket named: logged empty, not garbage */
         size_t used = 0;
 
         for (unsigned i = 0; i < PROF_BUCKETS && sProf[i].name != NULL && used < sizeof(text) - 32; ++i)

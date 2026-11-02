@@ -55,6 +55,13 @@ struct AssetPayload
 static struct AssetMapEntry *sEntries;
 static struct AssetPtrMapEntry *sPtrEntries;
 static struct AssetPayload *sPayloads;
+/*
+ * Every stub address and every grouped pointer the index knows lies in
+ * [sLowest, sHighest]. The game's copies and decompressions all ask whether
+ * their source is an asset (CpuSet, LZ77...), and nearly all of them come
+ * from RAM: one comparison answers those instead of three binary searches.
+ */
+static u32 sLowest = 0xFFFFFFFFu, sHighest;
 static char *sPathBlob;
 static u32 sPathBlobSize;
 static u32 sEntryCount;
@@ -177,6 +184,17 @@ static bool LoadAssetMap(void)
         }
     }
 
+    for (i = 0; i < sEntryCount; i++)
+    {
+        if (sEntries[i].addr < sLowest) sLowest = sEntries[i].addr;
+        if (sEntries[i].addr > sHighest) sHighest = sEntries[i].addr;
+    }
+    for (i = 0; i < sPtrEntryCount; i++)
+    {
+        if (sPtrEntries[i].ptr < sLowest) sLowest = sPtrEntries[i].ptr;
+        if (sPtrEntries[i].ptr > sHighest) sHighest = sPtrEntries[i].ptr;
+    }
+
     CtrLock_Init(&sLock);
     sStats.entries = sEntryCount;
     sStats.pointerEntries = sPtrEntryCount;
@@ -271,7 +289,11 @@ static bool RemapPointerViaPtrMap(u32 ptr, u32 *outBase, u32 *outOffset)
 static s32 FindAssetIndexForPointer(u32 ptr, u32 *outOffset)
 {
     u32 base, extraOffset;
-    s32 idx = FindAssetIndexByAddr(ptr);
+    s32 idx;
+
+    if (ptr < sLowest || ptr > sHighest)
+        return -1;
+    idx = FindAssetIndexByAddr(ptr);
 
     if (idx >= 0)
     {
@@ -332,7 +354,11 @@ static s32 FindInteriorAssetIndexForSizedPointer(u32 ptr, u32 size, u32 *outOffs
 
 static s32 FindAssetIndexForSizedPointer(u32 ptr, u32 size, u32 *outOffset)
 {
-    s32 idx = FindAssetIndexByAddr(ptr);
+    s32 idx;
+
+    if (ptr < sLowest || ptr > sHighest)
+        return -1;
+    idx = FindAssetIndexByAddr(ptr);
 
     if (idx >= 0)
     {
@@ -400,6 +426,9 @@ static u8 *ReadPayload(u32 idx)
 /* Under sLock. */
 static void Publish(u32 idx, u8 *buffer)
 {
+    /* Graphics with English words, redrawn for a translated build. Here,
+     * where the demand read, the warm-up worker and the prefetch all pass. */
+    Port_TransformAsset(GetAssetPathByIndex(idx), buffer, sEntries[idx].size);
     sPayloads[idx].data = buffer;
     sPayloads[idx].size = sEntries[idx].size;
     sPayloads[idx].stamp = sStamp;
@@ -407,6 +436,48 @@ static void Publish(u32 idx, u8 *buffer)
     ++sStats.loads;
     if (sStats.bytes > sStats.peakBytes)
         sStats.peakBytes = sStats.bytes;
+}
+
+/*
+ * A payload the game had to wait for names its neighbours: the rest of a
+ * tileset's folder (its animation frames are asked for one by one over the
+ * next seconds, 3-19 ms each on an Old 3DS while the warm-up still runs), or
+ * the rest of a source file's generated tables. The warm-up worker reads
+ * those next (WarmHinted). Under sLock.
+ */
+static char sWarmHint[96];
+static bool sWarmHintPending;
+
+static void HintNeighbours(const char *path)
+{
+    static const char generated[] = "generated/assets/";
+    size_t length = 0;
+
+    if (strncmp(path, generated, sizeof(generated) - 1) == 0)
+    {
+        const char *group = strstr(path + sizeof(generated) - 1, "__");
+
+        if (group != NULL)
+            length = (size_t)(group - path) + 2;
+    }
+    else if (strncmp(path, "data/tilesets/", 14) == 0)
+    {
+        /* data/tilesets/<primary|secondary>/<name>/ */
+        const char *p = path + 14;
+
+        p = strchr(p, '/');
+        if (p != NULL)
+            p = strchr(p + 1, '/');
+        if (p != NULL)
+            length = (size_t)(p - path) + 1;
+    }
+    if (length == 0 || length >= sizeof(sWarmHint))
+        return;
+    if (sWarmHintPending && strncmp(sWarmHint, path, length) == 0 && sWarmHint[length] == '\0')
+        return;
+    memcpy(sWarmHint, path, length);
+    sWarmHint[length] = '\0';
+    sWarmHintPending = true;
 }
 
 static u8 *GetPayload(u32 idx)
@@ -427,6 +498,8 @@ static u8 *GetPayload(u32 idx)
         u64 start = CtrPlatform_Ticks();
 
         ++sStats.misses;
+        if (sWarming != NULL)
+            HintNeighbours(GetAssetPathByIndex(idx));
         data = ReadPayload(idx);
         if (data != NULL)
             Publish(idx, data);
@@ -473,7 +546,15 @@ typedef struct
 static const char *const sWarmFirst[] = {
     "graphics/intro/", "graphics/title_screen/", "graphics/rayquaza_scene/",
     "graphics/pokemon/rayquaza/", "graphics/pokemon/groudon/", "graphics/pokemon/kyogre/",
-    "graphics/battle_anims/", "graphics/fonts/", "graphics/text_window/", "graphics/interface/",
+    /* The field the save continues on: the primary tilesets (100 KiB, with
+     * the water and flower animations every map shows) and the map name
+     * pop-up were read in the frame, a dozen of them, in the first minute. */
+    "data/tilesets/primary/", "generated/assets/build_root_src_map_name_popup__",
+    /* The follower's ball, as it first comes out there: its two files were
+     * 38 ms of that frame. */
+    "graphics/balls/",
+    "graphics/battle_anims/", "graphics/battle_interface/", "graphics/battle_environment/",
+    "graphics/battle_transitions/", "graphics/fonts/", "graphics/text_window/", "graphics/interface/",
     "graphics/birch_speech/", "graphics/misc/",
 };
 #define WARM_RANKS (sizeof(sWarmFirst) / sizeof(sWarmFirst[0]))
@@ -497,9 +578,13 @@ static int CompareWarmEntries(const void *a, const void *b)
     return x->idx < y->idx ? -1 : x->idx > y->idx;
 }
 
+/* Set at exit (CtrAssets_StopWarmup): the worker stops before the file
+ * system it reads from is closed. */
+static volatile bool sWarmStop, sWarmRunning;
+
 static bool WarmRoom(void)
 {
-    return sStats.bytes < sBudget / WARM_BUDGET_SHARE;
+    return !sWarmStop && sStats.bytes < sBudget / WARM_BUDGET_SHARE;
 }
 
 /* Claims the payloads [first, end) of the list that nobody holds yet. */
@@ -524,6 +609,45 @@ static void WarmRelease(const WarmEntry *list, unsigned first, unsigned end)
     for (unsigned i = first; i < end; ++i)
         sWarming[list[i].idx] = 0;
     CtrLock_Unlock(&sLock);
+}
+
+/* One payload into the cache, unless someone holds it or has it already. */
+static void WarmOne(const WarmEntry *entry)
+{
+    u32 idx = entry->idx;
+    u8 *data;
+
+    if (WarmClaim(entry, 0, 1) == 0)
+        return;
+    data = ReadPayload(idx);
+    CtrLock_Lock(&sLock);
+    if (data != NULL && sPayloads[idx].data == NULL)
+        Publish(idx, data), data = NULL;
+    sWarming[idx] = 0;
+    CtrLock_Unlock(&sLock);
+    free(data);
+}
+
+/* The neighbours of what the game last waited for (HintNeighbours), first. */
+static void WarmHinted(const WarmEntry *list, unsigned count)
+{
+    char hint[sizeof(sWarmHint)];
+    size_t length;
+
+    CtrLock_Lock(&sLock);
+    if (!sWarmHintPending)
+    {
+        CtrLock_Unlock(&sLock);
+        return;
+    }
+    memcpy(hint, sWarmHint, sizeof(hint));
+    sWarmHintPending = false;
+    CtrLock_Unlock(&sLock);
+    length = strlen(hint);
+    for (unsigned i = 0; i < count && WarmRoom(); ++i)
+        if (sPayloads[list[i].idx].data == NULL
+         && strncmp(GetAssetPathByIndex(list[i].idx), hint, length) == 0)
+            WarmOne(&list[i]);
 }
 
 /* The pack: runs of neighbouring payloads in one read each. */
@@ -594,26 +718,26 @@ static void WarmWorker(void *arg)
         count = 0;
         for (u32 i = 0; i < sEntryCount && WarmRoom(); ++i)
         {
-            u32 idx = list[i].idx;
-            WarmEntry one = list[i];
-            u8 *data;
-
-            if (WarmClaim(&one, 0, 1) == 0)
-                continue;
-            data = ReadPayload(idx);
-            CtrLock_Lock(&sLock);
-            if (data != NULL && sPayloads[idx].data == NULL)
-                Publish(idx, data), data = NULL;
-            sWarming[idx] = 0;
-            CtrLock_Unlock(&sLock);
-            free(data);
+            WarmHinted(list, sEntryCount);
+            WarmOne(&list[i]);
         }
     }
     free(run);
     free(list);
-    CtrLog_Write(CTR_LOG_FS, "assets warmed: %lu KiB of %lu payloads in %.0f ms (%s)",
-                 (unsigned long)(sStats.bytes >> 10), (unsigned long)sStats.loads,
-                 CtrPlatform_TickMs(CtrPlatform_Ticks() - begin), count ? "pack runs" : "file by file");
+    CtrLog_Write(CTR_LOG_FS, "assets warmed%s: %lu KiB of %lu payloads in %.0f ms (%s)",
+                 sWarmStop ? " until exit" : "", (unsigned long)(sStats.bytes >> 10),
+                 (unsigned long)sStats.loads, CtrPlatform_TickMs(CtrPlatform_Ticks() - begin),
+                 count ? "pack runs" : "file by file");
+    sWarmRunning = false;
+}
+
+/* Exiting with the warm-up under way, its reads failed in the log as the
+ * RomFS went away under them: it stops first, a payload at most later. */
+void CtrAssets_StopWarmup(void)
+{
+    sWarmStop = true;
+    for (unsigned waited = 0; sWarmRunning && waited < 200; ++waited)
+        CtrPlatform_SleepUs(5000);
 }
 
 void CtrAssets_StartWarmup(void)
@@ -624,17 +748,21 @@ void CtrAssets_StartWarmup(void)
         return;
     sWarming = calloc(sEntryCount, 1);
     list = malloc(sEntryCount * sizeof(*list));
+    sWarmRunning = true;
     if (sWarming == NULL || list == NULL
-        || !CtrPlatform_StartThread(WarmWorker, list, 16 * 1024, -2))
+        /*
+         * On the system core: on the application core, below the game, the
+         * worker only ran while the game waited for the display, and read
+         * the RomFS a file at a time over a whole minute (58 s on an Old
+         * 3DS), the field asking for its tiles in the frame meanwhile. It
+         * waits on the FS service far more than it computes.
+         */
+        || !CtrPlatform_StartThread(WarmWorker, list, 16 * 1024, 1))
     {
         free(list);
+        sWarmRunning = false;
         CtrLog_Write(CTR_LOG_ERROR, "assets: no warm-up worker; payloads load on demand");
     }
-}
-
-void CtrAssets_SetBudget(u32 bytes)
-{
-    sBudget = bytes;
 }
 
 const struct CtrAssetStats *CtrAssets_GetStats(void)
@@ -870,6 +998,30 @@ static const void *ResolveLoaded(s32 idx, u32 offset, const void *fallback)
         return fallback;
     }
     return data + offset;
+}
+
+/*
+ * A graphic the game has just decompressed (LZ77UnCompWram/Vram, bios.c),
+ * named by the asset its compressed data came from without the ".lz": the
+ * Portuguese build redraws the English words in it (3ds_icons_ptbr.c).
+ */
+void Port_TransformDecompressed(const void *source, void *data, unsigned size)
+{
+    char plain[128];
+    const char *path;
+    size_t n;
+    u32 offset = 0;
+    s32 idx = FindAssetIndexForPointer((u32)source, &offset);
+
+    if (idx < 0 || offset != 0 || data == NULL)
+        return;
+    path = GetAssetPathByIndex((u32)idx);
+    n = strlen(path);
+    if (n <= 3 || n - 3 >= sizeof(plain) || strcmp(path + n - 3, ".lz") != 0)
+        return;
+    memcpy(plain, path, n - 3);
+    plain[n - 3] = '\0';
+    Port_TransformAsset(plain, data, size);
 }
 
 const void *Port_ResolveAssetPointer(const void *ptr)

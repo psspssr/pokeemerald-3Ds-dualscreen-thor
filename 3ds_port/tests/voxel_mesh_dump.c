@@ -26,6 +26,11 @@
 
 #define GRID 64u
 
+/* voxel_tree.c only compares a map's secondary tileset against its address */
+const char gTileset_Dewford[1], gTileset_Fortree[1], gTileset_Mauville[1], gTileset_Lavaridge[1],
+    gTileset_Rustboro[1], gTileset_Lilycove[1], gTileset_EverGrande[1],
+    gTileset_BattleFrontierOutsideWest[1], gTileset_Mossdeep[1], gTileset_Fallarbor[1];
+
 static VoxelMapInstance sMap;
 static VoxelAtlasMap sAtlas;
 static uint16_t *sCells;
@@ -52,6 +57,7 @@ VoxelVisualShape VoxelWorld_ClassifyTile(int x, int y)
     return VoxelWorld_GetInstanceAt(x, y) ? VOXEL_SHAPE_FLAT : VOXEL_SHAPE_VOID;
 }
 int VoxelWorld_BorderMetatile(int x, int y) { (void)x; (void)y; return -1; }
+bool VoxelWorld_BorderIsWater(int x, int y) { (void)x; (void)y; return false; }
 void VoxelWorld_GetPlayerWorldCoords(float *x, float *z) { *x = 0; *z = 0; }
 void VoxelAtlas_SlotUV(unsigned slot, float *u, float *v, float *ue, float *ve)
 {

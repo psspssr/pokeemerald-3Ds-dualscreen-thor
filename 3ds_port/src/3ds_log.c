@@ -7,8 +7,6 @@
 #include "3ds_log.h"
 
 static PrintConsole sConsole;
-static PrintConsole sOverlay;
-static bool sOverlayVisible;
 static const char *const sTags[] =
 {
     "BOOT", "VIDEO", "INPUT", "FS", "AUDIO", "GAME", "ERROR"
@@ -59,6 +57,71 @@ static void RingPut(const char *text, unsigned length)
     {
         sRing[sHead] = text[i];
         sHead = (sHead + 1) % LOG_RING;
+    }
+}
+
+/*
+ * perf.bin: the frame profiler's fixed-size records (3ds_prof.c), in a ring
+ * of their own so that a burst of text never pushes them out, drained by the
+ * same thread after the text.
+ */
+#define BIN_RING (64 * 1024)
+static FILE *sBinFile;
+static uint8_t sBinRing[BIN_RING];
+static unsigned sBinHead, sBinTail, sBinDropped;
+static void Drain(void);
+
+void CtrLog_WriteBinary(const void *data, unsigned size)
+{
+    const uint8_t *bytes = data;
+
+    if (sBinFile == NULL)
+        return;
+    LightLock_Lock(&sLock);
+    if (size >= BIN_RING - (sBinHead - sBinTail + BIN_RING) % BIN_RING)
+        ++sBinDropped;
+    else
+        for (unsigned i = 0; i < size; ++i)
+        {
+            sBinRing[sBinHead] = bytes[i];
+            sBinHead = (sBinHead + 1) % BIN_RING;
+        }
+    LightLock_Unlock(&sLock);
+    if (sWriter == NULL && (sBinHead - sBinTail + BIN_RING) % BIN_RING > BIN_RING / 2)
+        Drain();
+}
+
+static void DrainBinary(void)
+{
+    static uint8_t chunk[4096];
+
+    for (;;)
+    {
+        unsigned n = 0, dropped;
+
+        LightLock_Lock(&sLock);
+        while (sBinTail != sBinHead && n < sizeof(chunk))
+        {
+            chunk[n++] = sBinRing[sBinTail];
+            sBinTail = (sBinTail + 1) % BIN_RING;
+        }
+        dropped = sBinDropped;
+        sBinDropped = 0;
+        LightLock_Unlock(&sLock);
+        if (dropped != 0 && sFile != NULL)
+            fprintf(sFile, "[ERROR] perf.bin ring full: %u records dropped\n", dropped);
+        if (n == 0)
+            break;
+        if (sBinFile != NULL && fwrite(chunk, 1, n, sBinFile) != n)
+        {
+            fclose(sBinFile);
+            sBinFile = NULL;
+        }
+    }
+    if (sBinFile != NULL && fflush(sBinFile) != 0)
+    {
+        fclose(sBinFile);
+        sBinFile = NULL;
     }
 }
 
@@ -115,6 +178,7 @@ static void Drain(void)
         fclose(sFile);
         sFile = NULL;
     }
+    DrainBinary();
     sDrainEnd = svcGetSystemTick();
     LightLock_Unlock(&sDrainLock);
 }
@@ -213,8 +277,14 @@ void CtrLog_Init(void)
             remove("sdmc:/3ds/emerald3ds/port-prev.log");
             rename("sdmc:/3ds/emerald3ds/port.log", "sdmc:/3ds/emerald3ds/port-prev.log");
             sFile = fopen("sdmc:/3ds/emerald3ds/port.log", "w");
+            remove("sdmc:/3ds/emerald3ds/perf-prev.bin");
+            rename("sdmc:/3ds/emerald3ds/perf.bin", "sdmc:/3ds/emerald3ds/perf-prev.bin");
+            sBinFile = sFile != NULL ? fopen("sdmc:/3ds/emerald3ds/perf.bin", "wb") : NULL;
         }
     }
+    sBinHead = sBinTail = sBinDropped = 0;
+    if (sBinFile)
+        setvbuf(sBinFile, NULL, _IONBF, 0);
     if (sFile)
     {
         /* The ring already batches; a second buffer would only copy twice. */
@@ -228,6 +298,11 @@ void CtrLog_Init(void)
                                          : sWriter != NULL ? "ready" : "ready, written inline");
 }
 
+bool CtrLog_Enabled(void)
+{
+    return sFile != NULL;
+}
+
 void CtrLog_Write(CtrLogCategory category, const char *format, ...)
 {
     char message[384];
@@ -235,6 +310,11 @@ void CtrLog_Write(CtrLogCategory category, const char *format, ...)
     va_list args;
     unsigned tag = (unsigned)category;
     int length;
+    /* Without debug.txt there is nowhere for the line to go: a player's
+     * console skips the formatting (floats through vfprintf are slow on the
+     * ARM11) and the debug-output SVC altogether. */
+    if (sFile == NULL)
+        return;
     if (tag >= sizeof(sTags) / sizeof(sTags[0]))
         tag = CTR_LOG_ERROR;
     va_start(args, format);
@@ -244,7 +324,11 @@ void CtrLog_Write(CtrLogCategory category, const char *format, ...)
     if (length < 0)
         return;
     if (length >= (int)sizeof(line))
+    {
+        /* Truncated: still a line of its own in port.log. */
         length = sizeof(line) - 1;
+        line[length - 1] = '\n';
+    }
     /* The bottom screen no longer mirrors the log: only the debug output and
      * the SD file receive it, and the screen is left to the overlay. */
     svcOutputDebugString(line, length);
@@ -287,32 +371,15 @@ void CtrLog_Close(void)
     if (sFile)
         fclose(sFile);
     sFile = NULL;
-}
-
-void CtrLog_SetOverlay(bool enabled)
-{
-    LightLock_Lock(&sConsoleLock);
-    sOverlayVisible = enabled;
-    /* Hidden and never shown: no console, nothing on the bottom screen. */
-    if (!enabled && !sConsoleReady)
-    {
-        LightLock_Unlock(&sConsoleLock);
-        return;
-    }
-    EnsureConsole();
-    consoleSelect(&sConsole);
-    consoleSetWindow(&sConsole, 0, 0, 40, 30);
-    consoleClear();
-    /* Without the log rows the overlay has the whole screen. */
-    sOverlay = sConsole;
-    LightLock_Unlock(&sConsoleLock);
+    if (sBinFile)
+        fclose(sBinFile);
+    sBinFile = NULL;
 }
 
 /* With the log off the screen, a fatal error would otherwise leave it blank. */
 void CtrLog_ShowFatal(const char *reason)
 {
     LightLock_Lock(&sConsoleLock);
-    sOverlayVisible = false;
     EnsureConsole();
     consoleSelect(&sConsole);
     consoleSetWindow(&sConsole, 0, 0, 40, 30);
@@ -320,30 +387,5 @@ void CtrLog_ShowFatal(const char *reason)
     printf("\x1b[1;1HFATAL: %.32s", reason);
     printf("\x1b[3;1HLog (if debug.txt exists): port.log");
     printf("\x1b[5;1HSTART: exit");
-    LightLock_Unlock(&sConsoleLock);
-}
-
-void CtrLog_DrawOverlay(const char *text)
-{
-    if (!sOverlayVisible) return;
-    LightLock_Lock(&sConsoleLock);
-    consoleSelect(&sOverlay);
-    /* libctru flushes BOTH LCD buffers at every newline. Position rows with
-     * ANSI instead: the GPU frame-end flush covers the completed overlay. */
-    unsigned row = 1;
-    while (*text && row <= 30)
-    {
-        const char *end = strchr(text, '\n');
-        size_t length = end ? (size_t)(end - text) : strlen(text);
-        char line[41];
-        size_t visible = length < 40 ? length : 40;
-        memset(line, ' ', 40);
-        memcpy(line, text, visible);
-        line[40] = 0;
-        printf("\x1b[%u;1H%s", row++, line);
-        text += length;
-        if (*text == '\n') ++text;
-    }
-    consoleSelect(&sConsole);
     LightLock_Unlock(&sConsoleLock);
 }

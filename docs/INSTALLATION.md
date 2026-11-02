@@ -1,4 +1,4 @@
-# Install and update Pokémon Emerald 3Ds Dual Screen
+# Install and update Emerald 3DS
 
 These instructions apply to the latest
 [release](https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen/releases/latest).
@@ -6,9 +6,12 @@ Download the ZIP attached to the release, not the automatically generated
 source-code archives.
 
 The download **does not contain the game**. You need a clean dump of your own
-Pokémon Emerald (USA, Europe) cartridge. The builder generates the game's data
-pack locally from your ROM; it does not upload, copy or modify the ROM, and it
-needs no Internet connection.
+Pokémon Emerald (USA, Europe), Pokémon Esmeralda (Spain), Pokémon Émeraude
+(France) or Pokémon Smeraldo (Italy) cartridge; the game is built in its
+language. The builder generates the game's data pack locally from your ROM; it
+does not upload, copy or modify the ROM, and it needs an Internet connection
+only to download the optional follower sprites (without one, the game is built
+without them).
 
 ## What you need
 
@@ -38,7 +41,7 @@ needs no Internet connection.
 6. If you selected a folder instead of the SD card, copy its `3ds` folder to
    the **root** of your SD card, merging it with the existing `3ds` folder.
 7. Make sure `SD:/3ds/dspfirm.cdc` is present for sound (see below). Put the
-   card back in the console and launch **Pokémon Emerald 3Ds Dual Screen** from
+   card back in the console and launch **Emerald 3DS** from
    the Homebrew Launcher.
 
 ### Sound
@@ -62,7 +65,7 @@ the two releases for you and shows this path only when it is safe; the game
 also refuses an incompatible pack when it starts.
 
 **Full update: generate the pack again.** When a release changes the data
-(most of them while the game is in Alpha):
+(most of them while the game is in beta):
 
 1. Either use the **web builder at <https://emerald-3ds.com>**, where you select your ROM
    and the pack is built inside your browser: the ROM is read locally and never
@@ -108,7 +111,7 @@ python -m emerald3ds_builder --payload /path/to/payload install --rom /path/to/r
 
 See the [builder documentation](../builder/README.md) for other source-builder commands.
 
-Pokémon Emerald 3Ds Dual Screen is an unofficial fan project, not affiliated
+Emerald 3DS is an unofficial fan project, not affiliated
 with or endorsed by Nintendo, Game Freak, Creatures or The Pokémon Company.
 Pokémon and Pokémon Emerald are trademarks of their respective owners. See
 `LICENSES/` in the release ZIP.

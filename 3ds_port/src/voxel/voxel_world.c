@@ -12,12 +12,17 @@
 #include "global.h"
 #include "main.h"
 #include "overworld.h"
+#include "event_data.h"
+#include "time_events.h"
+#include "constants/layouts.h"
 #include "fieldmap.h"
 #include "decompress.h"
 #include "metatile_behavior.h"
 #include "event_object_movement.h"
 #include "field_player_avatar.h"
+#include "field_camera.h"
 #include "constants/map_types.h"
+#include "constants/maps.h"
 #include "constants/metatile_behaviors.h"
 #include "port_platform.h"
 
@@ -25,7 +30,10 @@
 #include "voxel_regions.h"
 #include "voxel_tree.h"
 #include "voxel_atlas.h"
+#include "voxel_relief.h"
 #ifdef PLATFORM_3DS
+#include "3ds_video.h"
+#include "voxel_building.h"
 #include "field_weather.h"
 #include "palette.h"
 #include "constants/field_weather.h"
@@ -46,7 +54,9 @@ static unsigned sInstanceCount;
  * handful of distinct tilesets and layouts on screen, so a scan beats anything
  * cleverer, and every entry is dropped at VoxelWorld_BeginBatch.
  */
-#define VOXEL_MEMO_SLOTS 8
+/* At least one per instance: past a full memo every lookup on the remaining
+ * instances falls back to the asset binary search, per tile. */
+#define VOXEL_MEMO_SLOTS (MAX_VOXEL_MAP_INSTANCES + 4)
 
 struct VoxelMemo
 {
@@ -154,44 +164,6 @@ unsigned Voxel_MetatileCount(const void *tilesetPtr, unsigned limit)
     return bytes < limit ? (unsigned)bytes : limit;
 }
 
-bool Voxel_LoadTiles(const void *tilesetPtr, uint8_t *dest, uint32_t destSize)
-{
-    const struct Tileset *tileset = tilesetPtr;
-    const void *tiles;
-    u32 available;
-
-    if (tileset == NULL || tileset->tiles == NULL || dest == NULL)
-        return false;
-
-    if (tileset->isCompressed)
-    {
-        /*
-         * LZ77UnCompWram cannot be told how large the destination is, so the
-         * header is read first and a payload that does not fit is refused
-         * rather than allowed to run off the end of the scratch buffer.
-         */
-        const u8 *packed = Port_ResolveAssetPointer(tileset->tiles);
-        u32 size;
-
-        if (packed == NULL)
-            return false;
-        size = (u32)packed[1] | ((u32)packed[2] << 8) | ((u32)packed[3] << 16);
-        if (size == 0 || size > destSize)
-            return false;
-        LZDecompressWram((const u32 *)packed, dest);
-        return true;
-    }
-
-    tiles = Port_ResolveAssetPointer(tileset->tiles);
-    if (tiles == NULL)
-        return false;
-    available = Port_GetAssetSizeExact(tileset->tiles);
-    if (available == 0 || available > destSize)
-        available = destSize;
-    memcpy(dest, tiles, available);
-    return true;
-}
-
 /* ── Availability ───────────────────────────────────────────────────────── */
 
 /* Return completion separately from success, allowing bounded decoding. */
@@ -289,22 +261,79 @@ bool VoxelWorld_IsBattleMapAvailable(void)
 
 /* ── Instances ──────────────────────────────────────────────────────────── */
 
-static void FillInstance(VoxelMapInstance *inst, const struct MapHeader *header,
+/*
+ * Maps whose layout a script swaps on entering them (setmaplayoutindex in
+ * their ON_TRANSITION), as the swap stands while the player is elsewhere:
+ * a neighbour is drawn whole, and its header's layout showed what the game
+ * hides - the Mirage Tower over the desert from Mauville, every day, years
+ * after it fell - or hid what it shows: Mirage Island, out in the sea of
+ * Route 130 the days it is there, rose out of it only once the player
+ * crossed into the route. `swapped` says, as the script does, whether the
+ * map is entered with `layoutId`; NULL: always.
+ */
+static bool MirageTowerHidden(void)
+{
+    return !FlagGet(FLAG_MIRAGE_TOWER_VISIBLE);
+}
+
+static bool MirageIslandShown(void)
+{
+    return IsMirageIslandPresent();
+}
+
+static const struct
+{
+    u8 mapGroup, mapNum;
+    bool (*swapped)(void);
+    u16 layoutId;
+} sLayoutSwaps[] = {
+    { MAP_GROUP(MAP_ROUTE111), MAP_NUM(MAP_ROUTE111), MirageTowerHidden, LAYOUT_ROUTE111_NO_MIRAGE_TOWER },
+    { MAP_GROUP(MAP_ROUTE130), MAP_NUM(MAP_ROUTE130), MirageIslandShown, LAYOUT_ROUTE130_MIRAGE_ISLAND },
+    { MAP_GROUP(MAP_ROUTE131), MAP_NUM(MAP_ROUTE131), NULL, LAYOUT_ROUTE131_SKY_PILLAR },
+};
+
+static u16 NeighbourLayoutId(const struct MapHeader *header, int mapGroup, int mapNum)
+{
+    for (unsigned i = 0; i < ARRAY_COUNT(sLayoutSwaps); ++i)
+        if (sLayoutSwaps[i].mapGroup == mapGroup && sLayoutSwaps[i].mapNum == mapNum
+         && (sLayoutSwaps[i].swapped == NULL || sLayoutSwaps[i].swapped())
+         && Port_GetMapLayoutById(sLayoutSwaps[i].layoutId) != NULL)
+            return sLayoutSwaps[i].layoutId;
+    return header->mapLayoutId;
+}
+
+/* `layoutId`: the layout the map is drawn with - the current map's is the
+ * save block's (a script may have swapped it: the header keeps the map's
+ * first id), a neighbour's NeighbourLayoutId. The current map's layout is
+ * the one the game loaded, gMapHeader's pointer (SetCurrentMapLayout moves
+ * it with the save block's id), never looked up again by id. */
+static void FillInstance(VoxelMapInstance *inst, const struct MapHeader *header, u16 layoutId,
                          int mapGroup, int mapNum, int originX, int originY)
 {
+    const struct MapLayout *layout = header == &gMapHeader || layoutId == header->mapLayoutId
+                                   ? header->mapLayout : Port_GetMapLayoutById(layoutId);
+
+    if (layout == NULL)
+    {
+        layout = header->mapLayout;
+        layoutId = header->mapLayoutId;
+    }
     inst->header = header;
-    inst->layout = header->mapLayout;
-    inst->primaryTileset = header->mapLayout->primaryTileset;
-    inst->secondaryTileset = header->mapLayout->secondaryTileset;
-    inst->layoutId = header->mapLayoutId;
+    inst->layout = layout;
+    inst->primaryTileset = layout->primaryTileset;
+    inst->secondaryTileset = layout->secondaryTileset;
+    inst->layoutId = layoutId;
+    inst->headerLayoutId = header->mapLayoutId;
+    inst->live = false;
     inst->mapGroup = mapGroup;
     inst->mapNum = mapNum;
     inst->originX = originX;
     inst->originY = originY;
-    inst->width = header->mapLayout->width;
-    inst->height = header->mapLayout->height;
+    inst->width = layout->width;
+    inst->height = layout->height;
     inst->indoor = header->mapType == MAP_TYPE_INDOOR
                 || header->mapType == MAP_TYPE_SECRET_BASE;
+    inst->lift = 0;
 }
 
 /*
@@ -338,12 +367,37 @@ static bool ConnectionOrigin(const struct MapConnection *conn, const struct MapH
 }
 
 /*
- * The map across each side connection of `from`. The current map's own are
- * taken as they are; one further away (`far`) only where it is not a map
- * already placed and covers none of their ground - the connections of
- * Hoenn's maps do not always agree with one another's.
+ * Every map the walk out along the connections has placed, the instances
+ * among them: each is a place the walk goes on from, so that a map within
+ * reach is found even where the way to it leads through one that is not.
  */
-static void AddConnections(const VoxelMapInstance *from, bool far)
+#define VOXEL_PLACED_MAX 32
+#define VOXEL_WALK_REACH (2 * VOXEL_WORLD_REACH)
+
+static VoxelMapInstance sPlaced[VOXEL_PLACED_MAX];
+static unsigned sPlacedCount;
+
+/* Tiles between two rectangles, the larger of the two axes; 0 touching. */
+static int RectGap(const VoxelMapInstance *a, int x, int y, int width, int height)
+{
+    int dx = x >= a->originX + a->width ? x - (a->originX + a->width)
+           : a->originX >= x + width ? a->originX - (x + width) : 0;
+    int dy = y >= a->originY + a->height ? y - (a->originY + a->height)
+           : a->originY >= y + height ? a->originY - (y + height) : 0;
+
+    return dx > dy ? dx : dy;
+}
+
+/*
+ * The map across each side connection of `from`. The current map's own are
+ * taken as they are; one further away only where it is not a map already
+ * placed and covers none of their ground - the connections of Hoenn's maps
+ * do not always agree with one another's. `keep`: an instance however far it
+ * lies (a connection of the current map's own neighbours); otherwise only
+ * within VOXEL_WORLD_REACH of the current map, and not placed at all past
+ * VOXEL_WALK_REACH.
+ */
+static void AddConnections(const VoxelMapInstance *from, bool near, bool keep)
 {
     const struct MapHeader *header = from->header;
     const struct MapConnection *conn;
@@ -354,10 +408,11 @@ static void AddConnections(const VoxelMapInstance *from, bool far)
     for (s32 i = 0; i < header->connections->count; ++i, ++conn)
     {
         const struct MapHeader *neighbour;
-        int originX, originY;
+        int originX, originY, width, height, gap;
         bool clash = false;
+        VoxelMapInstance *placed;
 
-        if (sInstanceCount >= MAX_VOXEL_MAP_INSTANCES)
+        if (sPlacedCount >= VOXEL_PLACED_MAX)
             return;
         if (conn->direction == CONNECTION_DIVE || conn->direction == CONNECTION_EMERGE)
             continue;
@@ -365,50 +420,173 @@ static void AddConnections(const VoxelMapInstance *from, bool far)
         if (neighbour == NULL || neighbour->mapLayout == NULL
          || !ConnectionOrigin(conn, neighbour, from, &originX, &originY))
             continue;
-        for (unsigned k = 0; far && k < sInstanceCount && !clash; ++k)
+        width = neighbour->mapLayout->width;
+        height = neighbour->mapLayout->height;
+        gap = RectGap(&sPlaced[0], originX, originY, width, height);
+        if (!near && !keep && gap > VOXEL_WALK_REACH)
+            continue;
+        for (unsigned k = 0; !near && k < sPlacedCount && !clash; ++k)
         {
-            const VoxelMapInstance *placed = &sInstances[k];
+            const VoxelMapInstance *other = &sPlaced[k];
 
-            clash = (placed->mapGroup == conn->mapGroup && placed->mapNum == conn->mapNum)
-                 || (originX < placed->originX + placed->width
-                     && originX + neighbour->mapLayout->width > placed->originX
-                     && originY < placed->originY + placed->height
-                     && originY + neighbour->mapLayout->height > placed->originY);
+            clash = (other->mapGroup == conn->mapGroup && other->mapNum == conn->mapNum)
+                 || (originX < other->originX + other->width
+                     && originX + width > other->originX
+                     && originY < other->originY + other->height
+                     && originY + height > other->originY);
         }
-        if (!clash)
-            FillInstance(&sInstances[sInstanceCount++], neighbour,
-                         conn->mapGroup, conn->mapNum, originX, originY);
+        if (clash)
+            continue;
+        placed = &sPlaced[sPlacedCount++];
+        FillInstance(placed, neighbour, NeighbourLayoutId(neighbour, conn->mapGroup, conn->mapNum),
+                     conn->mapGroup, conn->mapNum, originX, originY);
+        /* as high as the seam with the map it is reached from asks */
+        placed->lift = from->lift + VoxelRelief_SeamStep(from, placed);
+        if ((near || keep || gap <= VOXEL_WORLD_REACH) && sInstanceCount < MAX_VOXEL_MAP_INSTANCES)
+            sInstances[sInstanceCount++] = *placed;
     }
 }
 
+#ifdef PLATFORM_3DS
+/* Ground variant (layout, metatile) is drawn from `inst`'s own tileset of
+ * that metatile, the one the atlas composes it from (voxel_atlas.c
+ * AtlasSourceOf). */
+static bool VariantFits(const VoxelMapInstance *inst, unsigned layoutId, unsigned metatile)
+{
+    const struct MapLayout *layout = Port_GetMapLayoutById((u16)layoutId);
+
+    if (layout == NULL)
+        return false;
+    return metatile < NUM_METATILES_IN_PRIMARY
+         ? layout->primaryTileset == inst->primaryTileset
+         : layout->secondaryTileset == inst->secondaryTileset;
+}
+#endif
+
 /*
- * The current map, its connections, and theirs. The game loads only the first
- * two, which is all its 15 x 10 tiles of screen can reach; the 3D view sees
+ * The current map, its connections, theirs, and any map further along that
+ * lies within VOXEL_WORLD_REACH of it. The game loads only the first two,
+ * which is all its 15 x 10 tiles of screen can reach; the 3D view sees
  * several times as far, and a map one crossing further away was missing from
  * it - the belt of border trees stood in its place, and on the crossing that
  * made it a neighbour it had to be built from nothing while the view showed
  * black where it lies. Placed from the start, it is built ahead of time like
- * any map in the ring, and the crossing only moves the coordinates. The set
- * depends on the current map alone, never on the view: a change to it is a
- * new epoch, and every chunk in view verified again.
+ * any map in the ring, and the crossing only moves the coordinates.
+ *
+ * Two crossings were not enough either. The view looks back the way the
+ * player came - walking south out of Route 101 into Littleroot it faces
+ * north - and the map two crossings behind, still on screen, became three
+ * crossings away on the step that crossed: Route 102 went out of the world
+ * and the belt stood where it had been, black until built. Counted by
+ * distance instead of by crossings, the set of one map holds whatever the
+ * view from the map beside it showed across their seam, so a crossing drops
+ * nothing in sight and builds nothing that was already there.
+ *
+ * The set depends on the current map alone, never on the view: a change to
+ * it is a new epoch, and every chunk in view verified again.
  */
+/*
+ * The lift each map last stood at (voxel_relief.c VoxelRelief_SeamStep): the
+ * map the player comes to keeps it, so the world is not moved under them -
+ * across a seam it is the lift the map already had on screen, through a
+ * warp the one it had when last seen, and the chunks built for it stand.
+ * Going round one of Hoenn's loops adds what the loop does not close by; a
+ * lift past LIFT_FORGET is let go at the next warp, the map back at its base.
+ */
+#define LIFT_MEMORY 32
+#define LIFT_FORGET (8 * 16)
+
+static struct
+{
+    bool used;
+    s16 mapGroup, mapNum;
+    s16 lift;
+} sLiftMemory[LIFT_MEMORY];
+static unsigned sLiftMemoryNext;
+
+static int RememberedLift(int mapGroup, int mapNum, bool *found)
+{
+    for (unsigned i = 0; i < LIFT_MEMORY; ++i)
+        if (sLiftMemory[i].used && sLiftMemory[i].mapGroup == mapGroup
+         && sLiftMemory[i].mapNum == mapNum)
+        {
+            *found = true;
+            return sLiftMemory[i].lift;
+        }
+    *found = false;
+    return 0;
+}
+
+static void RememberLift(const VoxelMapInstance *inst)
+{
+    unsigned slot = sLiftMemoryNext;
+
+    for (unsigned i = 0; i < LIFT_MEMORY; ++i)
+        if (sLiftMemory[i].used && sLiftMemory[i].mapGroup == inst->mapGroup
+         && sLiftMemory[i].mapNum == inst->mapNum)
+        {
+            sLiftMemory[i].lift = (s16)inst->lift;
+            return;
+        }
+    if (inst->lift == 0)
+        return;     /* forgotten is 0 */
+    sLiftMemory[slot].used = true;
+    sLiftMemory[slot].mapGroup = (s16)inst->mapGroup;
+    sLiftMemory[slot].mapNum = (s16)inst->mapNum;
+    sLiftMemory[slot].lift = (s16)inst->lift;
+    sLiftMemoryNext = (slot + 1u) % LIFT_MEMORY;
+}
+
+/* The lift the current map keeps: the one it had among the maps on screen
+ * (a crossing), else the one remembered (a warp). */
+static int CurrentLift(int mapGroup, int mapNum)
+{
+    bool found;
+    int lift;
+
+    for (unsigned i = 0; i < sInstanceCount; ++i)
+        if (sInstances[i].mapGroup == mapGroup && sInstances[i].mapNum == mapNum)
+            return sInstances[i].lift;
+    lift = RememberedLift(mapGroup, mapNum, &found);
+    return lift > LIFT_FORGET || lift < -LIFT_FORGET ? 0 : lift;
+}
+
 void VoxelWorld_BuildInstances(void)
 {
     unsigned near;
+    int lift = CurrentLift(gSaveBlock1Ptr->location.mapGroup, gSaveBlock1Ptr->location.mapNum);
 
+#ifdef PLATFORM_3DS
+    VoxelBuildings_SetVariantFits(VariantFits);
+    VoxelBuildings_SetDrawings(VoxelWorld_LayoutDrawing);
+#endif
     sInstanceCount = 0;
+    sPlacedCount = 0;
     if (gMapHeader.mapLayout == NULL)
         return;
 
     /* Instance 0 is always the current map, at the origin. */
-    FillInstance(&sInstances[0], &gMapHeader,
+    FillInstance(&sPlaced[0], &gMapHeader, gSaveBlock1Ptr->mapLayoutId,
                  gSaveBlock1Ptr->location.mapGroup,
                  gSaveBlock1Ptr->location.mapNum, 0, 0);
-    sInstanceCount = 1;
-    AddConnections(&sInstances[0], false);
-    near = sInstanceCount;
-    for (unsigned i = 1; i < near; ++i)
-        AddConnections(&sInstances[i], true);
+    /* Its layout is the save block's: a script that swaps it in
+     * (setmaplayoutindex - Route 130's Mirage Island, Route 131's Sky Pillar,
+     * the Sky Pillar's clean floors, Route 111 without its tower)
+     * sets that and gMapHeader.mapLayout, never gMapHeader.mapLayoutId
+     * (overworld.c, SetCurrentMapLayout). Keyed by the header's, the
+     * relief, regions and buildings were the default layout's. */
+    sPlaced[0].layoutId = gSaveBlock1Ptr->mapLayoutId;
+    sPlaced[0].lift = sPlaced[0].indoor ? 0 : lift;
+    sInstances[0] = sPlaced[0];
+    sInstances[0].live = true;
+    sPlacedCount = sInstanceCount = 1;
+    AddConnections(&sPlaced[0], true, true);
+    near = sPlacedCount;
+    /* Nearest first: the walk goes outwards a crossing at a time. */
+    for (unsigned i = 1; i < sPlacedCount; ++i)
+        AddConnections(&sPlaced[i], false, i < near);
+    for (unsigned i = 0; i < sInstanceCount; ++i)
+        RememberLift(&sInstances[i]);
 }
 
 unsigned VoxelWorld_InstanceCount(void)
@@ -527,6 +705,12 @@ bool VoxelWorld_IsVisibleReflectiveSurface(int worldX, int worldY)
     behavior = UNPACK_BEHAVIOR(GetMetatileAttribute(inst, metatileId));
     if (!MetatileBehavior_IsReflective(behavior) && !MetatileBehavior_IsIce(behavior))
         return false;
+    /* A bridge's deck over a pond (Route 104's pier, the only one there is):
+     * the GBA shows a walker's reflection under the bridge, in the water the
+     * planks hide; here the deck is no water surface, and a reflection laid
+     * on it was drawn over the planks. The water beside it still reflects. */
+    if (behavior == MB_REFLECTION_UNDER_BRIDGE)
+        return false;
 
     /* Fortree's 0x288-0x29A puddle family contains grass artwork despite its
      * MB_PUDDLE behavior. The original 2D ground effect treats it as nearby
@@ -536,6 +720,79 @@ bool VoxelWorld_IsVisibleReflectiveSurface(int worldX, int worldY)
      && metatileId >= 0x288 && metatileId <= 0x29A)
         return false;
     return true;
+}
+
+/*
+ * A sprite of priority 3 lies over BG3 alone. A metatile's lower layer is on
+ * BG3 unless it is a NORMAL one (BG2, over the sprite), and its upper layer
+ * on BG2 or BG1, both over it: the sprite shows where the cell is COVERED or
+ * SPLIT and its upper layer draws nothing (index 0). Read from the tiles the
+ * field has loaded (the current map's tilesets), a metatile at a time,
+ * cached: the cards are laid in the VBlank handler.
+ */
+#define UNDER_GROUND_CACHE 64u
+
+bool VoxelWorld_UnderGroundMask(int worldX, int worldY, uint16_t rows[16])
+{
+#ifdef PLATFORM_3DS
+    static struct
+    {
+        const void *primary, *secondary;
+        uint16_t metatileId;
+        uint16_t rows[16];
+    } sCache[UNDER_GROUND_CACHE];
+    const VoxelMapInstance *inst = NULL;
+    u16 block = GetRawBlock(worldX, worldY, &inst);
+    const uint8_t *tiles = CtrVideo_GetBgVram();
+    const uint16_t *entries;
+    unsigned metatileId, slot;
+
+    if (inst == NULL || tiles == NULL || sInstanceCount == 0
+     || inst->primaryTileset != sInstances[0].primaryTileset
+     || inst->secondaryTileset != sInstances[0].secondaryTileset)
+        return false;
+    metatileId = block & MAPGRID_METATILE_ID_MASK;
+    slot = metatileId % UNDER_GROUND_CACHE;
+    if (sCache[slot].primary == inst->primaryTileset && sCache[slot].secondary == inst->secondaryTileset
+     && sCache[slot].metatileId == metatileId)
+    {
+        memcpy(rows, sCache[slot].rows, sizeof(sCache[slot].rows));
+        return true;
+    }
+    entries = metatileId < NUM_METATILES_IN_PRIMARY
+            ? Voxel_ResolveMetatiles(inst->primaryTileset)
+            : Voxel_ResolveMetatiles(inst->secondaryTileset);
+    if (entries == NULL)
+        return false;
+    entries += (metatileId % NUM_METATILES_IN_PRIMARY) * NUM_TILES_PER_METATILE;
+    memset(rows, 0, 16 * sizeof(rows[0]));
+    if (UNPACK_LAYER_TYPE(GetMetatileAttribute(inst, metatileId)) != METATILE_LAYER_TYPE_NORMAL)
+        for (unsigned q = 0; q < 4; ++q)
+        {
+            uint16_t entry = entries[4 + q];
+            const uint8_t *tile = tiles + (entry & 0x3FF) * 32u;
+
+            for (unsigned y = 0; y < 8; ++y)
+                for (unsigned x = 0; x < 8; ++x)
+                {
+                    unsigned sx = (entry & 0x400) ? 7 - x : x, sy = (entry & 0x800) ? 7 - y : y;
+                    uint8_t packed = tile[sy * 4 + sx / 2];
+
+                    if (((sx & 1) ? packed >> 4 : packed & 0xF) == 0)
+                        rows[(q >> 1) * 8 + y] |= (uint16_t)(1u << ((q & 1) * 8 + x));
+                }
+        }
+    sCache[slot].primary = inst->primaryTileset;
+    sCache[slot].secondary = inst->secondaryTileset;
+    sCache[slot].metatileId = (uint16_t)metatileId;
+    memcpy(sCache[slot].rows, rows, sizeof(sCache[slot].rows));
+    return true;
+#else
+    (void)worldX;
+    (void)worldY;
+    (void)rows;
+    return false;
+#endif
 }
 
 bool VoxelWorld_UsesTreeSprites(const VoxelMapInstance *inst)
@@ -585,25 +842,36 @@ static VoxelVisualShape BehaviorShape(u8 behavior)
 
 VoxelVisualShape VoxelWorld_ClassifyTile(int worldX, int worldY)
 {
-    const VoxelMapInstance *inst = VoxelWorld_GetInstanceAt(worldX, worldY);
+    const VoxelMapInstance *inst = NULL;
+    u16 block = GetRawBlock(worldX, worldY, &inst);   /* one instance search for all three reads */
     int metatileId;
     VoxelVisualShape announced;
 
     if (inst == NULL)
         return VOXEL_SHAPE_VOID;
 
-    metatileId = VoxelWorld_GetMetatileId(worldX, worldY);
+    metatileId = block & MAPGRID_METATILE_ID_MASK;
     if (VoxelWorld_UsesTreeSprites(inst)
-     && (VoxelTree_Part(metatileId) >= 0
-         || VoxelTree_GroundMetatile(metatileId) != metatileId))
+     && (VoxelTree_Part(inst->secondaryTileset, metatileId) >= 0
+         || VoxelTree_GroundMetatile(inst->secondaryTileset, metatileId) != metatileId))
+    {
+        int ground = VoxelTree_GroundMetatile(inst->secondaryTileset, metatileId);
+
+        /* a crown's row over water, or a trunk standing in it, is that
+         * water where the ground pass lays it */
+        if ((VoxelTree_Part(inst->secondaryTileset, metatileId) < 0
+             || !VoxelTree_LaysGround(inst->secondaryTileset, metatileId))
+         && BehaviorShape(UNPACK_BEHAVIOR(GetMetatileAttribute(inst, ground))) == VOXEL_SHAPE_WATER)
+            return VOXEL_SHAPE_WATER;
         return VOXEL_SHAPE_FLAT;
+    }
     if (VoxelRegions_RoleAt((unsigned)inst->layoutId,
                             worldX - inst->originX, worldY - inst->originY)
         == VOXEL_ROLE_SIGNPOST)
         return VOXEL_SHAPE_SIGN;
 
     /* The cells whose behaviour says what they are: water and furniture. */
-    announced = BehaviorShape(VoxelWorld_GetMetatileBehavior(worldX, worldY));
+    announced = BehaviorShape(UNPACK_BEHAVIOR(GetMetatileAttribute(inst, metatileId)));
     if (announced != VOXEL_SHAPE_COUNT)
         return announced;
 
@@ -616,25 +884,13 @@ VoxelVisualShape VoxelWorld_ClassifyTile(int worldX, int worldY)
 
         /*
          * Beds, tables and rugs announce nothing at all: Emerald gives them no
-         * behaviour of their own. These are ids from the general indoor
-         * tileset, and only for it: in the Pokemon Center's the same ids are
-         * its floor emblem, and read as tables, a bed and a cupboard they
-         * stood up out of its floor.
+         * behaviour of their own, and they are not guessed from their ids.
+         * The reference's list for the general indoor tileset names other
+         * things in it: a rug's border stood up as a row of black television
+         * sets and a bed (House1), the back wall's top row as mats, and a
+         * table as two of its four cells. A room's furniture stands up when
+         * the room is modelled from its drawing (voxel_building.h).
          */
-        if (inst->secondaryTileset != &gTileset_GenericBuilding)
-            return VOXEL_SHAPE_FLAT;
-        if (metatileId == 576 || metatileId == 577 || metatileId == 584
-         || metatileId == 585 || metatileId == 586)
-            return VOXEL_SHAPE_TABLE;
-        if (metatileId == 565 || metatileId == 558 || metatileId == 566
-         || metatileId == 570)
-            return VOXEL_SHAPE_FURNITURE;
-        if (metatileId == 578)
-            return VOXEL_SHAPE_SIGN;
-        if (metatileId >= 514 && metatileId <= 517)
-            return VOXEL_SHAPE_DECAL;
-        if (metatileId == 567 || metatileId == 568 || metatileId == 575)
-            return VOXEL_SHAPE_BED;
     }
 
     return VOXEL_SHAPE_FLAT;
@@ -689,15 +945,60 @@ VoxelWeatherClass VoxelWorld_Weather(void)
     case WEATHER_UNDERWATER_BUBBLES:
         return VOXEL_WEATHER_FOG;
     case WEATHER_SNOW:
-    case WEATHER_VOLCANIC_ASH:
-    case WEATHER_SANDSTORM:
         return VOXEL_WEATHER_PARTICLES;
+    case WEATHER_VOLCANIC_ASH:
+        return VOXEL_WEATHER_ASH;
+    case WEATHER_SANDSTORM:
+        return VOXEL_WEATHER_SAND;
     case WEATHER_SHADE:
     case WEATHER_SUNNY_CLOUDS:
         return VOXEL_WEATHER_SHADE;
     }
 #endif
     return VOXEL_WEATHER_CLEAR;
+}
+
+float VoxelWorld_WeatherAmount(void)
+{
+#ifdef PLATFORM_3DS
+    float amount;
+
+    switch (GetCurrentWeather())
+    {
+    case WEATHER_RAIN:
+    case WEATHER_RAIN_THUNDERSTORM:
+    case WEATHER_DOWNPOUR:
+        /* The drops turned on, one by one, up to 10, 16 or 24. */
+        return (float)gWeatherPtr->curRainSpriteIndex / MAX_RAIN_SPRITES;
+    case WEATHER_VOLCANIC_ASH:
+        if (!gWeatherPtr->ashSpritesCreated)
+            return 0.0f;
+        break;
+    case WEATHER_SANDSTORM:
+        if (!gWeatherPtr->sandstormSpritesCreated)
+            return 0.0f;
+        break;
+    default:
+        return 0.0f;
+    }
+    /* Both come in to EVA 16 and leave to 0. */
+    amount = (float)gWeatherPtr->currBlendEVA / 16.0f;
+    return amount > 1.0f ? 1.0f : amount;
+#else
+    return 0.0f;
+#endif
+}
+
+/* The bolt's colour map is 19, the storm's own 3 (Thunderstorm_Main). */
+float VoxelWorld_Lightning(void)
+{
+#ifdef PLATFORM_3DS
+    if (GetCurrentWeather() != WEATHER_RAIN_THUNDERSTORM || gWeatherPtr->colorMapIndex <= 3)
+        return 0.0f;
+    return gWeatherPtr->colorMapIndex >= 19 ? 1.0f : (float)(gWeatherPtr->colorMapIndex - 3) / 16.0f;
+#else
+    return 0.0f;
+#endif
 }
 
 /*
@@ -721,6 +1022,16 @@ float VoxelWorld_FogDensity(void)
 bool VoxelWorld_Underground(void)
 {
     return gMapHeader.mapType == MAP_TYPE_UNDERGROUND;
+}
+
+bool VoxelWorld_MapIsConnected(void)
+{
+    return gMapHeader.connections != NULL && gMapHeader.connections->count > 0;
+}
+
+unsigned VoxelWorld_ClosedEdges(void)
+{
+    return GetMapClosedEdges();
 }
 
 /*
@@ -832,6 +1143,67 @@ void VoxelWorld_SetMaterialView(const int rect[4], int margin)
     sMaterialMargin = margin;
 }
 
+/*
+ * What lies past a map's edge, in voxel.
+ *
+ * The voxel camera sees past a map's edges, further than the 2D field does,
+ * and what it sees there is the map's border block tiled outwards: a wood on
+ * Rustboro's west, beyond its sea. Map by map, an edge (or a stretch of one)
+ * can be filled with another metatile instead, one that goes on from what the
+ * map shows there: the sea going on as sea. Voxel only; the 2D field keeps
+ * the game's border. The stretches are the map's fixes (relief_fixes.json
+ * "edges", set in the editor's mountain page), read with the relief
+ * (VoxelRelief_EdgeFill): the metatile, and the height its top stands at if
+ * given - else water is laid level with the map's own sea there
+ * (BorderWaterLevel, voxel_mesh_builder.c), anything else as the border is.
+ */
+
+/* The metatile an edge fill puts at (worldX, worldY), or -1. */
+static int EdgeFillAt(int worldX, int worldY)
+{
+    VoxelEdgeFill fill;
+
+    if (sInstanceCount == 0 || !VoxelRelief_EdgeFillAt(&sInstances[0], worldX, worldY, &fill))
+        return -1;
+    return fill.metatile;
+}
+
+/* The edge fills' metatiles for this map, kept in its atlas. */
+static void MarkEdgeFills(const VoxelMapInstance *inst, uint8_t *used)
+{
+    int metatile;
+
+    for (unsigned i = 0; VoxelRelief_EdgeFills((unsigned)inst->layoutId, i, &metatile); ++i)
+        if (metatile >= 0 && metatile < NUM_METATILES_TOTAL)
+            used[metatile] = 2;
+}
+
+/* The cut records' grounds and walls, in the window MarkUsedMetatiles reads
+ * the cells in, as important as the cells there. */
+typedef struct
+{
+    const VoxelMapInstance *inst;
+    int x0, y0, x1, y1;
+    uint8_t *used;
+} CutMark;
+
+static void MarkCut(int x, int y, int ground, int wall, void *ctx)
+{
+    const CutMark *mark = ctx;
+    const VoxelMapInstance *inst = mark->inst;
+    unsigned priority;
+
+    if (x < mark->x0 || y < mark->y0 || x >= mark->x1 || y >= mark->y1)
+        return;
+    priority = !sMaterialViewSet ||
+        (x + inst->originX >= sMaterialView[0] && x + inst->originX < sMaterialView[2]
+      && y + inst->originY >= sMaterialView[1] && y + inst->originY < sMaterialView[3]) ? 2u : 1u;
+    if (ground >= 0 && ground < (int)VOXEL_METATILE_IDS && mark->used[ground] < priority)
+        mark->used[ground] = (uint8_t)priority;
+    if (wall >= 0 && wall < (int)VOXEL_METATILE_IDS && mark->used[wall] < priority)
+        mark->used[wall] = (uint8_t)priority;
+}
+
 void VoxelWorld_MarkUsedMetatiles(const void *primaryTileset, const void *secondaryTileset,
                                   uint8_t *used)
 {
@@ -839,7 +1211,6 @@ void VoxelWorld_MarkUsedMetatiles(const void *primaryTileset, const void *second
     {
         const VoxelMapInstance *inst = &sInstances[i];
         const struct MapLayout *layout = inst->layout;
-        const uint16_t *border;
 
         if (inst->primaryTileset != primaryTileset
          || inst->secondaryTileset != secondaryTileset)
@@ -857,6 +1228,8 @@ void VoxelWorld_MarkUsedMetatiles(const void *primaryTileset, const void *second
             if (y1 > sMaterialView[3] + sMaterialMargin - inst->originY)
                 y1 = sMaterialView[3] + sMaterialMargin - inst->originY;
         }
+        if (i == 0)
+            MarkEdgeFills(inst, used);
         const uint16_t *map = i == 0 ? gBackupMapLayout.map : Voxel_ResolveMap(layout);
         if (map != NULL)
             for (int y = y0; y < y1; ++y)
@@ -873,18 +1246,64 @@ void VoxelWorld_MarkUsedMetatiles(const void *primaryTileset, const void *second
                       && y + inst->originY >= sMaterialView[1] && y + inst->originY < sMaterialView[3]) ? 2u : 1u;
                     if (used[m] < priority) used[m] = priority;
                 }
+        /* What the mesh draws from the relief's records besides the cells'
+         * own metatiles: the ground a cut tile runs on, its cliff's face.
+         * Read off the layout, they are not always in the live grid - a
+         * script's setmetatile (Route 120's bridge once its Kecleon is
+         * gone) took the only cell drawing that ground, and the bridge's
+         * water under its deck was a hole showing the black behind. */
+        {
+            CutMark mark = {inst, x0, y0, x1, y1, used};
 
-        border = layout->border != NULL ? Port_ResolveAssetPointer(layout->border) : NULL;
-        if (border != NULL)
-            for (unsigned t = 0; t < 4; ++t)
-                used[border[t] & MAPGRID_METATILE_ID_MASK] = 2;
+            VoxelRelief_ForEachCut(inst, MarkCut, &mark);
+        }
+    }
+    /* The belt is drawn with the current map's atlas, and from a neighbour's
+     * border as well as its own (VoxelWorld_BorderMetatile): any border whose
+     * metatiles these tilesets hold. */
+    for (unsigned i = 0; i < sInstanceCount; ++i)
+    {
+        const VoxelMapInstance *inst = &sInstances[i];
+        const struct MapLayout *layout = inst->layout;
+        const uint16_t *border;
+        bool secondary = false;
+
+        if (inst->primaryTileset != primaryTileset || layout == NULL || layout->border == NULL)
+            continue;
+        border = Port_ResolveAssetPointer(layout->border);
+        if (border == NULL)
+            continue;
+        for (unsigned t = 0; t < 4; ++t)
+            secondary |= (border[t] & MAPGRID_METATILE_ID_MASK) >= NUM_METATILES_IN_PRIMARY;
+        if (secondary && inst->secondaryTileset != secondaryTileset)
+            continue;
+        for (unsigned t = 0; t < 4; ++t)
+            used[border[t] & MAPGRID_METATILE_ID_MASK] = 2;
     }
     /* The replacement removes canopy fringes even on maps that never used
      * their bare ground tile. Keep that material available in the atlas. */
     if (primaryTileset == &gTileset_General)
         for (int m = 0; m < NUM_METATILES_TOTAL; ++m)
-            if (used[m] > used[VoxelTree_GroundMetatile(m)])
-                used[VoxelTree_GroundMetatile(m)] = used[m];
+        {
+            int ground = VoxelTree_GroundMetatile(secondaryTileset, m);
+            if (used[m] > used[ground])
+                used[ground] = used[m];
+        }
+}
+
+/* A layout's own drawing, not the live grid (voxel_world.h). */
+const uint16_t *VoxelWorld_LayoutDrawing(int layoutId, int *width, int *height)
+{
+    const struct MapLayout *layout;
+
+    if (layoutId <= 0 || layoutId > 0xFFFF)
+        return NULL;
+    layout = Port_GetMapLayoutById((u16)layoutId);
+    if (layout == NULL || layout->width <= 0 || layout->height <= 0)
+        return NULL;
+    *width = layout->width;
+    *height = layout->height;
+    return Voxel_ResolveMap(layout);
 }
 
 /*
@@ -984,71 +1403,45 @@ uint32_t VoxelWorld_BlockHash(int x0, int y0, int x1, int y1)
  * tiles the layout's 2x2 border block outwards for ever, which is why a town
  * looks like it sits in a wood rather than on a plate over a black sky.
  *
- * The indexing is GetBorderBlockAt's, over backup-layout coordinates, so the
- * phase of the 2x2 matches what the 2D renderer draws on the same tile.
+ * Whose border, and in which phase, is fieldmap.c's to say: the nearest map's
+ * whose border the current tilesets draw, the same answer the 2D camera
+ * gives, and the same from either side of a crossing. Past an edge filled
+ * for the current map (VoxelRelief_EdgeFill), its fill.
  */
 int VoxelWorld_BorderMetatile(int worldX, int worldY)
 {
-    const struct MapLayout *layout;
     const uint16_t *border;
-    const void *resolved;
-    int bx, by, index;
+    const void *source, *resolved;
+    u8 index;
+    int fill;
 
-    if (sInstanceCount == 0)
+    if (sInstanceCount == 0 || sInstances[0].layout == NULL)
         return -1;
-    layout = sInstances[0].layout;
-    if (layout == NULL || layout->border == NULL)
+    fill = EdgeFillAt(worldX, worldY);
+    if (fill >= 0)
+        return fill;
+    source = MapGridGetCameraBorderAt(worldX - sInstances[0].originX,
+                                      worldY - sInstances[0].originY, &index);
+    if (source == NULL)
         return -1;
-    if (!MemoGet(&sBorderMemo, layout->border, &resolved))
+    if (!MemoGet(&sBorderMemo, source, &resolved))
     {
-        resolved = Port_ResolveAssetPointer(layout->border);
-        MemoPut(&sBorderMemo, layout->border, resolved);
+        resolved = Port_ResolveAssetPointer(source);
+        MemoPut(&sBorderMemo, source, resolved);
     }
     border = resolved;
     if (border == NULL)
         return -1;
-    bx = worldX - sInstances[0].originX + MAP_OFFSET;
-    by = worldY - sInstances[0].originY + MAP_OFFSET;
-    index = ((bx + 1) & 1) + (((by + 1) & 1) * 2);
     return (int)(border[index] & MAPGRID_METATILE_ID_MASK);
 }
 
-/*
- * Layouts of the maps just past those placed: the connections of each
- * connection. They are placed the moment the player crosses, and whatever is
- * read for them then is read in the middle of a frame.
- */
-unsigned VoxelWorld_NextLayouts(unsigned *layouts, unsigned max)
+bool VoxelWorld_BorderIsWater(int worldX, int worldY)
 {
-    unsigned count = 0;
+    int metatileId = VoxelWorld_BorderMetatile(worldX, worldY);
 
-    for (unsigned i = 1; i < sInstanceCount; ++i)
-    {
-        const struct MapHeader *header = sInstances[i].header;
-        const struct MapConnection *conn;
-
-        if (header == NULL || header->connections == NULL)
-            continue;
-        conn = header->connections->connections;
-        for (s32 c = 0; c < header->connections->count && count < max; ++c, ++conn)
-        {
-            const struct MapHeader *next;
-            bool known = false;
-
-            if (conn->direction == CONNECTION_DIVE || conn->direction == CONNECTION_EMERGE)
-                continue;
-            next = GetMapHeaderFromConnection(conn);
-            if (next == NULL || next->mapLayout == NULL)
-                continue;
-            for (unsigned k = 0; k < count && !known; ++k)
-                known = layouts[k] == next->mapLayoutId;
-            for (unsigned k = 0; k < sInstanceCount && !known; ++k)
-                known = (unsigned)sInstances[k].layoutId == next->mapLayoutId;
-            if (!known)
-                layouts[count++] = next->mapLayoutId;
-        }
-    }
-    return count;
+    return metatileId >= 0 && !sInstances[0].indoor
+        && BehaviorShape(UNPACK_BEHAVIOR(GetMetatileAttribute(&sInstances[0], metatileId)))
+           == VOXEL_SHAPE_WATER;
 }
 
 static unsigned AddPayload(const void **payloads, unsigned count, unsigned max, const void *ptr)
