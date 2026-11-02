@@ -92,8 +92,8 @@ Navigate Pause and Settings with the **D-pad, left stick or arrow keys**. Use th
 
 <table>
   <tr>
-    <td width="50%"><a href="docs/images/classic-route-beta.png"><img src="docs/images/classic-route-beta.png" width="480" alt="Route 102 in the original 2D view, with voxel rendering disabled"></a></td>
-    <td width="50%"><a href="docs/images/voxel-sharp-2x.png"><img src="docs/images/voxel-sharp-2x.png" width="480" alt="Route 102 with detailed voxel trees and terrain at 2× Sharp resolution"></a></td>
+    <td width="50%"><a href="docs/images/classic-route-beta.png"><img src="docs/images/classic-route-beta.png" width="480" alt="Route 101 in the original 2D view, with voxel rendering disabled"></a></td>
+    <td width="50%"><a href="docs/images/voxel-sharp-2x.png"><img src="docs/images/voxel-sharp-2x.png" width="480" alt="Route 101 with detailed voxel trees and terrain at 2× Sharp resolution"></a></td>
   </tr>
   <tr>
     <td align="center"><strong>The original 2D look</strong></td>

@@ -20,30 +20,27 @@ used to validate alpha.8. Supported anti-aliasing choices are Off, 2× and 4×;
 fast-forward offers 2×, 4× and 8×. Fast-forward was enabled for the screenshot.
 Optional features still start off.
 
-## Beta gameplay captures
+## Upstream 0.5.0 gameplay captures
 
-The beta gallery shows separate 1920×1080 and 1240×1080 emulator displays,
-with Fill scaling and the FPS counter off. These are actual captures, not
-upscaled or retouched artwork. The 2× and 4× images use the same Route 102
-save and camera; ambient animation and NPCs continue between captures.
+The current gallery shows the upstream 0.5.0 integration at commit `43b17d6`,
+with the classic sprite and soft-reset fixes. Captures come from the local
+ARM-translation Android emulator at 1920×1080 and 1240×1080, with no
+secondary-preview thumbnail. The hero device is an illustrative mockup using
+the new native map and dock, not a physical Thor photograph.
 
 | Image | Scene |
 |---|---|
-| [Classic route](classic-route-beta.png) | Route 102 with voxel rendering disabled. |
-| [2× Sharp](voxel-sharp-2x.png) | Voxel Route 102 at 800×480 internal resolution, blur and anti-aliasing off. |
-| [4× Ultra](voxel-ultra-4x.png) | The same view at 1600×960 internal resolution. |
-| [Voxel battle](voxel-battle-beta.png) | Natural Wurmple encounter on Route 101 with Sharp sprites and text. |
-| [Battle touch screen](thor-battle-touch.png) | Torchic's move selector filling the lower panel. |
+| [Classic route](classic-route-beta.png) | Route 101 with the original 2D renderer and correct player/NPC sprites. |
+| [2× Sharp](voxel-sharp-2x.png) | The same area with voxel scenery at 800×480 internal resolution and blur off. |
+| [Voxel battle](voxel-battle-beta.png) | A natural Poochyena encounter with voxel scenery and Sharp battle sprites. |
+| [Battle touch screen](thor-battle-touch.png) | Torchic's move selector in the new native bottom interface. |
+| [4× Ultra](voxel-ultra-4x.png) | Earlier Route 102 at 1600×960 internal resolution. |
 | [Touch keyboard](thor-touch-keyboard.png) | Protagonist name entered by finger on the lower panel. |
 
-The battle and battle-touch images come from the exact signed **beta.2** APK,
-with Sharp pixels, 2× voxel resolution, anti-aliasing Off and 3D blur Off.
-[Capture hashes and release identity](beta2-battle-captures.json).
-
-The classic route and voxel-world images use the earlier candidate at
-`03b48fc`, engine/data ABI `91b37e30`. The keyboard uses an earlier candidate
-with the same naming overlay. These older images are distinct from the exact
-released-APK captures. See [validation](../VALIDATION.md) for coverage.
+The [beta.2 battle images](beta2-battle-captures.json) are preserved as
+`voxel-battle-beta2.png` and `thor-battle-touch-beta2.png`, with their original
+hashes and release identity. The keyboard and 4× images also remain earlier
+candidates. See [validation](../VALIDATION.md) for current and historical coverage.
 
 ## Earlier gallery
 

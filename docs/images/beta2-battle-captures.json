@@ -8,7 +8,7 @@
   "method": "Unmodified screen captures during ordinary gameplay from a normal save; no image generation or retouching.",
   "images": [
     {
-      "file": "voxel-battle-beta.png",
+      "file": "voxel-battle-beta2.png",
       "source_capture": "release-gallery-top.png",
       "pixels": [
         1920,
@@ -19,7 +19,7 @@
       "pixel_edits": false
     },
     {
-      "file": "thor-battle-touch.png",
+      "file": "thor-battle-touch-beta2.png",
       "source_capture": "release-gallery-bottom.png",
       "pixels": [
         1240,
