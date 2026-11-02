@@ -17,5 +17,7 @@ def main():
     assert mode.index('return MODE_PARTY_MENU;')<mode.index('CtrStorage_IsOpen() || CtrVideo_BottomWhole()')
     # Full native UI is presented without the obsolete cropped GBA mapping.
     assert 'CtrBottomContent_SourcePoint' not in source
-    print('PASS upstream native bottom screen and Android whole-party routing')
+    video=(TREE/'3ds_port/src/3ds_video.c').read_text()
+    assert 'CtrGpu_ConfigureVoxelTargets(sLogical, sTop, !down && (voxel || sBattleWorld), bottom);' in video
+    print('PASS upstream native bottom screen, held-top/Pokédex scaling scope and Android whole-party routing')
 if __name__=='__main__':main()

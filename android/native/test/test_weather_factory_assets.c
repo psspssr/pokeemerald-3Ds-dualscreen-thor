@@ -50,8 +50,8 @@ static bool Port_LoadAssetPointerToBuffer(const void *ptr, void *dest, u32 size)
 { return Port_LoadAssetPointerToBufferSized(ptr,dest,size); }
 #else
 #define sDroughtWeatherColors (*(const u16 (*)[6][0x1000])droughtData)
-#define sPokeballGray_Pal grayData
-#define sInterface_Pal interfaceData
+#define sPokeballGray_Pal embeddedFactoryPalettes
+#define sInterface_Pal (embeddedFactoryPalettes + 32)
 #define sMonPicBg_Gfx pictureData
 #define gFrontierFactoryMenu_Gfx menuData
 #endif

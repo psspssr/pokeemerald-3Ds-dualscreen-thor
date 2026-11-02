@@ -86,6 +86,7 @@ labels instead, in both the game and app menus.
 | Start | Start | Enter |
 | Select | Select | Backspace or either Shift |
 | App pause menu / Settings | **L1 + R1 together**; Android Back also works | Escape |
+| Soft reset | **Start + Select, then L1 + R1** | Enter + Backspace/Shift, then Q + W |
 | Toggle fast-forward | R2 | Pause-menu action |
 | Hold fast-forward | L2 | Tab |
 

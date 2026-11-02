@@ -5,9 +5,11 @@ only**; check the device's actual ABI list before installing. The separate
 display-test APK also contains x86_64 so the Android UI can be tested on a
 standard hardware-accelerated emulator.
 
-This guide builds the checked-out source, which pins upstream `c330c0a1aece`
-(0.2.0). The published alpha.8 APK retains its earlier `cdc77a3d2b01` pin.
-Updating source does not change an existing release.
+This guide builds the checked-out source, which pins upstream `bcae4b70dac6`
+(0.5.0). Existing published APKs retain their own earlier pins. Updating source
+does not change an existing release. Upstream's original 0.5.0 port material is
+CC BY-NC-SA 4.0; the independent Android implementation remains MIT. See
+`../NOTICE.md` and `../origin/LICENSE-PORT.md` for the applicable scopes.
 
 ## Install the tools
 

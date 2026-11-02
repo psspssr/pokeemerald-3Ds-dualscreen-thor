@@ -19,7 +19,7 @@ index ad0c0e8..6f26d95 100644
 +#ifdef __ANDROID__
 +    /* Retain the held top image while a bottom-only menu uses the native
 +     * compositor; otherwise enlarge only a frame containing voxel geometry. */
-+    CtrGpu_ConfigureVoxelTargets(sLogical, sTop, !bottom && (voxel || sBattleWorld), bottom);
++    CtrGpu_ConfigureVoxelTargets(sLogical, sTop, !down && (voxel || sBattleWorld), bottom);
 +#endif
  
      if (down)

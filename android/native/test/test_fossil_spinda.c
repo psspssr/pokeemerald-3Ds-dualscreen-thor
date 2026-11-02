@@ -32,7 +32,7 @@ static u16 sDebug_DisintegrationData[8];
 #include "asset_pair_data.inc"
 
 static unsigned allocated, freed, resumed, destroyed, randomCalls, animations;
-static unsigned fossilResolved, spotsResolved;
+static unsigned fossilResolved, fossilLoaded, spotsResolved;
 static unsigned destroyedTasks, towerUploadSize;
 static u8 towerUpload[2336];
 static const u16 sMirageTowerTilemap[1];
@@ -130,9 +130,13 @@ static const void *Port_ResolveAssetPointer(const void *base)
 }
 static bool Port_LoadAssetPointerToBufferSized(const void *base, void *out, u32 size)
 {
-    assert(base == sMirageTower_Gfx && size <= sizeof(towerPayload));
+    const u8 *payload;
+    assert(base == sMirageTower_Gfx || base == sFossil_Gfx);
+    payload = base == sMirageTower_Gfx ? towerPayload : fossilPayload;
+    if (base == sFossil_Gfx) fossilLoaded++;
+    assert(size <= (base == sMirageTower_Gfx ? sizeof(towerPayload) : sizeof(fossilPayload)));
     if (!TEST_EXTERNAL || !size) return false;
-    memcpy(out, towerPayload, size);
+    memcpy(out, payload, size);
     return true;
 }
 static bool Port_LoadAssetPointerToBuffer(const void *base, void *out, u32 size)
@@ -165,7 +169,7 @@ static void tower(void)
 
 static void fossil(void)
 {
-    allocated = freed = resumed = destroyed = randomCalls = animations = fossilResolved = 0;
+    allocated = freed = resumed = destroyed = randomCalls = animations = fossilResolved = fossilLoaded = 0;
     gTasks[0].tState = 1;
     for (unsigned state = 1; state <= 6; state++) Task_FossilFallAndSink(0);
     assert(gTasks[0].tState == 7 && sFallingFossil);
@@ -189,9 +193,9 @@ static void fossil(void)
     Task_FossilFallAndSink(0);
     assert(resumed == 1 && destroyed == 1 && allocated == 4 && freed == 4 && animations == 128);
 #ifdef PORT_BRIDGE
-    assert(fossilResolved == 1);
+    assert(fossilResolved == 0 && fossilLoaded == (TEST_EXTERNAL ? 1 : 2));
 #else
-    assert(fossilResolved == 0);
+    assert(fossilResolved == 0 && fossilLoaded == 0);
 #endif
     puts("PASS actual fossil: full image allocation/copy, fall, 256-pixel disintegration, cleanup and script resume");
 }
@@ -244,7 +248,7 @@ static void spinda(void)
                 personalities[test], changed, actualChanged);
         assert(!memcmp(expected, actual, sizeof(actual)));
 #ifdef PORT_BRIDGE
-        assert(spotsResolved == 4);
+        assert(spotsResolved == 4 * SPINDA_SPOT_HEIGHT);
 #endif
         spotsResolved = 0; memcpy(actual, original, sizeof(actual));
         DrawSpindaSpots(SPECIES_SPINDA, personalities[test], actual, false);

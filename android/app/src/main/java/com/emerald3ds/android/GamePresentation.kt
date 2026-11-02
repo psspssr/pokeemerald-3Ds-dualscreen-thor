@@ -3,7 +3,9 @@ package com.emerald3ds.android
 import android.app.Activity
 import android.app.Presentation
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
+import android.util.DisplayMetrics
 import android.view.Display
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -65,6 +67,16 @@ class GamePresentation(
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {}
+
+    @Suppress("DEPRECATION")
+    fun prepareDisplayMetrics() {
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) return
+        // API 30 can retain the pre-resize resources for a display context.
+        // Presentation.onStart rejects those stale metrics and cancels again.
+        val metrics = DisplayMetrics()
+        display.getMetrics(metrics)
+        resources.updateConfiguration(resources.configuration, metrics)
+    }
 
     fun setKeepScreenOn(enabled: Boolean) {
         if (enabled) window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

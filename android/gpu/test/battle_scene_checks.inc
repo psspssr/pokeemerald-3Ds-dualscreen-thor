@@ -34,7 +34,9 @@ static void battleSceneChecks(shaderProgram_s *program,C3D_RenderTarget *restore
     C2D_TargetClear(target,C2D_Color32(255,255,255,255));pixel(24,8,255,255,255,255);
     C3D_SyncTextureCopy(saved,0,target->frameBuf.colorBuf,0,32*32*4,0);
     pixel(24,8,0,0,255,255);pixel(16,16,0,255,0,255);pixel(2,29,255,0,0,255);
+    C3D_SyncTextureCopy(target->frameBuf.colorBuf,0,saved,0,32*32*4-4,0);
+    assert(state==CTR_HOST_EXITING);checks++;state=CTR_HOST_RUNNING;
     free(saved);C3D_TexDelete(&sSceneTex);C3D_RenderTargetDelete(target);
     C2D_Prepare();C2D_SceneBegin(restore);C2D_ViewReset();
-    puts("PASS upstream battle filter restore, badge primitives and held-Pokedex framebuffer round trip");
+    puts("PASS upstream battle filter restore, badge primitives, held-Pokedex framebuffer round trip and partial-copy rejection");
 }

@@ -562,12 +562,13 @@ class GameActivity : AppCompatActivity(), SurfaceHolder.Callback, ControlsOverla
                         presentation = null
                         p.touchView.releaseAll()
                         relayout()
-                        // Android dismisses a Presentation if its display's
-                        // metrics change. Recreate it for the new metrics.
-                        handler.post { if (resumed && !exiting) updatePresentation() }
+                        // Let the new display configuration arrive before
+                        // recreating a Presentation dismissed for stale metrics.
+                        handler.postDelayed({ if (resumed && !exiting) updatePresentation() }, 100)
                     }
                 }
                 presentation = p
+                p.prepareDisplayMetrics()
                 p.show()
                 Log.i(TAG, "second display ${display.displayId}: ${display.name}")
             } catch (e: WindowManager.InvalidDisplayException) {

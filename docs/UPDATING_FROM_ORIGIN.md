@@ -17,24 +17,30 @@ changing the series refreshes affected sources and invalidates configuration.
 
 ## Current upstream pin
 
-The beta development branch imports upstream `c330c0a1aece` (0.2.0), including
-voxel terrain relief, improved sprite occlusion, map-banner clipping and
-background asset/audio work. Alpha.8 still contains `cdc77a3d2b01`; an upstream
-import does not alter an existing release.
+The development branch imports upstream `bcae4b70dac6` (0.5.0), including the
+redesigned native bottom interface, camera-scored NPC allocation, soft reset,
+randomizer/Nuzlocke support, held-top Pokédex restoration and new weather
+shaders. Existing releases retain their own pins; an upstream import does not
+alter an existing release. Since 0.5.0, upstream's original port material uses
+CC BY-NC-SA 4.0 rather than MIT; see `origin/LICENSE-PORT.md` and `NOTICE.md`
+for its exact scope and third-party exceptions.
 
-During this update, upstream supplied the Summary asset fix and touch handlers,
-so the older Android selector implementation was removed. The remaining
+Upstream already supplies the Summary asset fix and touch handlers, so the
+older Android selector implementation was removed. The remaining
 `050-summary-touch-guards.patch` discards stale/transition taps and makes the
 visible fifth-row Cancel work while reordering moves. The fifth row remains
 the new move in the learning selector. Review overlapping upstream fixes this
 way on future updates: retain only Android changes that are still needed.
 
-The 0.2.0 import also replaces the old Android map-banner overlay with the
-upstream implementation. Its indexed drawing and fixed attributes are covered
-by the Android GLES tests. Asset regressions exercise the actual game routines
-with both external stubs and embedded data: resolve a resource before taking
-an offset or reading a color, and use its real byte size for heap buffers.
-Keep those checks when rebasing or retiring a corresponding overlay.
+The native bottom interface replaces the obsolete Android crop/inverse-mapping
+overlay. Its indexed drawing and fixed attributes are covered by the Android
+GLES tests. Asset regressions exercise the actual game routines with both
+external stubs and embedded data: resolve a resource before taking an offset
+or reading a color, and use its real byte size for heap buffers. Keep those
+checks when rebasing or retiring a corresponding overlay. Android has an
+explicit unavailable local-wireless adapter, not simulated 3DS radio peers.
+The build remains English; upstream translations are imported, but regional
+ROM language staging is not integrated or validated.
 
 ## Preview and import
 

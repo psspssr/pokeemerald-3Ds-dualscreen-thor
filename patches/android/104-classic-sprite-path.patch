@@ -1,0 +1,24 @@
+--- a/3ds_port/src/3ds_video.c
++++ b/3ds_port/src/3ds_video.c
+@@ -5898,11 +5898,14 @@
+         static unsigned batchKey = ~0u;
+         unsigned key = (effects ? 1u : 0u) | (mode == 1 ? 2u : 0u) | (sDayNightObject ? 4u : 0u);
++#ifndef __ANDROID__
+         float shiftX = x + CTR_VIEW_X + sLayerShift;
+         int whole = (int)shiftX;
++#endif
+ 
+         if (sSpritePending && key != batchKey) SpriteBatchFlush();
+         /* At any zoom: the view is the GPU's, for these quads as for
+          * Citro2D's; the battle scene composes its sprites at 2x. */
++#ifndef __ANDROID__
+         if (!affine && (float)whole == shiftX
+             && SpriteBatchRoom((width / 8) * (height / 8)))
+         {
+@@ -5930,5 +5933,6 @@
+             return;
+         }
++#endif
+         SpriteBatchFlush();
+         batchKey = ~0u;
+     }

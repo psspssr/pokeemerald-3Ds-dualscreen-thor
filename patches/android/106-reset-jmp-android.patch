@@ -1,0 +1,14 @@
+--- a/3ds_port/src/3ds_game_full.c
++++ b/3ds_port/src/3ds_game_full.c
+@@ -9,5 +9,10 @@
+  */
+ 
+ /* Before the game's headers, whose global.h defines abs and friends. */
+ #include <setjmp.h>
++#ifdef __ANDROID__
++#undef setjmp
++#define setjmp(env) __builtin_setjmp((void **)(env))
++#define longjmp(env, value) __builtin_longjmp((void **)(env), value)
++#endif
+ #include <stdlib.h>
+ 

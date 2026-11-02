@@ -128,8 +128,8 @@ class DualDisplayTest {
         val coords = MotionEvent.PointerCoords().apply { this.x = x; this.y = y; pressure = 1f; size = 1f }
         val e = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, 1,
             arrayOf(pointer), arrayOf(coords), 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
-        // setDisplayId is hidden in the SDK, but available to debuggable instrumentation.
-        android.view.InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
+        // Android 11 declares the hidden setter on MotionEvent rather than InputEvent.
+        MotionEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
             .invoke(e, displayId)
         assertTrue(inst.uiAutomation.injectInputEvent(e, true))
         e.recycle()
@@ -716,7 +716,7 @@ class DualDisplayTest {
         val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, 1,
             arrayOf(properties), arrayOf(coordinates), 0, 0, 1f, 1f, 0, 0,
             if (joystick) InputDevice.SOURCE_JOYSTICK else InputDevice.SOURCE_TOUCHSCREEN, 0)
-        android.view.InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
+        MotionEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
             .invoke(event, displayId)
         try { assertTrue(inst.uiAutomation.injectInputEvent(event, false)) } finally { event.recycle() }
     }

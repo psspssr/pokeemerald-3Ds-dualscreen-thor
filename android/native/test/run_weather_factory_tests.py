@@ -77,8 +77,14 @@ def main():
                           "void CpuSet(const void *src, void *dst, u32 cnt)")))
         payload = ""
         for name, path in (("menuData", "menu.4bpp"), ("pictureData", "mon_pic_bg.4bpp"),
-                           ("interfaceData", "interface.gbapal"), ("grayData", "pokeball_gray.gbapal")):
+                           ("interfaceData", "interface.gbapal"), ("grayData", "pokeball_gray.gbapal"),
+                           ("selectedData", "pokeball_selected.gbapal")):
             payload += array(name, (TREE / "graphics/battle_frontier/factory_screen" / path).read_bytes())
+        payload += "#ifndef PORT_BRIDGE\n"
+        payload += array("embeddedFactoryPalettes", b"".join(
+            (TREE / "graphics/battle_frontier/factory_screen" / path).read_bytes()
+            for path in ("pokeball_gray.gbapal", "pokeball_selected.gbapal", "interface.gbapal")))
+        payload += "#endif\n"
         drought = b"".join((TREE / ("graphics/weather/drought/colors_%d.bin" % i)).read_bytes() for i in range(6))
         assert len(drought) == 6 * 4096 * 2
         payload += array("droughtData", drought)

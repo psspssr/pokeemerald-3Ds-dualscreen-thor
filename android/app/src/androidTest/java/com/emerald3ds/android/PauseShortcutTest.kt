@@ -118,6 +118,27 @@ class PauseShortcutTest {
         }
     }
 
+    @Test fun startSelectShouldersReachSoftResetWithoutOpeningPause() {
+        inst.runOnMainSync {
+            for (leftFirst in listOf(false, true)) {
+                val owner = Owner()
+                val input = owner.input
+                val start = down(KeyEvent.KEYCODE_BUTTON_START)
+                val select = down(KeyEvent.KEYCODE_BUTTON_SELECT)
+                val first = down(if (leftFirst) KeyEvent.KEYCODE_BUTTON_L1 else KeyEvent.KEYCODE_BUTTON_R1)
+                val second = down(if (leftFirst) KeyEvent.KEYCODE_BUTTON_R1 else KeyEvent.KEYCODE_BUTTON_L1)
+                send(input, start); send(input, select)
+                send(input, first); send(input, second)
+                assertEquals(0, owner.pauses)
+                assertEquals(CtrKeys.START or CtrKeys.SELECT or CtrKeys.L or CtrKeys.R, InputHub.sentKeys)
+                send(input, up(first)); send(input, up(second)); send(input, up(start)); send(input, up(select))
+                assertEquals(0, InputHub.sentKeys)
+                send(input, down(first.keyCode)); send(input, down(second.keyCode))
+                assertEquals(1, owner.pauses)
+            }
+        }
+    }
+
     @Test fun chordLatchesEvenWhenOwnerDoesNotClearAndOneHeldShoulderCannotRearm() {
         inst.runOnMainSync {
             val owner = Owner(clearOnPause = false)

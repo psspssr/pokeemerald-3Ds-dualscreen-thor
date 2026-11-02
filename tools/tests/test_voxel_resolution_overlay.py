@@ -32,7 +32,7 @@ class VoxelResolutionOverlayTests(unittest.TestCase):
         self.assertGreater(call, self.after.index("sBattleWorld = battleUpdated"))
         self.assertGreater(call, self.after.index("PORT_PROF_BEGIN(draw);"))
         self.assertLess(call, self.after.index("RenderEye(sBottom, clear, 0.0f);"))
-        self.assertIn("!bottom && (voxel || sBattleWorld), bottom", self.after[call:call+150])
+        self.assertIn("!down && (voxel || sBattleWorld), bottom", self.after[call:call+150])
 
     def test_non_android_source_and_logical_coordinates_are_unchanged(self):
         include = "#ifdef __ANDROID__\n#include <ctr_gpu_voxel.h>\n#endif\n"
@@ -50,11 +50,12 @@ static void CtrGpu_ConfigureVoxelTargets(void *a, void *b, bool voxel, bool keep
 }
 int main(void) {
     int a,b; void *sLogical=&a,*sTop=&b;
-    for(int bits=0;bits<8;bits++) {
-        bool bottom=(bits&1)!=0, voxel=(bits&2)!=0, sBattleWorld=(bits&4)!=0;
+    for(int bits=0;bits<16;bits++) {
+        bool bottom=(bits&1)!=0, down=(bits&2)!=0;
+        bool voxel=(bits&4)!=0, sBattleWorld=(bits&8)!=0;
 """ + call + """
-        if(bottom) assert(!observedVoxel && observedKeep);
-        else assert(observedVoxel==(voxel || sBattleWorld) && !observedKeep);
+        assert(observedVoxel==(!down && (voxel || sBattleWorld)));
+        assert(observedKeep==bottom);
     }
 }
 """

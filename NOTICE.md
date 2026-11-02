@@ -3,10 +3,18 @@
 ## origin/
 
 [ZallaxDev/pokeemerald-3Ds-dualscreen](https://github.com/ZallaxDev/pokeemerald-3Ds-dualscreen),
-included unmodified as a git subtree. Its port code is MIT
-(`origin/LICENSE-PORT.md`); its other components keep the terms listed in
-`origin/NOTICE.md`, including pret/pokeemerald (no stated licence, fetched at
-build time and never vendored) and devkitARM's `3dsx.ld` (MPL 2.0).
+included unmodified as a git subtree at `bcae4b70dac6` (0.5.0). Since 0.5.0,
+its original port code, tooling and documentation are licensed under
+**Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International**
+(`origin/LICENSE-PORT.md`), within the scope stated there. Versions through
+0.4.x remain MIT; third-party material, including the voxel renderer's MIT
+contributions, keeps its own terms. See `origin/NOTICE.md` for other components,
+including pret/pokeemerald (no stated licence, fetched at build time and never
+vendored) and devkitARM's `3dsx.ld` (MPL 2.0).
+
+Android overlays identify their modifications to this upstream material and
+retain the applicable CC BY-NC-SA 4.0 terms. This does not relicense the
+independent Android implementation code, which remains MIT under `LICENSE`.
 
 ## Android port
 

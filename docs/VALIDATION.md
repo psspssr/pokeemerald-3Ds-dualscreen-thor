@@ -4,6 +4,60 @@ The repository's [history cleanup](HISTORY.md) changed older commit IDs while
 keeping retained source snapshots identical. The source mapping covers releases
 from before that cleanup; beta.2 and later use the current history.
 
+## Unreleased local integration: upstream 0.5.0
+
+The local Android integration imports upstream `bcae4b70dac61419fc933084084469f6cfbe344b`
+(0.5.0). It is not a published release. The final debug APK is
+`android/app/build/outputs/apk/debug/emerald3ds-android-debug.apk`, 33,983,912 bytes,
+SHA-256 `e35e051e456c3ee3ebbe7e8da3416bd58aec12e7a80282a23e3ab9d25a6acade`.
+The engine-only, unsigned release APK is
+`android/app/build/outputs/apk/release/emerald3ds-android-release-unsigned.apk`,
+20,143,973 bytes, SHA-256
+`21b2ab3ca66d0c2fed03bcd2dea36d69151b7035746a5d9c607b212e19f2a668`.
+No APK was signed, pushed or published.
+
+Both debug and release builds passed, including `lintVitalRelease`. All **26 native
+test scripts**, **99 tooling tests**, **26 GPU host tests**, **155 app
+instrumentation tests**, harness/release lint, **381 GLES pixel assertions** and
+both host suites passed. Upstream randomizer and Nuzlocke host tests passed.
+The origin pin is unchanged and all **384 SDK identifiers** have header and linked
+symbol coverage. Weather shader compilation, two-program containers, all five
+framebuffer formats, held-top Pokédex copies and partial-copy rejection are covered.
+
+Runtime testing exposed three integration defects and their fixes. Android now uses
+the established per-tile classic sprite path because upstream's new fast sprite
+batch produced black title text and player/NPC rectangles. API 30 Presentation
+resources are synchronized before display-metric validation, stopping a resize
+recreation/Binder storm. Soft reset uses Clang's direct setjmp/longjmp builtins:
+both Bionic variants crashed in a minimal ARM-translation probe as well as the game,
+while the builtin probe and actual game reset succeeded.
+
+The API 30 ARM-translation emulator passed cold Continue with a copied valid save,
+1920×1080 main output and a 1240×1080 secondary Presentation. Party, Bag, native
+Pokédex list/info and top-picture restoration, Options tabs and pause/resume passed.
+Voxel rendering and camera changes were inspected. A real Route 101 Zigzagoon battle
+accepted FIGHT→SCRATCH, updated HP, ended in victory and awarded shared EXP/level-up
+before returning to the field. Classic player/NPC sprites and battle sprites rendered
+correctly after the sprite fix.
+
+Nuzlocke's dock tracker displayed Route 101, both party Pokémon and the level cap.
+CAUGHT updated the counter and was retained by a normal save, producing a 1436-byte
+companion record. Random Wild was toggled and restored OFF. A normal save advanced
+counter 16→17 and produced a valid 128 KiB save at Route 101 with two party Pokémon,
+SHA-256 `b039fca917d53629b9d8efe1c578411c815c3e8a7847e9bd32c91bfcf823cbd2`.
+The Android document picker exported identical bytes and imported them again;
+restart loaded that save. The final diagnostics-free build also passed the full
+START+SELECT→L+R soft reset and subsequent Continue without closing the app.
+Original save, settings and preference files were then restored with matching hashes.
+
+These are bounded emulator checks, not physical Thor, sustained-performance or
+full-game validation. Audible audio, lid sensing, radio multiplayer and regional
+languages remain unavailable or unverified. No live weather scene was visited.
+The optional regional-locale hash/staging test rejects Android-overlaid English
+sources; Android remains English-only and regional-ROM staging is not integrated.
+Evidence and runtime captures are ignored local files under
+`build/evidence/upstream-20261102/`.
+
 ## Latest beta: 0.1.0-beta.4
 
 The [signed beta.4 APK](https://github.com/psspssr/pokeemerald-3Ds-dualscreen-thor/releases/tag/v0.1.0-beta.4)

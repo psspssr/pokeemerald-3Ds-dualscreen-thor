@@ -221,7 +221,9 @@ class PhysicalInput(
                     shoulderPresses.add(identity)
                     val other = event.deviceId to if (code == KeyEvent.KEYCODE_BUTTON_L1)
                         KeyEvent.KEYCODE_BUTTON_R1 else KeyEvent.KEYCODE_BUTTON_L1
-                    if (other in shoulderPresses && other !in blockedShoulders) {
+                    val mapped = gamepadKeys.values.fold(0) { a, b -> a or b }
+                    val resetKeys = CtrKeys.START or CtrKeys.SELECT
+                    if (other in shoulderPresses && other !in blockedShoulders && (mapped and resetKeys) != resetKeys) {
                         blockedShoulders.add(identity)
                         blockedShoulders.add(other)
                         gamepadKeys.remove(identity)

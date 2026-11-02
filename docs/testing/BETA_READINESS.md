@@ -35,8 +35,9 @@ records the exact APK check and emulator performance limits.
 1. **Record the baseline.** Preserve normal saves and settings, then inspect
    alpha.8 on separate 1920×1080 and 1240×1080 surfaces. Record actual touch,
    controller and back/cancel behavior, not just screenshots.
-2. **Review the upstream update.** Rehearse the exact `c330c0a1aece` import,
-   including voxel terrain, fog, sprite-occlusion and frame-work improvements.
+2. **Review the upstream update.** Rehearse the exact `bcae4b70dac6` import,
+   including native bottom menus, soft reset, camera-scored NPC allocation and
+   randomizer/Nuzlocke support.
    Keep `origin/` unchanged from its pin, rebase only necessary Android overlays,
    and verify a complete ARM build before adopting it.
 3. **Fix menu routes.** Exercise the families below, with full bottom-panel

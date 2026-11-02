@@ -60,6 +60,7 @@ Face buttons use Nintendo positions by default, regardless of their printed labe
 | L / R | L1 / R1 individually | Q / W |
 | Start / Select | Start / Select | Enter / Backspace or Shift |
 | App pause menu | **L1 + R1 together** | Escape |
+| Soft reset | **Start + Select, then L1 + R1** | Enter + Backspace/Shift, then Q + W |
 | Fast-forward toggle / hold | R2 / L2 | Tab: hold |
 
 Fast-forward requires enabling it and choosing **2×, 4× or 8×** in Settings. Touch the bottom screen for game menus. [Full controls sheet, display swapping and optional controls](docs/AYN_THOR.md#controls-and-shortcuts).
@@ -123,6 +124,6 @@ Actual Android emulator captures at Thor panel sizes. [4× Ultra detail](docs/im
 - **gradenGnostic/pokeemerald-multiplatform contributors** — voxel logic adapted by the 3DS project; see its [attribution](origin/3ds_port/src/voxel/NOTICE.md).
 - **devkitPro** — libctru, Citro3D and Citro2D interfaces; implementation and licence details are recorded in the relevant `THIRD_PARTY.md` files.
 
-The Android port's original code is [MIT licensed](LICENSE). Imported components and game assets retain their owners' rights and terms; see [project notices](NOTICE.md). The code licence does not grant rights to Pokémon game assets.
+The independent Android implementation's original code is [MIT licensed](LICENSE). Upstream 0.5.0's original port material is [CC BY-NC-SA 4.0](origin/LICENSE-PORT.md); the ordered Android overlays document modifications to it. Other imported components and game assets retain their owners' rights and terms; see [project notices](NOTICE.md). The code licences do not grant rights to Pokémon game assets.
 
 An independent, unofficial fan project, unaffiliated with Nintendo, Game Freak, Creatures, The Pokémon Company or AYN. Provided “as is” and “as available,” without warranties where permitted by law. No support or services are offered or promised. [Full credits and notice](https://psspssr.github.io/emerald-dual-screen-site/credits.html#disclaimer).

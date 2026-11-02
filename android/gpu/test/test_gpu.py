@@ -29,6 +29,8 @@ class CpuBackendTests(unittest.TestCase):
         cls.lib = ctypes.CDLL(str(library))
         cls.lib.gpuDecodeTexture.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_int]
         cls.lib.gpuDecodeTexture.restype = ctypes.c_bool
+        cls.lib.gpuEncodeTexture.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_int]
+        cls.lib.gpuEncodeTexture.restype = ctypes.c_bool
         cls.lib.gpuPacingDeadline.argtypes = [ctypes.c_double, ctypes.c_double, ctypes.c_double]
         cls.lib.gpuPacingDeadline.restype = ctypes.c_double
         cls.lib.gpuFrameDue.argtypes = [ctypes.POINTER(FrameSchedule), ctypes.c_uint]
@@ -43,6 +45,40 @@ class CpuBackendTests(unittest.TestCase):
         dst = ctypes.create_string_buffer(width * height * 4)
         self.assertTrue(self.lib.gpuDecodeTexture(src, dst, width, height, fmt))
         return dst.raw
+
+    def test_framebuffer_format_encode_decode_round_trips(self):
+        rgba = bytearray(8 * 8 * 4)
+        for y in range(8):
+            for x in range(8):
+                offset = (y * 8 + x) * 4
+                rgba[offset:offset + 4] = bytes((((x + y) % 16) * 17,
+                                                 ((x * 3 + y * 5) % 16) * 17,
+                                                 ((x * 7 + y * 11) % 16) * 17,
+                                                 255 if (x + y) & 1 else 0))
+        for fmt, bpp in ((0, 4), (1, 3), (2, 2), (3, 2), (4, 2)):
+            with self.subTest(format=fmt):
+                source = ctypes.create_string_buffer(bytes(rgba))
+                packed = ctypes.create_string_buffer(64 * bpp)
+                self.assertTrue(self.lib.gpuEncodeTexture(source, packed, 8, 8, fmt))
+                expected = bytearray(rgba)
+                for offset in range(0, len(expected), 4):
+                    if fmt in (2, 3):
+                        for channel in ((0, 1, 2) if fmt == 2 else (0, 2)):
+                            value = expected[offset + channel] >> 3
+                            expected[offset + channel] = (value << 3) | (value >> 2)
+                        expected[offset + 3] = 255 if expected[offset + 3] >= 128 else 0
+                    if fmt == 3:
+                        value = expected[offset + 1] >> 2
+                        expected[offset + 1] = (value << 2) | (value >> 4)
+                    if fmt in (1, 3):
+                        expected[offset + 3] = 255
+                self.assertEqual(self.decode(packed.raw, 8, 8, fmt), bytes(expected))
+
+    def test_framebuffer_encode_rejects_unsupported_inputs(self):
+        data = ctypes.create_string_buffer(256)
+        self.assertFalse(self.lib.gpuEncodeTexture(data, data, 7, 8, 0))
+        self.assertFalse(self.lib.gpuEncodeTexture(data, data, 8, 8, 5))
+        self.assertFalse(self.lib.gpuEncodeTexture(data, data, 8, 8, 12))
 
     def test_rgba5551_bit_width_and_alpha(self):
         for packed, expected in [(0xF801, (255, 0, 0, 255)), (0x07C1, (0, 255, 0, 255)),
@@ -186,6 +222,108 @@ class ShaderTests(unittest.TestCase):
         glsl, _ = picasso.translate(source)
         self.assertIn("p_position.xyz = ((v0)).xyz;", glsl)
         self.assertIn("p_position.w = (((v0).wwww)).w;", glsl)
+
+
+class ShaderUniform(ctypes.Structure):
+    _fields_ = [("name", ctypes.c_char * 64), ("index", ctypes.c_uint32)]
+
+
+class ShaderEntry(ctypes.Structure):
+    _fields_ = [("source", ctypes.c_char_p), ("uniformCount", ctypes.c_uint),
+                ("uniforms", ctypes.POINTER(ShaderUniform))]
+
+
+class ShaderBinary(ctypes.Structure):
+    _fields_ = [("numDVLE", ctypes.c_uint), ("DVLE", ctypes.POINTER(ShaderEntry))]
+
+
+class ShaderContainerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory(prefix="emerald-shader-container-")
+        cls.addClassCleanup(cls.temp.cleanup)
+        library = Path(cls.temp.name) / "shader.so"
+        log_stub = Path(cls.temp.name) / "log_stub.c"
+        log_stub.write_text("void *gpuProgram;\n"
+                            "int __android_log_print(int priority, const char *tag, const char *format, ...) "
+                            "{ (void)priority; (void)tag; (void)format; return 0; }\n")
+        subprocess.run(["cc", "-shared", "-fPIC", "-Wall", "-Wextra", "-Werror",
+                        "-I" + str(ROOT / "android/gpu/src"),
+                        "-I" + str(ROOT / "android/gpu/include"),
+                        "-I" + str(ROOT / "android/shim/include"),
+                        "-I" + str(ROOT / "android/host/include"),
+                        "-I" + str(ROOT / "android/shim/test/host"),
+                        str(ROOT / "android/gpu/src/shader.c"), str(log_stub),
+                        "-lGLESv2", "-o", str(library)], check=True)
+        cls.lib = ctypes.CDLL(str(library))
+        cls.lib.DVLB_ParseFile.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        cls.lib.DVLB_ParseFile.restype = ctypes.POINTER(ShaderBinary)
+        cls.lib.DVLB_Free.argtypes = [ctypes.POINTER(ShaderBinary)]
+
+    @staticmethod
+    def bundle(programs):
+        return b"CTRGLS2\0" + struct.pack("<I", len(programs)) + b"".join(
+            struct.pack("<I", len(program)) + program for program in programs)
+
+    def parse(self, data):
+        buffer = ctypes.create_string_buffer(data)
+        return self.lib.DVLB_ParseFile(buffer, len(data))
+
+    def assertRejected(self, data):
+        binary = self.parse(data)
+        self.assertFalse(bool(binary))
+        if binary:
+            self.lib.DVLB_Free(binary)
+
+    def test_two_program_bundle_preserves_both_entries(self):
+        sources = [(ROOT / "origin/3ds_port/src/voxel" / name).read_text()
+                   for name in ("voxel.v.pica", "voxel_weather.v.pica")]
+        expected = [picasso.translate(source)[0].encode() for source in sources]
+        binary = self.parse(self.bundle([picasso.compile_shader(source) for source in sources]))
+        self.assertTrue(binary)
+        try:
+            self.assertEqual(binary.contents.numDVLE, 2)
+            for index, glsl in enumerate(expected):
+                entry = binary.contents.DVLE[index]
+                self.assertEqual(entry.source, glsl)
+                self.assertGreater(entry.uniformCount, 0)
+        finally:
+            self.lib.DVLB_Free(binary)
+
+    def test_bundle_structure_rejections(self):
+        program = picasso.compile_shader((ROOT / "origin/3ds_port/src/voxel/voxel.v.pica").read_text())
+        bundle = self.bundle([program])
+        cases = [b"", bundle[:15], b"CTRGLS2\0" + struct.pack("<I", 0),
+                 b"CTRGLS2\0" + struct.pack("<I", 17), b"CTRGLS2\0" + struct.pack("<I", 1),
+                 b"CTRGLS2\0" + struct.pack("<II", 1, 8) + b"CTRGLS1\0",
+                 b"CTRGLS2\0" + struct.pack("<I", 1) + struct.pack("<I", len(program) + 1) + program,
+                 self.bundle([bundle]), bundle + b"\0"]
+        for data in cases:
+            with self.subTest(length=len(data), prefix=data[:16]):
+                self.assertRejected(data)
+
+    def test_single_program_validation_rejections(self):
+        program = bytearray(picasso.compile_shader((ROOT / "origin/3ds_port/src/voxel/voxel.v.pica").read_text()))
+        cases = []
+        for offset, value in ((12, 97), (8, 1), (8, 1024 * 1024 + 1)):
+            changed = bytearray(program)
+            struct.pack_into("<I", changed, offset, value)
+            cases.append(changed)
+        unterminated_name = bytearray(program)
+        unterminated_name[16:80] = b"A" * 64
+        cases.append(unterminated_name)
+        bad_uniform_index = bytearray(program)
+        struct.pack_into("<I", bad_uniform_index, 80, 96)
+        cases.append(bad_uniform_index)
+        unterminated_source = bytearray(program)
+        unterminated_source[-1] = 1
+        cases.append(unterminated_source)
+        embedded_nul = bytearray(program)
+        embedded_nul[-2] = 0
+        cases.append(embedded_nul)
+        for data in cases:
+            with self.subTest(length=len(data)):
+                self.assertRejected(bytes(data))
 
 
 class VoxelUploadQueueTests(unittest.TestCase):
