@@ -35,6 +35,10 @@ jobs:
         with:
           ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
+      - name: Host GPU test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev
       - name: Verify the imported upstream pin
         run: python3 tools/check_origin.py --fetch
       - name: Updater and coverage regressions
