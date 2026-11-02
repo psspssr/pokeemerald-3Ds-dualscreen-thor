@@ -1,7 +1,8 @@
 diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
+index 696f799..bbe11f5 100644
 --- a/src/pokemon_storage_system.c
 +++ b/src/pokemon_storage_system.c
-@@ -2059,7 +2059,7 @@
+@@ -2059,7 +2059,7 @@ static void EnterPokeStorage(u8 boxOption)
  {
      ResetTasks();
      sCurrentBoxOption = boxOption;
@@ -10,7 +11,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
      if (sStorage == NULL)
      {
          SetMainCallback2(CB2_ExitPokeStorage);
-@@ -2079,7 +2079,7 @@
+@@ -2079,7 +2079,7 @@ static void EnterPokeStorage(u8 boxOption)
  static void CB2_ReturnToPokeStorage(void)
  {
      ResetTasks();
@@ -19,7 +20,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
      if (sStorage == NULL)
      {
          SetMainCallback2(CB2_ExitPokeStorage);
-@@ -8582,7 +8582,7 @@
+@@ -8582,7 +8582,7 @@ static bool8 MultiMove_Init(void)
  static void MultiMove_Free(void)
  {
      if (sMultiMove != NULL)

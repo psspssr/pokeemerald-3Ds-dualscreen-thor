@@ -25,19 +25,11 @@ def main():
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="emerald-menu-assets-") as directory:
         work = Path(directory)
-        for name in ("092-condition-icon-palette.patch", "093-map-popup-outline-bound.patch"):
-            patch = ROOT / "patches/android" / name
-            for rel in patch_files(patch):
-                p = work / rel
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_bytes((TREE / rel).read_bytes())
-            try:
-                strict_apply(work, patch, ["--reverse"])
-            except PatchError:
-                strict_apply(work, patch)
-                strict_apply(work, patch, ["--reverse"])
-            if not args.before:
-                strict_apply(work, patch)
+        if args.before: raise SystemExit("The fix is upstream; use a historical checkout for --before")
+        for rel in ("src/menu_specialized.c", "src/map_name_popup.c"):
+            p = work / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes((TREE / rel).read_bytes())
         condition = (work / "src/menu_specialized.c").read_text()
         popup = (work / "src/map_name_popup.c").read_text()
         sprite = (TREE / "src/sprite.c").read_text()
@@ -58,7 +50,9 @@ def main():
         (work / "menu_bios.inc").write_text("\n".join(function(bios, signature) for signature in (
             "static uint32_t CPUReadMemory(const void *src)", "static void CPUWriteMemory(void *dest, uint32_t val)",
             "static uint16_t CPUReadHalfWord(const void *src)", "static void CPUWriteHalfWord(void *dest, uint16_t val)",
-            "void CpuSet(const void *src, void *dst, u32 cnt)")))
+            "static bool32 CopyRepeats(const u8 *source, const u8 *dest, u32 bytes)",
+                          "static void Fill32(u8 *dest, u32 value, u32 count)",
+                          "void CpuSet(const void *src, void *dst, u32 cnt)")))
         for external in (True, False):
             binary = work / ("external" if external else "embedded")
             subprocess.run([os.environ.get("CC", "cc"), "-std=gnu11", "-O1", "-g", "-Wall", "-Wextra", "-Werror",

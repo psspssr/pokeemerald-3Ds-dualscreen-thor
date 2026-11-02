@@ -24,7 +24,7 @@ static Thread workerHandle;
 Thread __real_threadCreate(ThreadFunc entry, void *arg, size_t stack, int priority, int core, bool detached);
 Thread __wrap_threadCreate(ThreadFunc entry, void *arg, size_t stack, int priority, int core, bool detached)
 {
-    assert(core == -2 && stack == 16 * 1024);
+    assert(core == 1 && stack == 16 * 1024);
     if (failCreate) return NULL;
     created++;
     assert(detached == !TEST_FIXED);
@@ -50,8 +50,8 @@ static struct CtrAssetStats sStats;
 static CtrLock sLock;
 static volatile u8 *sWarming;
 #if TEST_FIXED
-static CtrThread sWarmThread;
-static bool sWarmStop;
+static char sWarmHint[96];
+static bool sWarmHintPending;
 #endif
 #include "asset_thread_helpers.inc"
 
@@ -94,6 +94,9 @@ static bool sInitialized = true;
 static CtrPlatformHooks sHooks;
 static u64 sFrames;
 static aptHookCookie sAptHook;
+void LocalLink_Shutdown(void) {}
+void CtrProf_Close(void) {}
+void CtrScenario_Close(void) {}
 void CtrSettings_Shutdown(void) { assert(!atomic_load(&filesClosed)); }
 void CtrVideo_Shutdown(void) {}
 void CtrAudio_Shutdown(void) {}

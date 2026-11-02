@@ -1,6 +1,8 @@
+diff --git a/src/contest.c b/src/contest.c
+index 5e3e7c6..51cc56f 100644
 --- a/src/contest.c
 +++ b/src/contest.c
-@@ -3940,7 +3940,13 @@
+@@ -3940,7 +3940,13 @@ static void SetBottomSliderHeartsInvisibility(bool8 invisible)
              if (!invisible)
                  gSprites[eContestGfxState[i].sliderHeartSpriteId].x = 180;
              else

@@ -1,3 +1,5 @@
+diff --git a/3ds_port/src/voxel/ctr_voxel.c b/3ds_port/src/voxel/ctr_voxel.c
+index 4564d9d..ba68055 100644
 --- a/3ds_port/src/voxel/ctr_voxel.c
 +++ b/3ds_port/src/voxel/ctr_voxel.c
 @@ -24,6 +24,9 @@
@@ -10,7 +12,7 @@
  #include <limits.h>
  #include <math.h>
  #include <stdio.h>
-@@ -5712,6 +5715,11 @@
+@@ -8565,6 +8568,11 @@ void CtrVoxel_Draw(C3D_RenderTarget *target, int eye)
  
      sBloomStrength = light.bloom;
      C3D_FrameDrawOn(target);
@@ -22,14 +24,14 @@
  
      /* The camera the frustum was cut from in the update (UpdateFrustum).
       * The gloom is placed on the logical surface, before the fit to it. */
-@@ -5799,6 +5807,10 @@
-             C3D_DrawArrays(GPU_TRIANGLES, (int)first, (int)count);
-         }
+@@ -8673,6 +8681,10 @@ void CtrVoxel_Draw(C3D_RenderTarget *target, int eye)
+         C3D_TexEnvInit(C3D_GetTexEnv(5));
      }
-+
+ 
 +#ifdef __ANDROID__
 +    if (androidVoxelAa) CtrGpu_EndVoxelAA();
 +#endif
- 
++
      /* The reflections, cast shadows and the player's silhouette take no
       * dapples; the unit stays bound for the sprites and the rays, and is
+      * released after them (ReleaseDappleUnit: never C3D_TexBind(1, NULL),

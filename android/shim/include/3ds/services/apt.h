@@ -44,6 +44,9 @@ bool aptIsActive(void);
 bool aptShouldClose(void);
 void aptSetSleepAllowed(bool allowed);
 bool aptIsSleepAllowed(void);
+bool aptIsHomeAllowed(void);
+void aptSetHomeAllowed(bool allowed);
+bool aptCheckHomePressRejected(void);
 bool aptMainLoop(void);
 /* Hooks run newest first, on the thread calling aptMainLoop. */
 void aptHook(aptHookCookie *cookie, aptHookFn callback, void *param);

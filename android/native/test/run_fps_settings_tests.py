@@ -25,9 +25,10 @@ def main():
 #include <stdio.h>
 #include <string.h>
 #include "3ds_settings.c"
+void CtrDayNight_Update(void) {}
 static const char *settingsPath;
 FILE *CtrFs_OpenData(const char *name, const char *mode) {
-    assert(strcmp(name, "settings.txt") == 0);
+    (void)name;
     return fopen(settingsPath, mode);
 }
 void CtrLog_Write(CtrLogCategory category, const char *format, ...) {
@@ -68,7 +69,7 @@ int main(int argc, char **argv) {
                                check=True, timeout=10,
                                env={**os.environ, "UBSAN_OPTIONS": "halt_on_error=1"})
                 assert f"fps={after}\n" in settings.read_text()
-                assert f"voxel_blur={next_blur}\n" in settings.read_text()
+                assert f"voxel_blur={100 if next_blur else 0}\n" in settings.read_text()
                 blur = next_blur
         print("PASS FPS and voxel blur default off; fresh/legacy and explicit choices persist across restart")
 

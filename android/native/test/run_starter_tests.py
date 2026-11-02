@@ -49,9 +49,9 @@ def main():
         helpers += function(starter, signature)
     helpers += "\n".join(re.findall(r"^#define VIEW_(?:LEFT|RIGHT|TOP|BOTTOM) .*$", video, re.M)) + "\n"
     for signature in (
-        "static int WindowEdge(unsigned limits, bool last, unsigned extent)",
+        "static int WindowEdge(unsigned limits, unsigned over, bool last, unsigned extent)",
         "static bool BattleCurtain(void)",
-        "static void WindowSpan(unsigned limits, bool vertical, int *first, int *last)",
+        "static void WindowSpan(unsigned limits, unsigned over, bool vertical, int *first, int *last)",
     ):
         helpers += function(video, signature)
     fill_end = video.index("} CentredFill;") + len("} CentredFill;")

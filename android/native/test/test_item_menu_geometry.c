@@ -11,6 +11,7 @@
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof(*(a)))
 
 static bool sStage, sCentred, sBattle;
+static bool sStageFaded,sStageZoomed,sStageFadedRequested,sStageZoomedRequested,sInBattle;
 static unsigned sCentredScreen;
 static int sViewX, sViewY;
 static float sZoom, sOffX, sOffY, sShiftZoom;

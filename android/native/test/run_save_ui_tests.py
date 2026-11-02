@@ -55,22 +55,15 @@ def main():
             strict_apply(work,patch,["--include="+rel])
         source=path.read_text();strings,mapping=encoded_strings()
         capacity=re.search(r"u8 text\[(\d+)\];",source)[1]
-        declarations=re.search(r"typedef struct\s*\{\s*const u16 \*glyphs;.*?\} Font;",source,re.S)[0]+"\n"
-        declarations+=re.search(r"static u8 sSaveMessage\[\d+\];",source)[0]+"\n"
+        declarations=re.search(r"static u8 sSaveMessage\[\d+\];",source)[0]+"\n"
         declarations+="typedef struct { u8 saveStep,pressed,canSave,text["+capacity+"]; } ViewState;\n"
-        fonts=(TREE/"src/fonts.c").read_text()
-        for kind in ("Normal","Small"):
-            declarations+=re.search(r"const u8 gFont"+kind+r"LatinGlyphWidths\[\] = \{.*?\};",fonts,re.S)[0]+"\n"
         (work/"save_data.inc").write_text(declarations+"\n".join(
             "static const u8 text"+name+"[]={"+",".join(map(str,data))+"};" for name,data in strings)+
             "\nstatic const u8 playerName[]={"+",".join(map(str,mapping['W']*7+b'\xff'))+"};\n")
         util=(TREE/"src/string_util.c").read_text()
         helpers=function(util,"u8 *StringExpandPlaceholders(u8 *dest, const u8 *src)")
         helpers+=function(util,"u8 GetExtCtrlCodeLength(u8 code)")
-        for signature in ("static void ResolveFonts(void)","static u16 NextGlyph(const u8 **str)",
-                          "static int DrawStr(const Font *font, const u8 *str, int x, int y, u16 fg, u16 shadow)",
-                          "static void CopyText(u8 *dst, int size, const u8 *src)"):
-            helpers+=function(source,signature)
+        helpers+=function(source,"static void CopyText(u8 *dst, int size, const u8 *src)")
         if "static bool8 AppendSaveMessage(" in source:
             helpers+=function(source,"static bool8 AppendSaveMessage(u8 **out, unsigned *remaining, const u8 *text, unsigned depth)")
             helpers+=function(source,"static void SetSaveMessage(const u8 *text)")
@@ -78,7 +71,6 @@ def main():
             assert source.count("SetSaveMessage(")==4 # definition plus all3 Save writes
         else:
             helpers+="static void SetSaveMessage(const u8 *text) { StringExpandPlaceholders(sSaveMessage,text); }\n"
-        helpers+=function(source,"static void DrawSave(const ViewState *s)")
         helpers+=function(source,"static void DoSave(void)")
         helpers+=function(source,"static void OpenSave(void)")
         activate=function(source,"static void Activate(u8 id, u8 mode)")

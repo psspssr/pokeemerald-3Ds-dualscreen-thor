@@ -151,7 +151,8 @@ def main():
         # mail/held-item setters, compaction, and party recounting.
         flags = ["-D_GNU_SOURCE", "-DPORTABLE", "-DMODERN=1", "-DPORT_BRIDGE", "-DPLATFORM_3DS",
                  "-I" + str(ROOT / "android/native/include"), "-I" + str(ROOT / "android/host/include"),
-                 "-iquote" + str(TREE / "include"), "-iquote" + str(TREE / "3ds_port/compat"), "-iquote" + str(TREE)]
+                 "-iquote" + str(TREE / "include"), "-iquote" + str(TREE / "3ds_port/compat"),
+         "-iquote" + str(TREE / "3ds_port/include"), "-iquote" + str(TREE)]
         pre = subprocess.run([cc, "-E", "-D__INTELLISENSE__", *flags, "src/pokemon.c"],
                              cwd=TREE, capture_output=True, check=True).stdout
         converted = subprocess.run([str(TREE / "tools/preproc/preproc"), "-i", "src/pokemon.c", "charmap.txt"],

@@ -4,11 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define Port_ResolveAssetPointerSized(p,n) Port_ResolveAssetPointer(p)
 #include "constants/species.h"
 
 typedef uint8_t u8, bool8;
 typedef uint16_t u16;
-typedef uint32_t u32;
+typedef uint32_t u32, bool32;
 typedef int16_t s16;
 typedef int32_t s32;
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof(*(a)))

@@ -65,6 +65,7 @@ def main():
             # A translation-unit wrapper must never classify another scene's callback.
             assert set(re.findall(r"SetVBlankCallback\((\w+)\)", source)) == callbacks
             helper = "".join(e + "\n" for e in re.findall(r"enum\s*\{.*?\};", source, re.S) if "WIN_" in e)
+            helper += "\n".join(re.findall(r"#if[^\n]*\n(?:(?!#endif).)*#define BERRY_TAG_(?:(?!#endif).)*#endif", source, re.S)) + "\n"
             helper += declaration(source, "static const struct WindowTemplate sWindowTemplates[")
             yesno = target == "use_pokeblock"
             if yesno:

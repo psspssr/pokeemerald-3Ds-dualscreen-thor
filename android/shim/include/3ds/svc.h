@@ -100,6 +100,7 @@ Result svcOutputDebugString(const char *str, s32 length);
  * the calling thread. The process is left alone. */
 void svcBreak(UserBreakType breakReason) __attribute__((noreturn));
 Result svcCloseHandle(Handle handle);
+Result svcFlushProcessDataCache(Handle process,u32 address,u32 size);
 /* Priorities as given to threadCreate; 0x30 for threads the shim did not create. */
 Result svcGetThreadPriority(s32 *out, Handle handle);
 Result svcSetThreadPriority(Handle thread, s32 prio);

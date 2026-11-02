@@ -20,3 +20,5 @@ C3D_FVec *C3D_FixedAttribGetWritePtr(int id);
 void C3D_FixedAttribSet(int id, float x, float y, float z, float w);
 void C3D_SetScissor(GPU_SCISSORMODE mode, u32 left, u32 bottom, u32 right, u32 top);
 void C3D_SetViewport(u32 x, u32 y, u32 width, u32 height);
+
+float C3D_GetCmdBufUsage(void);

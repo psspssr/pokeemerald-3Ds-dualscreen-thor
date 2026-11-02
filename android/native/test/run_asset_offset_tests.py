@@ -24,7 +24,7 @@ def main():
     patch = ROOT / "patches/android/088-external-graphics-offsets.patch"
     with tempfile.TemporaryDirectory(prefix="emerald-asset-offsets-") as directory:
         work = Path(directory)
-        copied = tuple(patch_files(patch))
+        copied = ("src/evolution_scene.c", "src/field_effect.c", "src/battle_transition.c", "src/slot_machine.c", "src/contest.c")
         for rel in copied:
             p = work / rel
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -69,7 +69,9 @@ def main():
         (work / "asset_bios.inc").write_text("\n".join(function(bios, signature) for signature in (
             "static uint32_t CPUReadMemory(const void *src)", "static void CPUWriteMemory(void *dest, uint32_t val)",
             "static uint16_t CPUReadHalfWord(const void *src)", "static void CPUWriteHalfWord(void *dest, uint16_t val)",
-            "void CpuSet(const void *src, void *dst, u32 cnt)")))
+            "static bool32 CopyRepeats(const u8 *source, const u8 *dest, u32 bytes)",
+                          "static void Fill32(u8 *dest, u32 value, u32 count)",
+                          "void CpuSet(const void *src, void *dst, u32 cnt)")))
         for external in (True, False):
             binary = work / ("external" if external else "embedded")
             subprocess.run([os.environ.get("CC", "cc"), "-std=gnu11", "-O1", "-g", "-Wall", "-Wextra", "-Werror",

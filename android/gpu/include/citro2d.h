@@ -31,3 +31,7 @@ void C2D_ViewScale(float x,float y);
 bool C2D_DrawImageAt(C2D_Image image,float x,float y,float depth,const C2D_ImageTint *tint,float scaleX,float scaleY);
 bool C2D_DrawRectangle(float x,float y,float z,float width,float height,u32 topLeft,u32 topRight,u32 bottomLeft,u32 bottomRight);
 static inline bool C2D_DrawRectSolid(float x,float y,float z,float w,float h,u32 color) { return C2D_DrawRectangle(x,y,z,w,h,color,color,color,color); }
+
+bool C2D_DrawTriangle(float x0,float y0,u32 c0,float x1,float y1,u32 c1,float x2,float y2,u32 c2,float depth);
+bool C2D_DrawLine(float x0,float y0,u32 c0,float x1,float y1,u32 c1,float thickness,float depth);
+bool C2D_DrawCircleSolid(float x,float y,float depth,float radius,u32 color);

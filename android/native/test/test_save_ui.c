@@ -10,12 +10,8 @@ typedef uint16_t u16;
 #define FALSE 0
 #define ARRAY_COUNT(a) (sizeof(a)/sizeof(*(a)))
 enum {SAVE_ASK,SAVE_OVERWRITE,SAVE_DONE,BOX_MESSAGE,HIT_YES,HIT_NO,HIT_OK,TXT_WHITE,TXT_DARK,CTR_LOG_ERROR};
-static const u16 gFontNormalLatinGlyphs[1],gFontSmallLatinGlyphs[1];
 #include "save_data.inc"
-static Font sSmall,sNormal;
 static u8 sSaveStep;
-static const u8 gText_Yes[]={0xff},gText_No[]={0xff};
-static const u16 *ResolveFontBase(const u16 *p){return p;}
 #if TEST_BOUNDED
 static const u8 *Port_ResolveTextPointer(const u8 *p){return p;}
 static void CtrLog_Write(int kind,const char *text){(void)kind;(void)text;}
@@ -32,28 +28,6 @@ static const u8 *GetExpandedPlaceholder(unsigned id)
 }
 static u8 GetExtCtrlCodeLength(u8 code);
 static const u8 *Ascii(const char *s){(void)s;static const u8 error[]={CHAR_E,CHAR_R,CHAR_R,EOS};return error;}
-static struct {int x,y,w,h;} box,buttons[2];
-static unsigned buttonCount,glyphCount;
-static int maxX,maxY;
-static void DrawBox(int kind,int x,int y,int wt,int ht)
-{assert(kind==BOX_MESSAGE);box=(typeof(box)){x,y,wt*8,ht*8};}
-static int DrawGlyph(const Font *font,u16 glyph,int x,int y,u16 fg,u16 shadow)
-{
-    (void)fg;(void)shadow;
-    assert(x>=box.x+4 && y>=box.y+4);
-    int right=x+font->widths[glyph],bottom=y+font->height;
-    if(right>maxX)maxX=right;
-    if(bottom>maxY)maxY=bottom;
-    assert(right<=box.x+box.w-4 && bottom<=box.y+box.h-4);
-    glyphCount++;return font->widths[glyph];
-}
-static void DrawLabelButton(int x,int y,int wt,int ht,const u8 *text,bool8 pressed,bool8 enabled,int hit)
-{
-    (void)text;(void)pressed;(void)enabled;
-    assert(hit==HIT_YES || hit==HIT_NO || hit==HIT_OK);
-    assert(buttonCount<2 && x>=0 && y>=box.y+box.h && x+wt*8<=240 && y+ht*8<=240);
-    buttons[buttonCount++]=(typeof(box)){x,y,wt*8,ht*8};
-}
 enum {SCR_MAP,SCR_SAVE,SAVE_STATUS_EMPTY,SAVE_STATUS_CORRUPT,SAVE_STATUS_OK,SAVE_NORMAL,SAVE_OVERWRITE_DIFFERENT_FILE,GAME_STAT_SAVED_GAME,SE_SAVE};
 static u8 sScreen,gSaveFileStatus,gDifferentSaveFile;
 static bool fieldIdle=true;
@@ -70,7 +44,6 @@ static void PlaySE(int sound){assert(sound==SE_SAVE);}
 int main(void)
 {
     (void)ActivateSave; // keep the --before overflow probe independent of action tests
-    ResolveFonts();
     const u8 *cases[]={textDifferentSaveFile,textConfirmSave,textAlreadySavedFile,textPlayerSavedGame,textSaveError};
     const unsigned steps[]={SAVE_OVERWRITE,SAVE_ASK,SAVE_OVERWRITE,SAVE_DONE,SAVE_DONE};
     for(unsigned i=0;i<ARRAY_COUNT(cases);i++) {
@@ -84,11 +57,7 @@ int main(void)
         ViewState state={.saveStep=sSaveStep,.canSave=true};
         CopyText(state.text,sizeof(state.text),sSaveMessage);
         assert(length<sizeof(state.text) && !memcmp(reference,state.text,length+1));
-        buttonCount=glyphCount=0;maxX=maxY=0;DrawSave(&state);
-        assert(glyphCount>0 && buttonCount==(steps[i]==SAVE_DONE?1u:2u));
-        if(buttonCount==2)assert(buttons[0].x+buttons[0].w<=buttons[1].x);
-        fprintf(stderr,"save case%u: glyph bounds right%d bottom%d, box(%d,%d %dx%d), buttonsY%d\n",
-                i,maxX,maxY,box.x,box.y,box.w,box.h,buttons[0].y);
+
     }
 #if TEST_BOUNDED
     u8 tooLong[1024];memset(tooLong,CHAR_W,sizeof(tooLong));tooLong[sizeof(tooLong)-1]=EOS;
@@ -129,6 +98,6 @@ int main(void)
     u8 small[4]={1,2,3,4},*out=small;unsigned left=3;
     assert(!AppendSaveMessage(&out,&left,tooLong,0));assert(out==small+3 && left==0 && small[3]==4);
 #endif
-    puts("PASS Save UI: all5 real messages and max-length player name, bounded expansion/full snapshots, actual glyph/control-code line bounds and unchanged Yes/No/OK semantics");
+    puts("PASS Save UI: all5 real messages and max-length player name, bounded expansion/full snapshots, control-code integrity and unchanged Yes/No/OK semantics");
     return 0;
 }

@@ -1,6 +1,20 @@
+diff --git a/include/battle_scripts.h b/include/battle_scripts.h
+index a3b2bee..977ab30 100644
+--- a/include/battle_scripts.h
++++ b/include/battle_scripts.h
+@@ -17,6 +17,7 @@ extern const u8 BattleScript_FaintAttacker[];
+ extern const u8 BattleScript_FaintTarget[];
+ extern const u8 BattleScript_GiveExp[];
+ extern const u8 BattleScript_HandleFaintedMon[];
++extern const u8 BattleScript_FaintedMonTryChoose[];
+ extern const u8 BattleScript_LocalTrainerBattleWon[];
+ extern const u8 BattleScript_LocalTwoTrainersDefeated[];
+ extern const u8 BattleScript_LocalBattleWonLoseTexts[];
+diff --git a/src/battle_script_commands.c b/src/battle_script_commands.c
+index 53cc4e6..a663eb4 100644
 --- a/src/battle_script_commands.c
 +++ b/src/battle_script_commands.c
-@@ -6274,7 +6274,12 @@
+@@ -6361,7 +6361,12 @@ static void Cmd_buffermovetolearn(void)
  
  static void Cmd_jumpifplayerran(void)
  {
@@ -14,13 +28,3 @@
          gBattlescriptCurrInstr = T1_READ_PTR(gBattlescriptCurrInstr + 1);
      else
          gBattlescriptCurrInstr += 5;
---- a/include/battle_scripts.h
-+++ b/include/battle_scripts.h
-@@ -17,6 +17,7 @@
- extern const u8 BattleScript_FaintTarget[];
- extern const u8 BattleScript_GiveExp[];
- extern const u8 BattleScript_HandleFaintedMon[];
-+extern const u8 BattleScript_FaintedMonTryChoose[];
- extern const u8 BattleScript_LocalTrainerBattleWon[];
- extern const u8 BattleScript_LocalTwoTrainersDefeated[];
- extern const u8 BattleScript_LocalBattleWonLoseTexts[];

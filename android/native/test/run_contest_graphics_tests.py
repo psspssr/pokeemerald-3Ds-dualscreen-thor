@@ -27,28 +27,7 @@ def main():
         work = Path(directory)
         for rel in ("3ds_port/full.mk", "src/contest.c", "src/contest_util.c"):
             p = work / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes((TREE / rel).read_bytes())
-        patch = ROOT / "patches/android/086-contest-pokeblock-graphics.patch"
-        # Later patches extend the make list or add earlier lines in contest.c.
-        # Normalize exact later hunks for these copied files, then restore them.
-        selected = ["--include=" + rel for rel in ("3ds_port/full.mk", "src/contest.c", "src/contest_util.c")]
-        later = []
-        for candidate in sorted((ROOT / "patches/android").glob("*.patch"), reverse=True):
-            if candidate.name <= patch.name:
-                continue
-            try:
-                strict_apply(work, candidate, ["--reverse", *selected])
-                later.append(candidate)
-            except PatchError:
-                pass
-        try:
-            strict_apply(work, patch, ["--reverse"])
-        except PatchError:
-            strict_apply(work, patch)
-            strict_apply(work, patch, ["--reverse"])
-        if not args.before:
-            strict_apply(work, patch)
-            for candidate in reversed(later):
-                strict_apply(work, candidate, selected)
+        if args.before: raise SystemExit("The fix is now upstream; use a historical checkout for --before")
         contest = (work / "src/contest.c").read_text()
         results = (work / "src/contest_util.c").read_text()
         bios = (TREE / "src/platform/bios.c").read_text()
@@ -57,6 +36,8 @@ def main():
                           "static void CPUWriteMemory(void *dest, uint32_t val)",
                           "static uint16_t CPUReadHalfWord(const void *src)",
                           "static void CPUWriteHalfWord(void *dest, uint16_t val)",
+                          "static bool32 CopyRepeats(const u8 *source, const u8 *dest, u32 bytes)",
+                          "static void Fill32(u8 *dest, u32 value, u32 count)",
                           "void CpuSet(const void *src, void *dst, u32 cnt)"):
             helpers += function(bios, signature)
         helpers += function(contest, "static void UpdateApplauseMeter(void)")

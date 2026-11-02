@@ -1,7 +1,8 @@
 diff --git a/src/pokedex.c b/src/pokedex.c
+index 2ed87a3..55853a5 100644
 --- a/src/pokedex.c
 +++ b/src/pokedex.c
-@@ -6165,8 +6165,9 @@
+@@ -6505,8 +6505,9 @@ static s8 CtrDex_SearchItemAt(s16 x, s16 y)
      case 1: return SEARCH_COLOR;
      case 2: return x < 88 ? SEARCH_TYPE_LEFT : SEARCH_TYPE_RIGHT;
      case 3: return SEARCH_ORDER;

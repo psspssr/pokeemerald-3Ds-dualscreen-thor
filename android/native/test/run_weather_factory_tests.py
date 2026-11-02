@@ -32,28 +32,31 @@ def main():
     patch = ROOT / "patches/android/089-weather-factory-assets.patch"
     with tempfile.TemporaryDirectory(prefix="emerald-weather-factory-") as directory:
         work = Path(directory)
-        for rel in patch_files(patch):
+        for rel in ("src/field_weather.c", "src/battle_factory_screen.c"):
             p = work / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes((TREE / rel).read_bytes())
-        try:
-            strict_apply(work, patch, ["--reverse"])
-        except PatchError:
-            strict_apply(work, patch)
-            strict_apply(work, patch, ["--reverse"])
-        if not args.before:
-            strict_apply(work, patch)
+        if args.before: raise SystemExit("The fix is upstream; use a historical checkout for --before")
         weather = (work / "src/field_weather.c").read_text()
         factory = (work / "src/battle_factory_screen.c").read_text()
-        helpers = re.search(r"^#define DROUGHT_COLOR_INDEX.*$", weather, re.M)[0] + "\n"
+        helpers = "#define WEATHER_PAL(curPalIndex) (curPalIndex)\n#define WEATHER_PAL_COUNT 32\n"
+        helpers += re.search(r"^#define DROUGHT_COLOR_INDEX.*$", weather, re.M)[0] + "\n"
         helpers += re.search(r"struct RGBColor\s*\{.*?\};", weather, re.S)[0] + "\n"
-        helpers += function(weather, "static void ApplyColorMap(u8 startPalIndex, u8 numPalettes, s8 colorMapIndex)")
+        helpers += "#ifdef PORT_BRIDGE\n" + function(weather, "static const u16 *GetDroughtWeatherColors(s8 colorMapIndex)") + "#endif\n"
+        helpers += re.search(r"#ifdef PORT_BRIDGE\n// The INCBINs.*?#endif", factory, re.S)[0] + "\n"
+        # Pick the shared implementation across the platform-name conditional.
+        start=weather.index("static void ApplyColorMapToRange(u8 startPalIndex, u8 numPalettes, s8 colorMapIndex)\n")
+        brace=weather.index("\n{",start)
+        end=weather.index("\n}\n",brace)+3
+        helpers += "static void ApplyColorMap(u8 startPalIndex, u8 numPalettes, s8 colorMapIndex)"+weather[brace:end]
+        helpers += "\n#define WEATHER_PAL(curPalIndex) (curPalIndex)\n#define WEATHER_PAL_COUNT 32\n"
+
         helpers += function(weather, "static void ApplyDroughtColorMapWithBlend(s8 colorMapIndex, u8 blendCoeff, u16 blendColor)")
         if "static u16 FactorySwapFadeColor(void)" in factory:
             helpers += function(factory, "static u16 FactorySwapFadeColor(void)")
             helpers += function(factory, "static u32 FactoryAssetSize(const void *asset, u32 embeddedSize)")
             helpers += re.search(r"^#define FACTORY_ASSET_SIZE.*$", factory, re.M)[0] + "\n"
-        fade = re.findall(r"^\s*(?:BeginNormalPaletteFade|gPlttBufferFaded)[^\n]*(?:sPokeballGray_Pal\[37\]|FactorySwapFadeColor\(\))[^\n]*;", factory, re.M)
+        fade = re.findall(r"^\s*(?:BeginNormalPaletteFade|gPlttBufferFaded)[^\n]*(?:sPokeballGray_Pal\[37\]|FactorySwapFadeColor\(\)|FADE_TEXT_COLOR)[^\n]*;", factory, re.M)
         assert len(fade) == 3, "all three real Factory fade consumers must be tested"
         helpers += "static void FactoryFadeConsumers(void) {\n" + "\n".join(fade) + "\n}\n"
         for mode in ("Select", "Swap"):
@@ -69,7 +72,9 @@ def main():
         (work / "weather_factory_bios.inc").write_text("\n".join(function(bios, sig) for sig in (
             "static uint32_t CPUReadMemory(const void *src)", "static void CPUWriteMemory(void *dest, uint32_t val)",
             "static uint16_t CPUReadHalfWord(const void *src)", "static void CPUWriteHalfWord(void *dest, uint16_t val)",
-            "void CpuSet(const void *src, void *dst, u32 cnt)")))
+            "static bool32 CopyRepeats(const u8 *source, const u8 *dest, u32 bytes)",
+                          "static void Fill32(u8 *dest, u32 value, u32 count)",
+                          "void CpuSet(const void *src, void *dst, u32 cnt)")))
         payload = ""
         for name, path in (("menuData", "menu.4bpp"), ("pictureData", "mon_pic_bg.4bpp"),
                            ("interfaceData", "interface.gbapal"), ("grayData", "pokeball_gray.gbapal")):

@@ -1,19 +1,19 @@
+diff --git a/3ds_port/src/3ds_bottom_ui.c b/3ds_port/src/3ds_bottom_ui.c
+index 0e430c3..9a1d9e2 100644
 --- a/3ds_port/src/3ds_bottom_ui.c
 +++ b/3ds_port/src/3ds_bottom_ui.c
-@@ -1388,13 +1388,15 @@
+@@ -2590,13 +2590,13 @@ static u8 CurrentMode(void)
      /* Before the boxes: the bag can be opened from them, whole screen too. */
      if (gMain.callback2 == CB2_BagMenuRun && gBagMenu)
          return MODE_BAG_MENU;
 -    /* A summary opened from the boxes is on the whole screen too. */
 -    if (CtrStorage_IsOpen() || CtrVideo_BottomWhole())
 -        return MODE_STORAGE;
-+    /* A battle/facility Party also uses the whole bottom canvas. Identify
-+     * its live callback before the generic Storage/Summary fallback. */
      if (FuncIsActiveTask(Task_HandleChooseMonInput))
          sPartyMenuCallback = gMain.callback2;
-     if (sPartyMenuCallback && gMain.callback2 == sPartyMenuCallback)
+     if ((sPartyMenuCallback && gMain.callback2 == sPartyMenuCallback) || CtrParty_Building())
          return MODE_PARTY_MENU;
-+    /* A summary opened from the boxes is on the whole screen too. */
++    /* Identify a battle Party before the generic whole-screen fallback. */
 +    if (CtrStorage_IsOpen() || CtrVideo_BottomWhole())
 +        return MODE_STORAGE;
      if (gMain.inBattle)

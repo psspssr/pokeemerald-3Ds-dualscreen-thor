@@ -1,78 +1,33 @@
+diff --git a/3ds_port/include/3ds_platform.h b/3ds_port/include/3ds_platform.h
+index 35fdd26..885374d 100644
 --- a/3ds_port/include/3ds_platform.h
 +++ b/3ds_port/include/3ds_platform.h
-@@ -56,6 +56,10 @@
+@@ -56,6 +56,9 @@ void CtrLock_Init(CtrLock *lock);
  void CtrLock_Lock(CtrLock *lock);
  void CtrLock_Unlock(CtrLock *lock);
  bool CtrPlatform_StartThread(void (*entry)(void *), void *arg, unsigned stack, int core);
-+/* Joinable workers must finish before the services they use are shut down. */
 +typedef void *CtrThread;
 +CtrThread CtrPlatform_StartJoinableThread(void (*entry)(void *), void *arg, unsigned stack, int core);
 +void CtrPlatform_JoinThread(CtrThread thread);
  void CtrPlatform_SleepUs(unsigned microseconds);
  /* The frame profiler's report and reset, at present (3ds_prof.c). */
  void CtrProf_EndFrame(float workMs, float waitMs, uint64_t frame);
---- a/3ds_port/include/3ds_assets.h
-+++ b/3ds_port/include/3ds_assets.h
-@@ -24,6 +24,7 @@
- void CtrAssets_Collect(void);
- /* Reads every payload into the cache from a background worker (see 3ds_assets.c). */
- void CtrAssets_StartWarmup(void);
-+void CtrAssets_StopWarmup(void);
- const struct CtrAssetStats *CtrAssets_GetStats(void);
- void CtrAssets_Fatal(const char *detail) __attribute__((noreturn));
- 
---- a/3ds_port/src/3ds_platform.c
-+++ b/3ds_port/src/3ds_platform.c
-@@ -126,6 +126,23 @@
- 
-     svcGetThreadPriority(&priority, CUR_THREAD_HANDLE);
-     return threadCreate(entry, arg, stack, priority < 0x3F ? priority + 1 : 0x3F, core, true) != NULL;
-+}
-+
-+CtrThread CtrPlatform_StartJoinableThread(void (*entry)(void *), void *arg, unsigned stack, int core)
-+{
-+    s32 priority = 0x30;
-+
-+    svcGetThreadPriority(&priority, CUR_THREAD_HANDLE);
-+    return threadCreate(entry, arg, stack, priority < 0x3F ? priority + 1 : 0x3F, core, false);
-+}
-+
-+void CtrPlatform_JoinThread(CtrThread thread)
-+{
-+    if (thread != NULL)
-+    {
-+        threadJoin((Thread)thread, U64_MAX);
-+        threadFree((Thread)thread);
-+    }
- }
- 
- void CtrPlatform_SleepUs(unsigned microseconds)
-@@ -271,6 +288,7 @@
-     if (!sInitialized)
-         return;
-     sInitialized = false;
-+    CtrAssets_StopWarmup();
-     CtrSettings_Shutdown();
-     if (sHooks.shutdown)
-         sHooks.shutdown();
+diff --git a/3ds_port/src/3ds_assets.c b/3ds_port/src/3ds_assets.c
+index 38cf1ab..0d44180 100644
 --- a/3ds_port/src/3ds_assets.c
 +++ b/3ds_port/src/3ds_assets.c
-@@ -69,6 +69,8 @@
-  * and is reading (see the payload cache below). */
- static CtrLock sLock;
- static volatile u8 *sWarming;
-+static CtrThread sWarmThread;
-+static bool sWarmStop;
+@@ -580,11 +580,16 @@ static int CompareWarmEntries(const void *a, const void *b)
  
- static void *ReadWholeFile(const char *path, u32 *outSize)
- {
-@@ -499,7 +501,12 @@
+ /* Set at exit (CtrAssets_StopWarmup): the worker stops before the file
+  * system it reads from is closed. */
+-static volatile bool sWarmStop, sWarmRunning;
++static bool sWarmStop;
++static CtrThread sWarmThread;
  
  static bool WarmRoom(void)
  {
--    return sStats.bytes < sBudget / WARM_BUDGET_SHARE;
+-    return !sWarmStop && sStats.bytes < sBudget / WARM_BUDGET_SHARE;
 +    bool room;
-+
 +    CtrLock_Lock(&sLock);
 +    room = !sWarmStop && sStats.bytes < sBudget / WARM_BUDGET_SHARE;
 +    CtrLock_Unlock(&sLock);
@@ -80,7 +35,7 @@
  }
  
  /* Claims the payloads [first, end) of the list that nobody holds yet. */
-@@ -508,7 +515,7 @@
+@@ -593,7 +598,7 @@ static unsigned WarmClaim(const WarmEntry *list, unsigned first, unsigned end)
      unsigned claimed = 0;
  
      CtrLock_Lock(&sLock);
@@ -89,7 +44,7 @@
          if (sPayloads[list[i].idx].data == NULL)
          {
              sWarming[list[i].idx] = 1;
-@@ -576,13 +583,15 @@
+@@ -700,13 +705,14 @@ static void WarmWorker(void *arg)
      u8 *run = NULL;
      u64 begin = CtrPlatform_Ticks();
  
@@ -101,52 +56,100 @@
              list[count].idx = idx;
              list[count++].rank = WarmRank(GetAssetPathByIndex(idx));
          }
-+    if (!WarmRoom())
-+        goto finished;
++    if (!WarmRoom()) goto finished;
      if (count == sEntryCount && (run = malloc(WARM_RUN)) != NULL)
          WarmPack(list, count, run);
      else
-@@ -609,6 +618,7 @@
-             free(data);
+@@ -722,45 +728,48 @@ static void WarmWorker(void *arg)
+             WarmOne(&list[i]);
          }
      }
 +finished:
      free(run);
      free(list);
-     CtrLog_Write(CTR_LOG_FS, "assets warmed: %lu KiB of %lu payloads in %.0f ms (%s)",
-@@ -624,12 +634,33 @@
-         return;
-     sWarming = calloc(sEntryCount, 1);
-     list = malloc(sEntryCount * sizeof(*list));
--    if (sWarming == NULL || list == NULL
--        || !CtrPlatform_StartThread(WarmWorker, list, 16 * 1024, -2))
 +    CtrLock_Lock(&sLock);
-+    sWarmStop = false;
+     CtrLog_Write(CTR_LOG_FS, "assets warmed%s: %lu KiB of %lu payloads in %.0f ms (%s)",
+                  sWarmStop ? " until exit" : "", (unsigned long)(sStats.bytes >> 10),
+                  (unsigned long)sStats.loads, CtrPlatform_TickMs(CtrPlatform_Ticks() - begin),
+                  count ? "pack runs" : "file by file");
+-    sWarmRunning = false;
 +    CtrLock_Unlock(&sLock);
-+    if (sWarming != NULL && list != NULL)
-+        sWarmThread = CtrPlatform_StartJoinableThread(WarmWorker, list, 16 * 1024, -2);
-+    if (sWarmThread == NULL)
-     {
-         free(list);
-+        free((void *)sWarming);
-+        sWarming = NULL;
-         CtrLog_Write(CTR_LOG_ERROR, "assets: no warm-up worker; payloads load on demand");
-     }
-+}
-+
-+void CtrAssets_StopWarmup(void)
-+{
-+    if (sWarmThread == NULL)
-+        return;
+ }
+ 
+ /* Exiting with the warm-up under way, its reads failed in the log as the
+  * RomFS went away under them: it stops first, a payload at most later. */
+ void CtrAssets_StopWarmup(void)
+ {
++    if (sWarmThread == NULL) return;
 +    CtrLock_Lock(&sLock);
-+    sWarmStop = true;
+     sWarmStop = true;
+-    for (unsigned waited = 0; sWarmRunning && waited < 200; ++waited)
+-        CtrPlatform_SleepUs(5000);
 +    CtrLock_Unlock(&sLock);
-+    /* A current file/range read may finish. Never join while holding the
-+     * cache lock: the worker releases its claimed payloads before exiting. */
++    /* The file services outlive every in-flight read, even on slow storage. */
 +    CtrPlatform_JoinThread(sWarmThread);
 +    sWarmThread = NULL;
 +    free((void *)sWarming);
 +    sWarming = NULL;
  }
  
- void CtrAssets_SetBudget(u32 bytes)
+ void CtrAssets_StartWarmup(void)
+ {
+     WarmEntry *list;
+-
+-    if (!LoadAssetMap() || sWarming != NULL)
+-        return;
++    if (!LoadAssetMap() || sWarming != NULL) return;
+     sWarming = calloc(sEntryCount, 1);
+     list = malloc(sEntryCount * sizeof(*list));
+-    sWarmRunning = true;
+-    if (sWarming == NULL || list == NULL
+-        /*
+-         * On the system core: on the application core, below the game, the
+-         * worker only ran while the game waited for the display, and read
+-         * the RomFS a file at a time over a whole minute (58 s on an Old
+-         * 3DS), the field asking for its tiles in the frame meanwhile. It
+-         * waits on the FS service far more than it computes.
+-         */
+-        || !CtrPlatform_StartThread(WarmWorker, list, 16 * 1024, 1))
++    CtrLock_Lock(&sLock);
++    sWarmStop = false;
++    CtrLock_Unlock(&sLock);
++    if (sWarming != NULL && list != NULL)
++        sWarmThread = CtrPlatform_StartJoinableThread(WarmWorker, list, 16 * 1024, 1);
++    if (sWarmThread == NULL)
+     {
+         free(list);
+-        sWarmRunning = false;
++        free((void *)sWarming);
++        sWarming = NULL;
+         CtrLog_Write(CTR_LOG_ERROR, "assets: no warm-up worker; payloads load on demand");
+     }
+ }
+diff --git a/3ds_port/src/3ds_platform.c b/3ds_port/src/3ds_platform.c
+index f70dc9e..f2b14e0 100644
+--- a/3ds_port/src/3ds_platform.c
++++ b/3ds_port/src/3ds_platform.c
+@@ -176,6 +176,22 @@ bool CtrPlatform_StartThread(void (*entry)(void *), void *arg, unsigned stack, i
+     return threadCreate(entry, arg, stack, priority, core, true) != NULL;
+ }
+ 
++CtrThread CtrPlatform_StartJoinableThread(void (*entry)(void *), void *arg, unsigned stack, int core)
++{
++    s32 priority = 0x30;
++    svcGetThreadPriority(&priority, CUR_THREAD_HANDLE);
++    return threadCreate(entry, arg, stack, priority < 0x3F ? priority + 1 : 0x3F, core, false);
++}
++
++void CtrPlatform_JoinThread(CtrThread thread)
++{
++    if (thread != NULL)
++    {
++        threadJoin((Thread)thread, U64_MAX);
++        threadFree((Thread)thread);
++    }
++}
++
+ void CtrPlatform_SleepUs(unsigned microseconds)
+ {
+     svcSleepThread((s64)microseconds * 1000);

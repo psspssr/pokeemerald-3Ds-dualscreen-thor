@@ -39,8 +39,8 @@ def main():
                 strict_apply(work, patch, ["--reverse"])
             if not args.before:
                 strict_apply(work, patch)
-        elif not args.before:
-            raise RuntimeError("object spawn overlay is missing")
+        elif args.before:
+            raise RuntimeError("The fix is upstream; use a historical checkout for --before")
         source = target.read_text()
         signature = "static bool8 GetAvailableObjectEventId(u16 localId, u8 mapNum, u8 mapGroup, u8 *objectEventId)"
         # This definition has documentation between its signature and brace.

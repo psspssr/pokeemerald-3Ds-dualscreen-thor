@@ -1,5 +1,6 @@
 #include "gpu_internal.h"
 #include "gx_queue.h"
+#include <3ds/gpu/registers.h>
 #include <stdio.h>
 
 /* Origin deliberately reads these two fields of Citro3D 1.7.1's context when
@@ -48,6 +49,7 @@ bool C3D_Init(size_t size)
     gpuVoxelScaleInit();
     /* Citro3D reserves 32 GX entries. Preserve that upload allowance even
      * though GLES performs the transfers directly, without a PICA queue. */
+    free(frameQueue.entries);
     frameQueue=(gxCmdQueue_s){.maxEntries=32};
     GX_BindQueue(&frameQueue);
     for(int i=0;i<6;i++) C3D_TexEnvInit(&gpuEnvs[i]);
@@ -64,6 +66,7 @@ void C3D_Fini(void)
     gpuVoxelAaShutdown();
     gpuVoxelScaleShutdown();
     GX_BindQueue(NULL);
+    free(frameQueue.entries); frameQueue=(gxCmdQueue_s){0};
     while(gpuTargets) C3D_RenderTargetDelete(gpuTargets->target);
     while(gpuTextures) C3D_TexDelete(gpuTextures->tex);
     glDeleteVertexArrays(1,&drawVao); glDeleteBuffers(12,drawVbo); drawVao=0; drawLayoutValid=false;
@@ -300,6 +303,7 @@ void C3D_SyncTextureCopy(u32 *input,u32 inputDim,u32 *output,u32 outputDim,u32 s
     gpuGxRecordCommand();
     (void)flags; gpuC2DFlush();
     if(!input || !output) return;
+    if(!inputDim && !outputDim && gpuTargetCopy(output,input,size)) return;
     /* TextureCopy dimensions describe 16-byte runs and gaps, not pixel dimensions. */
     unsigned inWidth=(inputDim&0xffff)*16,inGap=(inputDim>>16)*16;
     unsigned outWidth=(outputDim&0xffff)*16,outGap=(outputDim>>16)*16;
@@ -343,3 +347,34 @@ void C3D_SyncMemoryFill(u32 *a,u32 av,u32 *ae,u16 ac,u32 *b,u32 bv,u32 *be,u16 b
 Result GX_TextureCopy(u32 *a,u32 b,u32 *c,u32 d,u32 e,u32 f) { C3D_SyncTextureCopy(a,b,c,d,e,f); return 0; }
 Result GX_DisplayTransfer(u32 *a,u32 b,u32 *c,u32 d,u32 e) { C3D_SyncDisplayTransfer(a,b,c,d,e); return 0; }
 Result GX_MemoryFill(u32 *a,u32 b,u32 *c,u16 d,u32 *e,u32 f,u32 *g,u16 h) { C3D_SyncMemoryFill(a,b,c,d,e,f,g,h); return 0; }
+
+float C3D_GetCmdBufUsage(void)
+{
+    /* No PICA command buffer exists in the immediate GLES backend. */
+    return 0.0f;
+}
+Result GX_ProcessCommandList(u32 *buffer,u32 size,u8 flags)
+{
+    (void)buffer; (void)flags;
+    /* Raw PICA streams cannot be executed by GLES. Our FrameSplit already
+     * submits translated draw calls; reject any actual foreign stream. */
+    if(size) return -1;
+    gpuC2DFlush(); glFlush(); gpuGxRecordCommand(); return 0;
+}
+Result GX_RequestDma(u32 *source,u32 *destination,u32 length)
+{
+    if(!source || !destination) return -1;
+    C3D_SyncTextureCopy(source,0,destination,0,length,0); return 0;
+}
+void GPUCMD_AddMaskedWrite(u32 reg,u32 mask,u32 value)
+{
+    /* Upstream uses these registers only to order render-to-texture writes.
+     * GLES FBO draws/copies are ordered; flushing the C2D CPU batch is enough. */
+    if((reg==GPUREG_TEXUNIT_CONFIG && mask==4 && value==(1u<<16))
+       || ((reg==GPUREG_FRAMEBUFFER_FLUSH || reg==GPUREG_FRAMEBUFFER_INVALIDATE) && value==1)) {
+        gpuC2DFlush(); return;
+    }
+    GPU_LOG("unsupported PICA register write 0x%x mask 0x%x value 0x%x",reg,mask,value);
+    CtrHost_SetState(CTR_HOST_EXITING);
+}
+void GPUCMD_AddWrite(u32 reg,u32 value) { GPUCMD_AddMaskedWrite(reg,15,value); }

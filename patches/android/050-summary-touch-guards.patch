@@ -1,6 +1,8 @@
+diff --git a/src/pokemon_summary_screen.c b/src/pokemon_summary_screen.c
+index d3513b1..143eca7 100644
 --- a/src/pokemon_summary_screen.c
 +++ b/src/pokemon_summary_screen.c
-@@ -1525,6 +1525,18 @@
+@@ -1899,6 +1899,18 @@ static struct {
  
  void CtrSummary_Tap(s16 x, s16 y)
  {
@@ -19,7 +21,7 @@
      sCtrTap.pending = TRUE;
      sCtrTap.x = x;
      sCtrTap.y = y;
-@@ -1537,6 +1549,11 @@
+@@ -1913,6 +1925,11 @@ static bool8 CtrSummary_TakeTap(s16 *x, s16 *y)
      if (!sCtrTap.pending)
          return FALSE;
      sCtrTap.pending = FALSE;
@@ -31,7 +33,7 @@
      if (gMain.vblankCounter1 - sCtrTap.frame > 30 || sCtrTap.x < 0 || sCtrTap.x >= DISPLAY_WIDTH
       || sCtrTap.y < 0 || sCtrTap.y >= DISPLAY_HEIGHT)
          return FALSE;
-@@ -1588,6 +1605,9 @@
+@@ -1964,6 +1981,9 @@ static u8 CtrSummary_MoveTouch(s16 *data, u8 *indexPtr, u8 maxIndex)
      if (CtrSummary_OnCancel(x, y))
          return CTR_TOUCH_B;
      row = CtrSummary_MoveRowAt(x, y);
@@ -41,7 +43,7 @@
      if (row < 0 || row > maxIndex)
          return CTR_TOUCH_NONE;
      if (row != MAX_MON_MOVES && sMonSummaryScreen->summary.moves[row] == MOVE_NONE)
-@@ -2380,6 +2400,9 @@
+@@ -3074,6 +3094,9 @@ static void SwapBoxMonMoves(struct BoxPokemon *mon, u8 moveIndex1, u8 moveIndex2
  
  static void Task_SetHandleReplaceMoveInput(u8 taskId)
  {
@@ -51,7 +53,7 @@
      SetNewMoveTypeIcon();
      CreateMoveSelectorSprites(SPRITE_ARR_ID_MOVE_SELECTOR1);
      gTasks[taskId].func = Task_HandleReplaceMoveInput;
-@@ -2388,6 +2411,10 @@
+@@ -3082,6 +3105,10 @@ static void Task_SetHandleReplaceMoveInput(u8 taskId)
  static void Task_HandleReplaceMoveInput(u8 taskId)
  {
      s16 *data = gTasks[taskId].data;

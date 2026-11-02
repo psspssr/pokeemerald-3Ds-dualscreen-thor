@@ -124,3 +124,34 @@ bool C2D_DrawRectangle(float x,float y,float z,float width,float height,u32 tl,u
     C2D_ImageTint tint={.corners={{tl,1},{tr,1},{bl,1},{br,1}}};
     return drawQuad(NULL,x,y,z,width,height,0,0,1,1,&tint);
 }
+
+/* New bottom-screen badges use vertex colors, including alpha gradients. */
+bool C2D_DrawTriangle(float x0,float y0,u32 c0,float x1,float y1,u32 c1,float x2,float y2,u32 c2,float depth)
+{
+    if(!vertices || !gpuTarget || sceneWidth<=0 || sceneHeight<=0) return false;
+    if(used && (batchTexture || used+3>capacity)) gpuC2DFlush();
+    batchTexture=NULL;
+    vertices[used++]=vertex(x0,y0,depth,0,0,(C2D_Tint){c0,1});
+    vertices[used++]=vertex(x1,y1,depth,0,0,(C2D_Tint){c1,1});
+    vertices[used++]=vertex(x2,y2,depth,0,0,(C2D_Tint){c2,1});
+    return true;
+}
+bool C2D_DrawLine(float x0,float y0,u32 c0,float x1,float y1,u32 c1,float thickness,float depth)
+{
+    float dx=x1-x0,dy=y1-y0,length=hypotf(dx,dy);
+    if(!isfinite(length) || !isfinite(thickness) || length<=0 || thickness<=0) return false;
+    float ox=-dy*thickness/(2*length),oy=dx*thickness/(2*length);
+    return C2D_DrawTriangle(x0+ox,y0+oy,c0,x0-ox,y0-oy,c0,x1+ox,y1+oy,c1,depth)
+        && C2D_DrawTriangle(x1+ox,y1+oy,c1,x0-ox,y0-oy,c0,x1-ox,y1-oy,c1,depth);
+}
+bool C2D_DrawCircleSolid(float x,float y,float depth,float radius,u32 color)
+{
+    if(!isfinite(radius) || radius<=0) return false;
+    /* 64 sides keep the small upstream UI circles smooth when scaled. */
+    for(unsigned i=0;i<64;i++) {
+        float a=i*(6.28318530718f/64),b=(i+1)*(6.28318530718f/64);
+        if(!C2D_DrawTriangle(x,y,color,x+radius*cosf(a),y+radius*sinf(a),color,
+                            x+radius*cosf(b),y+radius*sinf(b),color,depth)) return false;
+    }
+    return true;
+}

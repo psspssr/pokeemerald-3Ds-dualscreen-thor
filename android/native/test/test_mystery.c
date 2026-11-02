@@ -306,3 +306,5 @@ static void dolls(void) {
     puts("PASS missing-doll restoration, owned/placed deduplication, category capacity and rollback on partial insertion failure");
 }
 int main(void) {sessions();islands();gifts();dolls();temporaryChallengeParties();puts("All Mystery Events engine checks passed");return 0;}
+
+int CtrExtras_Get(const char *key) { (void)key; return 0; }

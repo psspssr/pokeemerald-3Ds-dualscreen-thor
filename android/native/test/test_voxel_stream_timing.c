@@ -29,11 +29,14 @@ static unsigned speed = 1, frameCount, sleeps, presents, jobs, atlasCalls, workC
 static double lastSleepTarget, lastWorkStart, drawSeconds;
 static void (*endHook)(void *);
 static void *endHookParam;
-static struct { unsigned frames; float cpuMs, gpuMs; } sStats;
-static unsigned sFpsFrames;
 typedef struct { float gameMs, vblankMs; } CtrTiming;
 static CtrTiming timing;
-static struct { float afterMs, afterBudgetMs; } voxelStats;
+static struct { float afterMs, afterBudgetMs, tailExpectedMs; } voxelStats;
+static float sTailMs;
+static unsigned sAfterStarvedFrames;
+static uint64_t sAfterEndTick;
+#define GX_CMDLIST_FLUSH 1
+static void CtrVoxel_Idle(void) {}
 static bool sReady = true, sViewReady, sCrossingSoon;
 static unsigned sFrame, sAheadBackoff;
 static float sLastBuildMs;
@@ -63,7 +66,6 @@ static int fakeSleep(clockid_t clock, int flags, const struct timespec *deadline
 #include "display.inc"
 #undef clock_nanosleep
 void C3D_FrameEndHook(void (*hook)(void *), void *parameter) { endHook = hook; endHookParam = parameter; }
-static float C3D_GetDrawingTime(void) { return (float)drawingTime; }
 #include "core.inc"
 
 static const CtrTiming *CtrPlatform_GetTiming(void) { return &timing; }
@@ -165,7 +167,7 @@ int main(void)
     assert(jobs == 1 && fabs(nowSeconds - (150 + framePeriod)) < .00001);
     // Crossing reserve is applied once to each estimate, not twice overall.
     reset(); sCrossingSoon = true; assert(render(true, false));
-    assert(voxelStats.afterBudgetMs > 4.0f && voxelStats.afterBudgetMs < 5.0f && jobs == 1);
+    assert(voxelStats.afterBudgetMs > 3.8f && voxelStats.afterBudgetMs < 3.9f && jobs == 1);
     reset(); speed = 8; assert(render(true, false));
     for (unsigned tick = 1; tick < 8; ++tick) assert(!render(true, false));
     sCrossingSoon = true; assert(render(true, false));

@@ -352,7 +352,9 @@ int main(int argc,char **argv)
 
     FILE *file=fopen(argv[1],"rb"); assert(file); fseek(file,0,SEEK_END); long size=ftell(file); rewind(file);
     u32 *shader=malloc(size); assert(fread(shader,1,size,file)==(size_t)size); fclose(file);
-    DVLB_s *binary=DVLB_ParseFile(shader,size); assert(binary); free(shader);
+    DVLB_s *binary=DVLB_ParseFile(shader,size); assert(binary && binary->numDVLE==2); free(shader);
+    GLuint weatherShader=gpuCompile(GL_VERTEX_SHADER,binary->DVLE[1].source);
+    assert(weatherShader); glDeleteShader(weatherShader);
     shaderProgram_s program; assert(shaderProgramInit(&program)==0); assert(shaderProgramSetVsh(&program,&binary->DVLE[0])==0);
     C3D_BindProgram(&program); C3D_Mtx identity; Mtx_Identity(&identity);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,shaderInstanceGetUniformLocation(program.vertexShader,"projection"),&identity);

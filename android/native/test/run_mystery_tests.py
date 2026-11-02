@@ -16,6 +16,7 @@ CC = os.environ.get("CC", "cc")
 flags = ["-D_GNU_SOURCE", "-DPORTABLE", "-DMODERN=1", "-DPORT_BRIDGE", "-DPLATFORM_3DS",
          "-I" + str(ROOT / "android/native/include"), "-I" + str(ROOT / "android/host/include"),
          "-iquote" + str(TREE / "include"), "-iquote" + str(TREE / "3ds_port/compat"),
+         "-iquote" + str(TREE / "3ds_port/include"),
          "-iquote" + str(TREE)]
 
 

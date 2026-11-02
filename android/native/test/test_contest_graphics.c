@@ -3,12 +3,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#define Port_ResolveAssetPointerSized(p,n) Port_ResolveAssetPointer(p)
 #include "gba/defines.h"
 typedef uint8_t u8, bool8;
 typedef int8_t s8;
 typedef int16_t s16;
 typedef uint16_t u16;
-typedef uint32_t u32;
+typedef uint32_t u32, bool32;
 typedef int32_t s32;
 enum { APPLAUSE_METER_SIZE=5, MAX_MON_MOVES=4, MOVE_NONE=0, MOVE_WINDOWS_START=5,
        FONT_NORMAL, FONT_NARROW, TEXT_SKIP_DRAW, WINDOW_TILE_DATA, CONTEST_EFFECT_REPETITION_NOT_BORING };

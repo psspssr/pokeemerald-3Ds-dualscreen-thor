@@ -8,6 +8,8 @@ static C3D_Tex *dioramaSurface;
 #define CTR_GAME_HEIGHT 240
 /* Extracted unchanged by the runner: exercise the actual optional upstream
  * postprocess, including its linear/nearest sampler state transitions. */
+static int CtrSettings_VoxelBlurStrength(void) { return 100; }
+static float CtrVoxel_SwoopNeutral(void) { return 0; }
 #include "upstream_voxel_diorama.inc"
 #undef CTR_GAME_WIDTH
 #undef CTR_GAME_HEIGHT

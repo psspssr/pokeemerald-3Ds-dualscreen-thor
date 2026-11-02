@@ -1,3 +1,5 @@
+diff --git a/3ds_port/src/3ds_video.c b/3ds_port/src/3ds_video.c
+index ad0c0e8..6f26d95 100644
 --- a/3ds_port/src/3ds_video.c
 +++ b/3ds_port/src/3ds_video.c
 @@ -2,6 +2,9 @@
@@ -10,8 +12,8 @@
  #include <math.h>
  #include <stdio.h>
  #include <stdlib.h>
-@@ -5808,6 +5811,11 @@
-     if (!voxel && !blank) LayersRender();
+@@ -12850,6 +12853,11 @@ void CtrVideo_Present(void)
+     if (!voxel && !blank && !down) ObjWindowCompose();
      PORT_PROF_END(layers, PORT_PROF_LAYERS);
      PORT_PROF_BEGIN(draw);
 +#ifdef __ANDROID__
@@ -20,5 +22,5 @@
 +    CtrGpu_ConfigureVoxelTargets(sLogical, sTop, !bottom && (voxel || sBattleWorld), bottom);
 +#endif
  
-     if (bottom)
+     if (down)
      {

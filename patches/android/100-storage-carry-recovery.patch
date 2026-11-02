@@ -1,7 +1,8 @@
 diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
+index bbe11f5..60ecb58 100644
 --- a/src/pokemon_storage_system.c
 +++ b/src/pokemon_storage_system.c
-@@ -582,6 +582,92 @@
+@@ -582,6 +582,92 @@ EWRAM_DATA static u8 sMovingMonOrigBoxId = 0;
  EWRAM_DATA static u8 sMovingMonOrigBoxPos = 0;
  EWRAM_DATA static bool8 sAutoActionOn = 0;
  
@@ -94,7 +95,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
  // Main tasks
  static void EnterPokeStorage(u8);
  static void Task_InitPokeStorage(u8);
-@@ -1582,14 +1668,18 @@
+@@ -1582,14 +1668,18 @@ static void Task_PCMainMenu(u8 taskId)
          LoadMessageBoxAndBorderGfx();
          DrawDialogueFrame(0, FALSE);
          FillWindowPixelBuffer(0, PIXEL_FILL(1));
@@ -115,7 +116,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
          break;
      case STATE_HANDLE_INPUT:
          task->tInput = Menu_ProcessInput();
-@@ -2062,6 +2152,7 @@
+@@ -2062,6 +2152,7 @@ static void EnterPokeStorage(u8 boxOption)
      sStorage = AllocZeroed(sizeof(*sStorage));
      if (sStorage == NULL)
      {
@@ -123,7 +124,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
          SetMainCallback2(CB2_ExitPokeStorage);
      }
      else
-@@ -2082,6 +2173,7 @@
+@@ -2082,6 +2173,7 @@ static void CB2_ReturnToPokeStorage(void)
      sStorage = AllocZeroed(sizeof(*sStorage));
      if (sStorage == NULL)
      {
@@ -131,7 +132,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
          SetMainCallback2(CB2_ExitPokeStorage);
      }
      else
-@@ -2178,6 +2270,7 @@
+@@ -2178,6 +2270,7 @@ static void Task_InitPokeStorage(u8 taskId)
      case 1:
          if (!InitPokeStorageWindows())
          {
@@ -139,7 +140,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
              SetPokeStorageTask(Task_ChangeScreen);
              return;
          }
-@@ -2203,6 +2296,7 @@
+@@ -2203,6 +2296,7 @@ static void Task_InitPokeStorage(u8 taskId)
      case 5:
          if (!MultiMove_Init())
          {
@@ -147,7 +148,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
              SetPokeStorageTask(Task_ChangeScreen);
              return;
          }
-@@ -3810,6 +3904,7 @@
+@@ -3810,6 +3904,7 @@ static void Task_ChangeScreen(u8 taskId)
      {
      case SCREEN_CHANGE_EXIT_BOX:
      default:
@@ -155,7 +156,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
          FreePokeStorageData();
          SetMainCallback2(CB2_ExitPokeStorage);
          break;
-@@ -6399,12 +6494,14 @@
+@@ -6399,12 +6494,14 @@ static void MoveMon(void)
      switch (sCursorArea)
      {
      case CURSOR_AREA_IN_PARTY:
@@ -170,7 +171,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
              SetMovingMonData(StorageGetCurrentBox(), sCursorPosition);
              SetMovingMonSprite(MODE_BOX, sCursorPosition);
          }
-@@ -6436,6 +6533,7 @@
+@@ -6436,6 +6533,7 @@ static void PlaceMon(void)
      }
  
      sIsMonBeingMoved = FALSE;
@@ -178,7 +179,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
  }
  
  static void RefreshDisplayMon(void)
-@@ -6509,6 +6607,7 @@
+@@ -6509,6 +6607,7 @@ static bool8 TryStorePartyMonInBox(u8 boxId)
          DestroyPartyMonIcon(sCursorPosition);
      }
  
@@ -186,7 +187,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
      if (boxId == StorageGetCurrentBox())
          CreateBoxMonIconAtPos(boxPosition);
  
-@@ -6568,6 +6667,7 @@
+@@ -6568,6 +6667,7 @@ static void ReleaseMon(void)
  
          PurgeMonOrBoxMon(boxId, sCursorPosition);
      }
@@ -194,7 +195,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
      TryRefreshDisplayMon();
  }
  
-@@ -9271,6 +9371,7 @@
+@@ -9271,6 +9371,7 @@ static void TakeItemFromMon(u8 cursorArea, u8 cursorPos)
      if (sStorage->boxOption != OPTION_MOVE_ITEMS)
          return;
  
@@ -202,7 +203,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
      id = GetItemIconIdxByPosition(cursorArea, cursorPos);
      itemId = ITEM_NONE;
      SetItemIconAffineAnim(id, ITEM_ANIM_PICK_UP);
-@@ -9352,6 +9453,7 @@
+@@ -9352,6 +9453,7 @@ static void GiveItemToMon(u8 cursorArea, u8 cursorPos)
          SetMonData(&gPlayerParty[cursorPos], MON_DATA_HELD_ITEM, &sStorage->movingItemId);
          SetPartyMonIconObjMode(cursorPos, ST_OAM_OBJ_NORMAL);
      }
@@ -210,7 +211,7 @@ diff --git a/src/pokemon_storage_system.c b/src/pokemon_storage_system.c
  }
  
  static void MoveItemFromMonToBag(u8 cursorArea, u8 cursorPos)
-@@ -9385,6 +9487,7 @@
+@@ -9385,6 +9487,7 @@ static void MoveItemFromCursorToBag(void)
          u8 id = GetItemIconIdxByPosition(CURSOR_AREA_IN_HAND, 0);
          SetItemIconAffineAnim(id, ITEM_ANIM_PUT_AWAY);
          SetItemIconCallback(id, ITEM_CB_WAIT_ANIM, CURSOR_AREA_IN_HAND, 0);

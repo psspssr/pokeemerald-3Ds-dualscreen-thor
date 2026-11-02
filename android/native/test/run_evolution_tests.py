@@ -22,7 +22,7 @@ def main():
     source = (TREE / "src/evolution_graphics.c").read_text()
     helpers = source[source.index("#define sSpeed "):source.index("void LoadEvoSparkleSpriteAndPal(void)")]
     makefile = args.full_makefile.read_text()
-    rules = makefile[makefile.index("CTR_GBA_CENTRED_SRCS :="):makefile.index("# Which centred screen")]
+    rules = makefile[makefile.index("CTR_GBA_BATTLE_SRCS :="):makefile.index("# The battle transitions:")]
     with tempfile.TemporaryDirectory(prefix="emerald-evolution-sparkles-") as directory:
         work = Path(directory)
         (work / "sparkles.inc").write_text(helpers)

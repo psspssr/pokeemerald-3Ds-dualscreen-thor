@@ -5,7 +5,33 @@ DVLB_s *DVLB_ParseFile(u32 *data,u32 size)
 {
     const unsigned char *bytes=(const unsigned char *)data;
     u32 length,count;
-    if(!bytes || size<16 || memcmp(bytes,"CTRGLS1\0",8)) return NULL;
+    if(!bytes || size<16) return NULL;
+    if(!memcmp(bytes,"CTRGLS2\0",8)) {
+        u32 entries;
+        memcpy(&entries,bytes+8,4);
+        if(!entries || entries>16) return NULL;
+        DVLB_s *bundle=calloc(1,sizeof(*bundle));
+        if(!bundle) return NULL;
+        bundle->DVLE=calloc(entries,sizeof(*bundle->DVLE));
+        if(!bundle->DVLE) { free(bundle); return NULL; }
+        bundle->numDVLE=entries;
+        size_t offset=12;
+        for(unsigned i=0;i<entries;i++) {
+            u32 bytesInProgram;
+            if(size-offset<4) { DVLB_Free(bundle); return NULL; }
+            memcpy(&bytesInProgram,bytes+offset,4); offset+=4;
+            if(bytesInProgram<16 || bytesInProgram>size-offset
+               || memcmp(bytes+offset,"CTRGLS1\0",8)) { DVLB_Free(bundle); return NULL; }
+            DVLB_s *one=DVLB_ParseFile((u32 *)(bytes+offset),bytesInProgram);
+            if(!one) { DVLB_Free(bundle); return NULL; }
+            bundle->DVLE[i]=one->DVLE[0];
+            free(one->DVLE); free(one);
+            offset+=bytesInProgram;
+        }
+        if(offset!=size) { DVLB_Free(bundle); return NULL; }
+        return bundle;
+    }
+    if(memcmp(bytes,"CTRGLS1\0",8)) return NULL;
     memcpy(&length,bytes+8,4); memcpy(&count,bytes+12,4);
     if(count>96 || length<2 || length>1024*1024 || (size_t)16+count*68+length!=size) return NULL;
     const char *source=(const char *)(bytes+16+count*68);

@@ -76,3 +76,6 @@ size_t gpuTextureSize(unsigned width,unsigned height,GPU_TEXCOLOR format);
 bool gpuDecodeTexture(const void *source,unsigned char *rgba,unsigned width,unsigned height,GPU_TEXCOLOR format);
 void gpuDecodePixel(const unsigned char *source,GPU_TEXCOLOR format,unsigned char *rgba);
 unsigned gpuPixelBytes(GPU_TEXCOLOR format);
+
+bool gpuEncodeTexture(const unsigned char *rgba,void *destination,unsigned width,unsigned height,GPU_TEXCOLOR format);
+bool gpuTargetCopy(void *destination,const void *source,size_t bytes);

@@ -54,6 +54,7 @@ SECTIONS
   .iplt           : { *(.iplt) }
   .text           :
   {
+    __ctr_text_start = .;
     *(.text.unlikely .text.*_unlikely .text.unlikely.*)
     *(.text.exit .text.exit.*)
     *(.text.startup .text.startup.*)
@@ -62,6 +63,7 @@ SECTIONS
     *(.text .stub .text.* .gnu.linkonce.t.*)
     *(.gnu.warning)
     *(.glue_7t) *(.glue_7) *(.vfp11_veneer) *(.v4_bx)
+    __ctr_text_end = .;
   }
   .fini           : { KEEP (*(SORT_NONE(.fini))) }
   PROVIDE (__etext = .);
@@ -119,6 +121,12 @@ SECTIONS
   .data           :
   {
     PROVIDE (__data_start = .);
+    /* Soft reset restores only game RAM; platform state and flash survive. */
+    __ctr_game_data = .;
+    EXCLUDE_FILE(*build/root/src/platform/*) *build/root/src/*(.data .data.*)
+    *build/root/data/*(.data .data.*)
+    . = ALIGN(4);
+    __ctr_game_data_end = .;
     *(.data .data.* .gnu.linkonce.d.*)
     SORT(CONSTRUCTORS)
   }
@@ -140,6 +148,14 @@ SECTIONS
   PROVIDE (__bss_start__ = .);
   .bss            :
   {
+   __ctr_game_bss = .;
+   /* Match upstream's spare room behind Juan's expanded battle text. */
+   *build/root/src/battle_main.o(.bss.gDisplayedStringBattle)
+   . += 1024;
+   EXCLUDE_FILE(*build/root/src/platform/*) *build/root/src/*(.bss .bss.* COMMON)
+   *build/root/data/*(.bss .bss.* COMMON)
+   . = ALIGN(4);
+   __ctr_game_bss_end = .;
    *(.dynbss)
    *(.bss .bss.* .gnu.linkonce.b.*)
    *(COMMON)

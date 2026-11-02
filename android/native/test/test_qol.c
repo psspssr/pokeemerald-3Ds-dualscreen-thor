@@ -260,3 +260,5 @@ int main(void)
     puts("PASS all QoL engine tests");
     return 0;
 }
+
+int CtrExtras_Get(const char *key) { (void)key; return 0; }

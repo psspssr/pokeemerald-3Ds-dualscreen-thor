@@ -48,7 +48,7 @@ def main():
             wrappers += "\n" + function(platform, "CtrThread CtrPlatform_StartJoinableThread(void (*entry)(void *), void *arg, unsigned stack, int core)")
             wrappers += "\n" + function(platform, "void CtrPlatform_JoinThread(CtrThread thread)")
         (work / "asset_thread_helpers.inc").write_text(wrappers)
-        (work / "asset_worker.inc").write_text(assets[assets.index("#define WARM_BUDGET_SHARE"):assets.index("void CtrAssets_SetBudget")])
+        (work / "asset_worker.inc").write_text(assets[assets.index("#define WARM_BUDGET_SHARE"):assets.index("const struct CtrAssetStats *CtrAssets_GetStats")])
         (work / "asset_shutdown.inc").write_text(function(platform, "void CtrPlatform_Shutdown(void)"))
         binary = work / "asset-worker"
         subprocess.run([os.environ.get("CC", "cc"), "-D_GNU_SOURCE", "-std=gnu11", "-O1", "-g",

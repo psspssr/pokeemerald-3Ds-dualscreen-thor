@@ -24,19 +24,19 @@ class VoxelMsaaOverlayTests(unittest.TestCase):
         cls.source = target.read_text()
 
     def test_scope_ends_before_billboards_and_contains_no_early_return(self):
-        body = self.source[self.source.index("void CtrVoxel_Draw(C3D_RenderTarget *target, float eyeOffset)"):]
+        body = self.source[self.source.index("void CtrVoxel_Draw(C3D_RenderTarget *target, int eye)"):]
         begin = body.index("bool androidVoxelAa = CtrGpu_BeginVoxelAA(target);")
         end = body.index("if (androidVoxelAa) CtrGpu_EndVoxelAA();")
         self.assertLess(body.index("if (!sReady || sDrawCount == 0)"), begin)
         self.assertLess(body.index("C3D_FrameDrawOn(target);"), begin)
         self.assertIn("pass < VOXEL_ATLAS_PAGES + 2u", body[begin:end])
         self.assertNotIn("return", body[begin:end])
-        for marker in ("if (sReflectionVertices != 0)", "if (sShadowVertices != 0)", "if (sSpriteVertices != 0)"):
+        for marker in ("if (sReflectionVertices != 0)", "if (sShadowVertices != 0 && sSwoopShadows)", "if (sSpriteVertices != 0 && sSwoopCards)"):
             self.assertGreater(body.index(marker), end)
 
     def test_all_three_callers_clear_before_drawing(self):
         video = (ROOT / "origin/3ds_port/src/3ds_video.c").read_text()
-        calls = list(re.finditer(r"CtrVoxel_Draw\(sLogical, 0\.0f\);", video))
+        calls = list(re.finditer(r"CtrVoxel_Draw\(sLogical, (?:eye|-1)\);", video))
         self.assertEqual(len(calls), 3)  # overworld, voxel battle, battle transition
         for call in calls:
             self.assertRegex(video[:call.start()].rstrip(), r"C2D_TargetClear\(sLogical, clear\);$")

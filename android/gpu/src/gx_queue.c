@@ -16,3 +16,13 @@ void gpuGxRecordCommand(void)
     if (boundQueue && boundQueue->numEntries < boundQueue->maxEntries)
         ++boundQueue->numEntries;
 }
+
+/* GLES commands are submitted immediately, so no queued PICA work remains. */
+void gxCmdQueueRun(gxCmdQueue_s *queue)
+{
+    if(queue) queue->curEntry=queue->lastEntry=queue->numEntries;
+}
+void gxCmdQueueStop(gxCmdQueue_s *queue)
+{
+    if(queue) queue->curEntry=queue->lastEntry=queue->numEntries;
+}

@@ -59,3 +59,28 @@ bool gpuDecodeTexture(const void *source,unsigned char *rgba,unsigned width,unsi
     }
     return true;
 }
+
+/* The inverse used when upstream saves a render target in linear memory. */
+bool gpuEncodeTexture(const unsigned char *rgba,void *destination,unsigned width,unsigned height,GPU_TEXCOLOR format)
+{
+    if(!rgba || !destination || width%8 || height%8 || format>GPU_RGBA4) return false;
+    unsigned bpp=gpuPixelBytes(format);
+    unsigned char *bytes=destination;
+    for(unsigned y=0;y<height;y++) for(unsigned x=0;x<width;x++) {
+        unsigned morton=(x&1)|((y&1)<<1)|((x&2)<<1)|((y&2)<<2)|((x&4)<<2)|((y&4)<<3);
+        unsigned index=((y/8)*(width/8)+x/8)*64+morton;
+        const unsigned char *p=rgba+4*((height-1-y)*width+x);
+        unsigned char *out=bytes+index*bpp;
+        unsigned value=0;
+        switch(format) {
+        case GPU_RGBA8: out[0]=p[3];out[1]=p[2];out[2]=p[1];out[3]=p[0];break;
+        case GPU_RGB8: out[0]=p[2];out[1]=p[1];out[2]=p[0];break;
+        case GPU_RGBA5551: value=((p[0]>>3)<<11)|((p[1]>>3)<<6)|((p[2]>>3)<<1)|(p[3]>>7);break;
+        case GPU_RGB565: value=((p[0]>>3)<<11)|((p[1]>>2)<<5)|(p[2]>>3);break;
+        case GPU_RGBA4: value=((p[0]>>4)<<12)|((p[1]>>4)<<8)|((p[2]>>4)<<4)|(p[3]>>4);break;
+        default:return false;
+        }
+        if(bpp==2) {out[0]=value&255;out[1]=value>>8;}
+    }
+    return true;
+}

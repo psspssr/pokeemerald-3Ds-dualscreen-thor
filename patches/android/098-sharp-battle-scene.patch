@@ -1,3 +1,5 @@
+diff --git a/3ds_port/src/3ds_video.c b/3ds_port/src/3ds_video.c
+index 0df0d17..ffd192f 100644
 --- a/3ds_port/src/3ds_video.c
 +++ b/3ds_port/src/3ds_video.c
 @@ -4,6 +4,7 @@
@@ -8,10 +10,10 @@
  #endif
  #include <math.h>
  #include <stdio.h>
-@@ -3840,6 +3841,15 @@
-     memset(&sSceneTex, 0, sizeof(sSceneTex));
- }
- 
+@@ -6919,6 +6920,15 @@ static void Compose(void)
+  */
+ static bool SceneKept(void);
+ static bool SceneMake(void);
 +static void SceneSetFilter(void)
 +{
 +    GPU_TEXTURE_FILTER_PARAM filter = GPU_LINEAR;
@@ -21,22 +23,10 @@
 +    C3D_TexSetFilter(&sSceneTex, filter, filter);
 +}
 +
- static void ScenePrepare(void)
- {
-     if (!sBattle && !sTransition)
-@@ -3848,6 +3858,11 @@
-         return;
-     }
-     sSceneUsedFrame = sStats.frames;
-+#ifdef __ANDROID__
-+    /* Settings may change while this cached target survives a pause/menu.
-+     * Both battles and their transitions sample this same pixel-art image. */
-+    if (sScene) SceneSetFilter();
-+#endif
-     if (sScene || (sSceneFailed && sStats.frames - sSceneFailFrame < LAYER_RETRY_FRAMES)) return;
-     for (unsigned attempt = 0; attempt < 2 && !sScene; ++attempt)
-     {
-@@ -3875,7 +3890,7 @@
+ static void SceneReady(void);
+ 
+ static C3D_RenderTarget *TopScreenTarget(gfx3dSide_t side)
+@@ -7068,7 +7078,7 @@ static void SceneReady(void)
      CtrLog_Write(CTR_LOG_VIDEO, "battle scene surface ready: filtered zoom (VRAM free=%lu)",
                   (unsigned long)vramSpaceFree());
      sSceneFailed = false;
@@ -45,3 +35,11 @@
      C3D_TexSetWrap(&sSceneTex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
  }
  
+@@ -7089,6 +7099,7 @@ static bool SceneKept(void)
+ 
+ static void ScenePrepare(void)
+ {
++    if (sScene) SceneSetFilter();
+     if (!sBattle && !sTransition)
+     {
+         if (SceneKept())

@@ -382,3 +382,5 @@ int main(int argc, char **argv)
     assert(liveAllocations == 0);
     return 0;
 }
+
+int CtrExtras_Get(const char *key) { (void)key; return 0; }

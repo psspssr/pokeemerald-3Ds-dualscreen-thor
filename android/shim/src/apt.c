@@ -217,3 +217,9 @@ bool aptMainLoop(void)
         return Exit();
     }
 }
+
+/* Android always retains its Home gesture; the game's hint is only state. */
+static bool sHomeAllowed = true;
+bool aptIsHomeAllowed(void) { return sHomeAllowed; }
+void aptSetHomeAllowed(bool allowed) { sHomeAllowed = allowed; }
+bool aptCheckHomePressRejected(void) { return false; }

@@ -7,7 +7,8 @@
 typedef uint8_t u8;
 typedef int8_t s8;
 typedef uint16_t u16;
-typedef uint32_t u32;
+typedef uint32_t u32, bool32;
+#define Port_ResolveAssetPointerSized(p,n) Port_ResolveAssetPointer(p)
 #define ARRAY_COUNT(a) (sizeof(a)/sizeof(*(a)))
 #define RGB2(r,g,b) ((r)|((g)<<5)|((b)<<10))
 #define PLTT_ID(n) ((n)*16)

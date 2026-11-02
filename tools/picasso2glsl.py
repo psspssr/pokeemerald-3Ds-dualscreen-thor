@@ -22,6 +22,8 @@ def translate(source: str) -> tuple[str, list[tuple[str, int]]]:
     instructions: list[str] = []
     register = 0
     inside = False
+    entry = "main"
+    seen_entry = False
     outputs = {"position": "p_position", "color": "v_color", "texcoord0": "v_tex0",
                "texcoord1": "v_tex1", "texcoord2": "v_tex2"}
 
@@ -93,7 +95,12 @@ def translate(source: str) -> tuple[str, list[tuple[str, int]]]:
                 if semantic not in outputs:
                     raise ValueError(f"unsupported output semantic: {semantic}")
                 symbols[name] = outputs[semantic]
-            elif line == ".proc main":
+            elif line.startswith(".entry "):
+                if instructions or seen_entry or not re.fullmatch(r"\.entry\s+[A-Za-z_]\w*", line):
+                    raise ValueError("invalid entry point")
+                entry = line.split()[1]
+                seen_entry = True
+            elif line == ".proc " + entry:
                 inside = True
             elif line == ".end":
                 inside = False
@@ -150,13 +157,23 @@ def compile_shader(source: str) -> bytes:
     return struct.pack("<8sII", MAGIC, len(body), len(uniforms)) + table + body
 
 
+def compile_shaders(sources: list[str]) -> bytes:
+    if not 1 <= len(sources) <= 16:
+        raise ValueError("one to sixteen vertex programs required")
+    programs = [compile_shader(source) for source in sources]
+    if len(programs) == 1:
+        return programs[0]
+    return struct.pack("<8sI", b"CTRGLS2\0", len(programs)) + b"".join(
+        struct.pack("<I", len(program)) + program for program in programs)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path)
+    parser.add_argument("source", type=Path, nargs="+")
     parser.add_argument("-o", "--output", type=Path, required=True)
     args = parser.parse_args()
     try:
-        data = compile_shader(args.source.read_text())
+        data = compile_shaders([p.read_text() for p in args.source])
     except ValueError as error:
         parser.exit(1, f"{args.source}: {error}\n")
     args.output.parent.mkdir(parents=True, exist_ok=True)

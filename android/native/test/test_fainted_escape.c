@@ -209,3 +209,5 @@ int main(void)
     puts("PASS fainted-menu escape: real command/run/loss functions + host prompt; disabled/Leave match original across128 routes, Stay/missing UI/pause preserve RNG/counters and select replacement, ordinary opponents and all-party loss unchanged");
     return 0;
 }
+
+int CtrExtras_Get(const char *key) { (void)key; return 0; }

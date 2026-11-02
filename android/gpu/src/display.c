@@ -418,7 +418,7 @@ bool gfxIsWide(void) { return false; }
 /* Origin's held-top menus bypass FrameBegin/FrameEnd. They share the same
  * simulation-tick grouping so menu animations and input also accelerate. */
 void gspWaitForVBlank(void) { if(gpuInit() && gpuShouldRender()) { gpuPresent(); gpuPace(); } }
-Result GSPGPU_FlushDataCache(const void *address,u32 size)
+static Result gpuFlushDataCache(const void *address,u32 size)
 {
     __sync_synchronize();
     if(!initialized || !address || !size) return 0;
@@ -435,6 +435,7 @@ Result GSPGPU_FlushDataCache(const void *address,u32 size)
     }
     return 0;
 }
+Result GSPGPU_FlushDataCache(const void *address,u32 size) { return gpuFlushDataCache(address,size); }
 Result GSPGPU_InvalidateDataCache(const void *address,u32 size) { (void)address; (void)size; __sync_synchronize(); return 0; }
 
 #ifdef CTR_GPU_TEST
@@ -460,3 +461,9 @@ void gpuTestDrawScreen(gfxScreen_t screen,CtrHostRect rect,int width,int height,
     gpuApplyState();
 }
 #endif
+
+Result svcFlushProcessDataCache(Handle process,u32 address,u32 size)
+{
+    if(process!=CUR_PROCESS_HANDLE) return -1;
+    return gpuFlushDataCache((const void *)(uintptr_t)address,size);
+}

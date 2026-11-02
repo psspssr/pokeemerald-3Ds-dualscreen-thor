@@ -1,11 +1,20 @@
+diff --git a/3ds_port/src/3ds_video.c b/3ds_port/src/3ds_video.c
+index ffd192f..cbcad0a 100644
 --- a/3ds_port/src/3ds_video.c
 +++ b/3ds_port/src/3ds_video.c
-@@ -5601,6 +5601,17 @@
-                      (unsigned long)sStats.frames);
-     sHoldTop = hold;
+@@ -5607,6 +5607,7 @@ static bool DrawLineBg(unsigned bg)
+     return true;
  }
+ 
 +
-+#if defined(__ANDROID__) && CTR_VOXEL_ENABLED
+ static void DrawAffineBg(unsigned bg)
+ {
+     /*
+@@ -12343,6 +12344,17 @@ static void RenderDexTop(bool stereo, float slider)
+     BlendForget();
+ }
+ 
++#ifdef __ANDROID__
 +/* Android presents and then paces inside FrameEnd. Use its synchronous
 + * post-present hook so the stream gets the spare time before that wait.
 + * Clear the one-shot hook before using this frame's stack parameter. */
@@ -15,41 +24,49 @@
 +    CtrVoxel_AfterSubmit(*(const uint64_t *)parameter);
 +}
 +#endif
- 
++
  void CtrVideo_Present(void)
  {
-@@ -5900,13 +5911,17 @@
-     if (bottom) BottomTransfer();
-     PORT_PROF_END(draw, PORT_PROF_DRAW);
-     PORT_PROF_BEGIN(frameEnd);
-+#if defined(__ANDROID__) && CTR_VOXEL_ENABLED
-+    if (overworld || battleUpdated)
-+        C3D_FrameEndHook(VoxelAfterSubmitBeforePacing, &start);
+     /* The frame's entry tick: its preparation, before FrameBegin. */
+@@ -13045,6 +13057,10 @@ void CtrVideo_Present(void)
+ 
+             if (used > sCmdBufPeak) sCmdBufPeak = used;
+         }
++#ifdef __ANDROID__
++        if (overworld || battleUpdated)
++            C3D_FrameEndHook(VoxelAfterSubmitBeforePacing, &start);
 +#endif
-     C3D_FrameEnd(0);
-     PORT_PROF_END(frameEnd, PORT_PROF_FRAMEEND);
-     ++sStats.frames;
-     ++sFpsFrames;
-     sStats.cpuMs = (svcGetSystemTick() - start) * 1000.0 / SYSCLOCK_ARM11;
-     sStats.gpuMs = C3D_GetDrawingTime();
--#if CTR_VOXEL_ENABLED
-+#if CTR_VOXEL_ENABLED && !defined(__ANDROID__)
+         C3D_FrameEnd(running ? GX_CMDLIST_FLUSH : 0);
+         sGpuEarly = false;
+     }
+@@ -13057,9 +13073,12 @@ void CtrVideo_Present(void)
+     sStats.voxelFrame = voxel || battleUpdated;
      /* The GPU draws the frame now: the voxel world builds what comes next in
       * the time the CPU would otherwise wait for the VBlank. */
++#ifndef __ANDROID__
      if (overworld || battleUpdated)
-@@ -5984,6 +5999,9 @@
+         CtrVoxel_AfterSubmit(start);
+     else
++#endif
++    if (!(overworld || battleUpdated))
+         CtrVoxel_Idle();
+     uint64_t now = CtrPlatform_Milliseconds();
+     if (now - sFpsStart >= 1000)
+@@ -13141,6 +13160,9 @@ void CtrVideo_SetLineScroll(unsigned reg, bool wide, const void *values, unsigne
  
  void CtrVideo_Shutdown(void)
  {
-+#if defined(__ANDROID__) && CTR_VOXEL_ENABLED
++#ifdef __ANDROID__
 +    C3D_FrameEndHook(NULL, NULL);
 +#endif
      BottomRelease();
- #if CTR_VOXEL_ENABLED
      CtrVoxel_Shutdown();
+     StereoSurfaceRelease();
+diff --git a/3ds_port/src/voxel/ctr_voxel.c b/3ds_port/src/voxel/ctr_voxel.c
+index ba68055..4c026f8 100644
 --- a/3ds_port/src/voxel/ctr_voxel.c
 +++ b/3ds_port/src/voxel/ctr_voxel.c
-@@ -3925,6 +3925,15 @@
+@@ -5024,6 +5024,15 @@ void CtrVoxel_AfterSubmit(uint64_t frameBeginTick)
      budget = VOXEL_FRAME_MS - TicksMs(started - frameBeginTick) - sOthersMs - VOXEL_AFTER_MARGIN_MS;
      if (sCrossingSoon)
          budget -= VOXEL_CROSSING_RESERVE_MS;
@@ -64,4 +81,4 @@
 +#endif
      budget = Clamp(budget, 0.0f, VOXEL_AFTER_MAX_MS);
      sStats.afterBudgetMs = budget;
-     if (budget < 0.5f)
+     if (budget < VOXEL_AFTER_STARVED_MS)

@@ -26,3 +26,9 @@ void GX_BindQueue(gxCmdQueue_s *queue);
 Result GX_DisplayTransfer(u32*,u32,u32*,u32,u32);
 Result GX_TextureCopy(u32*,u32,u32*,u32,u32,u32);
 Result GX_MemoryFill(u32*,u32,u32*,u16,u32*,u32,u32*,u16);
+
+#define GX_CMDLIST_FLUSH 1
+Result GX_ProcessCommandList(u32 *buffer,u32 size,u8 flags);
+Result GX_RequestDma(u32 *source,u32 *destination,u32 length);
+void gxCmdQueueRun(gxCmdQueue_s *queue);
+void gxCmdQueueStop(gxCmdQueue_s *queue);

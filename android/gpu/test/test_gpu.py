@@ -158,9 +158,9 @@ class ShaderTests(unittest.TestCase):
     def test_upstream_voxel_shader_and_uniform_contract(self):
         source = (ROOT / "origin/3ds_port/src/voxel/voxel.v.pica").read_text()
         glsl, uniforms = picasso.translate(source)
-        self.assertEqual(uniforms, [("projection",0),("modelView",4),("shadeTint",8),("tintDiff",9),
-                                    ("grade",10),("fog",11),("dappleU",12),("dappleV",13)])
-        self.assertIn("dot(u[4],r0)", glsl)
+        self.assertEqual(uniforms, [("projection",0),("modelView",4),("origin",8),("shadeTint",9),("tintDiff",10),
+                                    ("grade",11),("fog",12),("dappleU",13),("dappleV",14)])
+        self.assertIn("dot(u[4],r7)", glsl)
         self.assertIn("-2.0*p_position.z-p_position.w", glsl)
         binary = picasso.compile_shader(source)
         magic, length, count = struct.unpack_from("<8sII", binary)
@@ -196,13 +196,17 @@ class VoxelUploadQueueTests(unittest.TestCase):
         work = Path(cls.temp.name)
         source = (ROOT / "origin/3ds_port/src/3ds_video.c").read_text()
         begin = source.index("static gxCmdQueue_s *sFrameQueue;")
-        end = source.index("\n/* The voxel overworld", begin)
+        first_end = source.index("/*\n * The GPU set to work", begin)
+        last_start = source.index("bool CtrVideo_TryVoxelUpload(void)")
+        end = source.index("\n/* The voxel overworld", last_start)
+        subset = source[begin:first_end] + source[last_start:end]
         fixture = work / "queue.c"
-        fixture.write_text('#include "gx_queue.h"\n#include <stddef.h>\n' + source[begin:end] + r'''
+        fixture.write_text('#include "gx_queue.h"\n#include <stddef.h>\n#include <stdlib.h>\n' + subset + r'''
 static gxCmdQueue_s queue;
 void reset(unsigned reserve)
 {
-    queue=(gxCmdQueue_s){.maxEntries=32}; sUploadCommands=0; sRenderReserve=reserve;
+    free(queue.entries);
+    queue=(gxCmdQueue_s){.maxEntries=32}; sUploadCommands=sAnimCommands=0; sRenderReserve=reserve;
     GX_BindQueue(&queue);
 }
 unsigned used(void) { return queue.numEntries; }
@@ -237,9 +241,9 @@ void unbind(void) { GX_BindQueue(NULL); }
         for _ in range(4):
             self.lib.gpuGxRecordCommand()
         self.assertEqual(self.lib.CtrVideo_VoxelUploadsLeft(), 2)
-        for _ in range(40):
+        for _ in range(140):
             self.lib.gpuGxRecordCommand()
-        self.assertEqual(self.lib.used(), 32)
+        self.assertEqual(self.lib.used(), 128)
         self.assertFalse(self.lib.CtrVideo_TryVoxelUpload())
         self.assertEqual(self.lib.CtrVideo_VoxelUploadsLeft(), 0)
 

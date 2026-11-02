@@ -29,7 +29,7 @@ esac
 compiler="$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64/bin/$target-clang"
 out="$repo_root/build/gpu-tests"
 mkdir -p "$out"
-python3 tools/picasso2glsl.py origin/3ds_port/src/voxel/voxel.v.pica -o "$out/voxel.shbin"
+python3 tools/picasso2glsl.py origin/3ds_port/src/voxel/voxel.v.pica origin/3ds_port/src/voxel/voxel_weather.v.pica -o "$out/voxel.shbin"
 python3 - "$out/upstream_voxel_diorama.inc" "$out/upstream_voxel_warmup.inc" "$out/upstream_battle_scene.inc" <<'PY'
 from pathlib import Path
 import os
@@ -39,7 +39,9 @@ import tempfile
 source = Path("origin/3ds_port/src/3ds_video.c").read_text()
 first = source.index("#define DIORAMA_TOP")
 last = source.index("/*\n * Bloom:", first)
-Path(sys.argv[1]).write_text(source[first:last])
+surface_start = source.index("static void SurfaceFilter(GPU_TEXTURE_FILTER_PARAM filter)\n{")
+surface_end = source.index("\n}\n",surface_start)+3
+Path(sys.argv[1]).write_text(source[surface_start:surface_end]+source[first:last])
 # Exercise the real render-dispatch branch, including the complete strict
 # Android overlay order. The opt-in old image proves the pixel regression.
 sys.path.insert(0, "tools")
@@ -65,25 +67,9 @@ with tempfile.TemporaryDirectory(prefix="emerald-warmup-gles-") as directory:
     def function(signature, text=source):
         start = text.index(signature)
         return text[start:text.index("\n}\n", start) + 3]
-    names = ("SCENE_ZOOM", "SCENE_W", "SCENE_H", "VIEW_LEFT", "VIEW_TOP", "VIEW_RIGHT", "VIEW_BOTTOM",
-             "LAYER_IDLE_FRAMES", "LAYER_RETRY_FRAMES", "TRANSITION_ZOOM", "TRANSITION_X",
-             "TRANSITION_HALF", "TRANSITION_HALF_X", "TRANSITION_HALF_TOP", "BATTLE_SHADOW_W",
-             "BATTLE_SHADOW_H", "BATTLE_SHADOW_ALPHA", "BLOOM_W", "BLOOM_H", "BLOOM_THRESHOLD")
-    body = "\n".join(re.search(r"^#define " + name + r"\s+.*$", source, re.M)[0] for name in names) + "\n"
-    for signature in ("static void SceneRelease(void)", "static void SceneSetFilter(void)",
-                      "static void ScenePrepare(void)", "static bool BattleStatLayer(void)",
-                      "static void RenderBattleScene(uint32_t clear)"):
-        if signature in source:
-            body += function(signature)
-    body += re.search(r"typedef struct\n\{\n    int dx, dy;.*?\} TransitionBand;", source, re.S)[0] + "\n"
-    body += function("static TransitionBand TransitionBandAt(int g, unsigned targets)")
-    body += function("static void TransitionPicture(void)")
-    body += function("static bool BattleShadowTexture(void)")
-    body += function("static void VoxelBloomPrepare(void)")
-    body += function("static void VoxelBloomCompose(float strength)")
-    body += function("uint32_t CtrVideo_Texel(unsigned x, unsigned y, unsigned width)",
-                     Path("origin/3ds_port/src/3ds_video_decode.c").read_text())
-    Path(sys.argv[3]).write_text(body)
+    Path(sys.argv[3]).write_text(function("static void SceneSetFilter(void)") +
+                                 function("static void SceneTexFilter(GPU_TEXTURE_FILTER_PARAM filter)"))
+
 PY
 "$compiler" -std=gnu11 -O2 -Wall -Wextra -Werror -D__3DS__ -DCTR_GPU_TEST \
     -Iandroid/gpu/include -Iandroid/shim/include -Iandroid/host/include -Iorigin/3ds_port/include -I"$out" \

@@ -1,6 +1,8 @@
+diff --git a/src/title_screen.c b/src/title_screen.c
+index 303ce6a..e407c31 100644
 --- a/src/title_screen.c
 +++ b/src/title_screen.c
-@@ -921,7 +921,13 @@
+@@ -956,7 +956,13 @@ static void CB2_GoToBerryFixScreen(void)
      if (!UpdatePaletteFade())
      {
          m4aMPlayAllStop();

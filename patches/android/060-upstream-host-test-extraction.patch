@@ -1,3 +1,5 @@
+diff --git a/3ds_port/tests/voxel_runtime_test.py b/3ds_port/tests/voxel_runtime_test.py
+index 4cb709d..72d5862 100644
 --- a/3ds_port/tests/voxel_runtime_test.py
 +++ b/3ds_port/tests/voxel_runtime_test.py
 @@ -1,12 +1,16 @@

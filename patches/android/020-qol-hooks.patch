@@ -1,12 +1,14 @@
+diff --git a/src/battle_main.c b/src/battle_main.c
+index f03feed..70eeede 100644
 --- a/src/battle_main.c
 +++ b/src/battle_main.c
 @@ -1,4 +1,5 @@
  #include "global.h"
 +#include "android_qol.h"
- #include "battle.h"
- #include "battle_anim.h"
- #include "battle_ai_script_commands.h"
-@@ -4144,6 +4145,7 @@
+ #ifdef PLATFORM_3DS
+ #include "3ds_extras.h" // optional settings (OPTIONS pages)
+ #endif
+@@ -4219,6 +4220,7 @@ static void HandleTurnActionSelectionState(void)
              gBattleCommunication[gActiveBattler] = STATE_BEFORE_ACTION_CHOSEN;
              break;
          case STATE_BEFORE_ACTION_CHOSEN: // Choose an action.
@@ -14,7 +16,7 @@
              *(gBattleStruct->monToSwitchIntoId + gActiveBattler) = PARTY_SIZE;
              if (gBattleTypeFlags & BATTLE_TYPE_MULTI
                  || (position & BIT_FLANK) == B_FLANK_LEFT
-@@ -4178,6 +4180,14 @@
+@@ -4253,6 +4255,14 @@ static void HandleTurnActionSelectionState(void)
          case STATE_WAIT_ACTION_CHOSEN: // Try to perform an action.
              if (!IS_BATTLE_CONTROLLER_ACTIVE_OR_PENDING_SYNC_ANYWHERE(gActiveBattler))
              {
@@ -29,7 +31,7 @@
                  RecordedBattle_SetBattlerAction(gActiveBattler, gBattleBufferB[gActiveBattler][1]);
                  gChosenActionByBattler[gActiveBattler] = gBattleBufferB[gActiveBattler][1];
  
-@@ -4402,6 +4412,14 @@
+@@ -4468,6 +4478,14 @@ static void HandleTurnActionSelectionState(void)
                          }
                          else
                          {
@@ -44,6 +46,8 @@
                              if (!(gBattleTypeFlags & BATTLE_TYPE_PALACE))
                              {
                                  RecordedBattle_SetBattlerAction(gActiveBattler, gBattleBufferB[gActiveBattler][2]);
+diff --git a/src/battle_pyramid_bag.c b/src/battle_pyramid_bag.c
+index e131508..147a885 100644
 --- a/src/battle_pyramid_bag.c
 +++ b/src/battle_pyramid_bag.c
 @@ -1,4 +1,5 @@
@@ -52,7 +56,7 @@
  #include "battle.h"
  #include "battle_controllers.h"
  #include "battle_pyramid_bag.h"
-@@ -1299,6 +1300,11 @@
+@@ -1299,6 +1300,11 @@ static void TryCloseBagToGiveItem(u8 taskId)
  
  static void BagAction_UseInBattle(u8 taskId)
  {
@@ -64,15 +68,17 @@
      if (GetItemBattleFunc(gSpecialVar_ItemId) != NULL)
      {
          CloseMenuActionWindow();
+diff --git a/src/battle_script_commands.c b/src/battle_script_commands.c
+index bd42d40..53cc4e6 100644
 --- a/src/battle_script_commands.c
 +++ b/src/battle_script_commands.c
 @@ -1,4 +1,5 @@
  #include "global.h"
 +#include "android_qol.h"
- #include "battle.h"
- #include "battle_message.h"
- #include "battle_anim.h"
-@@ -3255,6 +3256,7 @@
+ #ifdef PLATFORM_3DS
+ #include "3ds_extras.h" // optional settings (OPTIONS pages)
+ #endif
+@@ -3273,6 +3274,7 @@ static bool8 sTeamExpShown;
  static void Cmd_getexp(void)
  {
      u16 item;
@@ -80,35 +86,42 @@
      s32 i; // also used as stringId
      u8 holdEffect;
      s32 sentIn;
-@@ -3308,6 +3310,7 @@
+@@ -3340,6 +3342,7 @@ static void Cmd_getexp(void)
              }
  
              calculatedExp = gSpeciesInfo[gBattleMons[gBattlerFainted].species].expYield * gBattleMons[gBattlerFainted].level / 7;
 +            CtrQol_BeginExperience(calculatedExp);
  
-             if (viaExpShare) // at least one mon is getting exp via exp share
-             {
-@@ -3342,7 +3345,9 @@
+ #ifdef PLATFORM_3DS
+             if (PARTY_EXP_SHARE())
+@@ -3389,13 +3392,16 @@ static void Cmd_getexp(void)
              else
                  holdEffect = GetItemHoldEffect(item);
  
--            if (holdEffect != HOLD_EFFECT_EXP_SHARE && !(gBattleStruct->sentInPokes & 1))
-+            extraExp = CtrQol_ExtraExperience(gBattleStruct->expGetterMonId,
++            extraExp = PARTY_EXP_SHARE() ? 0 : CtrQol_ExtraExperience(gBattleStruct->expGetterMonId,
 +                (gBattleStruct->sentInPokes & 1) != 0, holdEffect == HOLD_EFFECT_EXP_SHARE);
-+            if (holdEffect != HOLD_EFFECT_EXP_SHARE && !(gBattleStruct->sentInPokes & 1) && !extraExp)
-             {
-                 *(&gBattleStruct->sentInPokes) >>= 1;
-                 gBattleScripting.getexpState = 5;
-@@ -3369,7 +3374,7 @@
++
+ #ifdef PLATFORM_3DS
+             // Modern Exp Share: everyone but eggs and the fainted.
+             if (PARTY_EXP_SHARE()
+              ? (GetMonData(&gPlayerParty[gBattleStruct->expGetterMonId], MON_DATA_IS_EGG)
+                 || GetMonData(&gPlayerParty[gBattleStruct->expGetterMonId], MON_DATA_HP) == 0
+                 || GetMonData(&gPlayerParty[gBattleStruct->expGetterMonId], MON_DATA_SPECIES) == SPECIES_NONE)
+-             : (holdEffect != HOLD_EFFECT_EXP_SHARE && !(gBattleStruct->sentInPokes & 1)))
++             : (holdEffect != HOLD_EFFECT_EXP_SHARE && !(gBattleStruct->sentInPokes & 1) && !extraExp))
+ #else
+             if (holdEffect != HOLD_EFFECT_EXP_SHARE && !(gBattleStruct->sentInPokes & 1))
+ #endif
+@@ -3425,7 +3431,7 @@ static void Cmd_getexp(void)
                      if (gBattleStruct->sentInPokes & 1)
                          gBattleMoveDamage = *exp;
                      else
 -                        gBattleMoveDamage = 0;
 +                        gBattleMoveDamage = extraExp;
  
-                     if (holdEffect == HOLD_EFFECT_EXP_SHARE)
-                         gBattleMoveDamage += gExpShareExp;
-@@ -6357,6 +6362,8 @@
+ #ifdef PLATFORM_3DS
+                     if (PARTY_EXP_SHARE())
+@@ -6443,6 +6449,8 @@ static void Cmd_various(void)
          break;
      case VARIOUS_IS_RUNNING_IMPOSSIBLE:
          gBattleCommunication[0] = IsRunningFromBattleImpossible();
@@ -117,7 +130,7 @@
          break;
      case VARIOUS_GET_MOVE_TARGET:
          gBattlerTarget = GetMoveTarget(gCurrentMove, NO_TARGET_OVERRIDE);
-@@ -7401,7 +7408,10 @@
+@@ -7487,7 +7495,10 @@ static void Cmd_forcerandomswitch(void)
      }
      else
      {
@@ -129,6 +142,8 @@
      }
  }
  
+diff --git a/src/item_menu.c b/src/item_menu.c
+index ca986c1..0189e4d 100644
 --- a/src/item_menu.c
 +++ b/src/item_menu.c
 @@ -1,4 +1,5 @@
@@ -137,7 +152,7 @@
  #include "item_menu.h"
  #include "battle.h"
  #include "battle_controllers.h"
-@@ -2047,6 +2048,11 @@
+@@ -2080,6 +2081,11 @@ static void ItemMenu_Cancel(u8 taskId)
  
  static void ItemMenu_UseInBattle(u8 taskId)
  {
@@ -149,31 +164,35 @@
      if (GetItemBattleFunc(gSpecialVar_ItemId))
      {
          RemoveContextWindow();
+diff --git a/src/pokemon.c b/src/pokemon.c
+index 60b57af..d54b968 100644
 --- a/src/pokemon.c
 +++ b/src/pokemon.c
 @@ -1,4 +1,5 @@
  #include "global.h"
 +#include "android_qol.h"
- #include "malloc.h"
- #include "apprentice.h"
- #include "battle.h"
-@@ -2220,6 +2221,7 @@
-     else
-         personality = Random32();
+ #include "international_string_util.h"
+ #ifdef PLATFORM_3DS
+ #include "3ds_extras.h" // optional settings (OPTIONS pages)
+@@ -2291,6 +2292,7 @@ void CreateBoxMon(struct BoxPokemon *boxMon, u16 species, u8 level, u8 fixedIV,
+     }
+ #endif
  
 +    personality = CtrQol_WildPersonality(boxMon, species, personality, otIdType);
      SetBoxMonData(boxMon, MON_DATA_PERSONALITY, &personality);
  
      // Determine original trainer ID
+diff --git a/src/wild_encounter.c b/src/wild_encounter.c
+index 2793170..246b6e7 100644
 --- a/src/wild_encounter.c
 +++ b/src/wild_encounter.c
 @@ -1,4 +1,5 @@
  #include "global.h"
 +#include "android_qol.h"
- #include "wild_encounter.h"
- #include "pokemon.h"
- #include "metatile_behavior.h"
-@@ -381,6 +382,7 @@
+ #ifdef PLATFORM_3DS
+ #include "3ds_extras.h" // optional settings (OPTIONS pages)
+ #include "3ds_encounters.h"
+@@ -417,6 +418,7 @@ static void CreateWildMon(u16 species, u8 level)
      bool32 checkCuteCharm;
  
      ZeroEnemyPartyMons();
@@ -181,7 +200,7 @@
      checkCuteCharm = TRUE;
  
      switch (gSpeciesInfo[species].genderRatio)
-@@ -408,10 +410,12 @@
+@@ -444,10 +446,12 @@ static void CreateWildMon(u16 species, u8 level)
              gender = MON_FEMALE;
  
          CreateMonWithGenderNatureLetter(&gEnemyParty[0], species, level, USE_RANDOM_IVS, gender, PickWildMonNature(), 0);

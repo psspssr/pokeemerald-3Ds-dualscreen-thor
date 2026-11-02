@@ -19,6 +19,7 @@ static void Task_AskConfirmStarter(u8 taskId) { (void)taskId; }
 s16 Sin(s16 index, s16 amplitude) { (void)index; (void)amplitude; return 0; }
 
 static bool sStage, sCentred, sBattle, sTransitionCompose;
+static bool sStageFaded,sStageZoomed,sStageFadedRequested,sStageZoomedRequested,sInBattle;
 static unsigned sCentredScreen;
 static int sViewX, sViewY;
 static int sTargetW = CTR_GAME_WIDTH, sTargetH = CTR_GAME_HEIGHT;
@@ -102,11 +103,11 @@ int main(void)
         int first, last;
         /* Treecko's left label begins at -4, encoded as 252 in WIN0H. The
          * production centred-window decoder must preserve the wrapped edge. */
-        WindowSpan(((u8)left << 8) | (u8)right, false, &first, &last);
+        WindowSpan(((u8)left << 8) | (u8)right, 0, false, &first, &last);
         assert(first == left && last == right && first < last);
         assert(first + sViewX >= 0 && last + sViewX <= CTR_GAME_WIDTH);
         WindowSpan((label.tilemapTop * 8 << 8) | ((label.tilemapTop + label.height) * 8),
-                   true, &first, &last);
+                   0, true, &first, &last);
         assert(first + sViewY >= 0 && last + sViewY <= CTR_GAME_HEIGHT);
     }
     puts("PASS all three hands, balls, labels and selection animations share the same centred geometry");

@@ -38,7 +38,7 @@ def main():
             strict_apply(work, patch, ["--reverse", *include])
         strict_apply(work, patch, include)
         source = path.read_text()
-        data = "\n".join(re.findall(r"^#define KB(?:ROW|COL)_COUNT .*", source, re.M)) + "\n"
+        data = source[source.index("#define KBROW_COUNT"):source.index("#define KBROW_COUNT")+len("#define KBROW_COUNT 4")] + "\n" + re.search(r"#if[^\n]*\n#define KBCOL_COUNT.*?#endif", source, re.S)[0] + "\n"
         for first in ("INPUT_NONE", "WIN_KB_PAGE_1", "KBPAGE_SYMBOLS", "KEYBOARD_LETTERS_LOWER",
                       "KEY_ROLE_CHAR", "BUTTON_PAGE", "STATE_FADE_IN", "INPUT_STATE_DISABLED"):
             data += declaration(source, r"enum\s*\{\s*" + first + r"\b.*?\};")
@@ -48,7 +48,7 @@ def main():
         for name in ("sPageColumnCounts", "sPageColumnXPos", "sPageToKeyboardId", "sButtonKeyRoles"):
             data += declaration(source, r"static const u8 " + name + r"\[.*?\};")
         data += declaration(source, r"static struct\s*\{\s*bool8 pending;.*?\} sCtrNamingTap;")
-        (work / "naming_data.inc").write_text(data)
+        (work / "naming_data.inc").write_text("#undef KBCOL_COUNT\n" + data)
         signatures = (
             "bool8 CtrNaming_IsOpen(void)", "static bool8 CtrNaming_AcceptsTap(void)",
             "void CtrNaming_Tap(s16 x, s16 y)", "static bool8 CtrNaming_TakeTap(s16 *x, s16 *y)",

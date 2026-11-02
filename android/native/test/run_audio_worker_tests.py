@@ -24,11 +24,12 @@ def function(source, signature):
 def main():
     source = (PORT / "src/3ds_audio.c").read_text()
     declarations = []
-    for name in ("sWorker", "sKick, sIdle", "sWorkerQuit", "sReady", "sSamples"):
+    for name in ("sWorker", "sKick, sIdle", "sWorkerQuit", "sReady", "sSamples", "sClock", "sStats"):
         match = re.search(r"^static [^;\n]*\b" + re.escape(name) + r";", source, re.M)
         assert match, name
         declarations.append(match[0])
     actual = "\n".join(declarations) + "\n"
+    actual += "static unsigned QueuedBuffers(void) { return CTR_AUDIO_TARGET_DEPTH; }\n"
     actual += source[source.index("#define CTR_AUDIO_SYSCORE_PERCENT"):]
     actual += "\n" + function(source, "void CtrAudio_Shutdown(void)")
     with tempfile.TemporaryDirectory(prefix="emerald-audio-worker-") as directory:

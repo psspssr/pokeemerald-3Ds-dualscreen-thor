@@ -24,6 +24,13 @@ extern "C" {
 #define CPU_TICKS_PER_MSEC (SYSCLOCK_ARM11 / 1000.0)
 #define CPU_TICKS_PER_USEC (SYSCLOCK_ARM11 / 1000000.0)
 
+#define GET_VERSION_MAJOR(v) ((u32)(v) >> 24)
+#define GET_VERSION_MINOR(v) (((u32)(v) >> 16) & 255)
+#define GET_VERSION_REVISION(v) (((u32)(v) >> 8) & 255)
+/* No Nintendo kernel/firmware version exists on Android. */
+static inline u32 osGetKernelVersion(void) { return 0; }
+static inline u32 osGetFirmVersion(void) { return 0; }
+
 #define SYSTEM_VERSION(major, minor, revision) (((major) << 24) | ((minor) << 16) | ((revision) << 8))
 
 #define OS_HEAP_AREA_BEGIN 0x08000000

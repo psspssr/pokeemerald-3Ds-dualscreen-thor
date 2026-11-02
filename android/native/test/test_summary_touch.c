@@ -135,6 +135,10 @@ static void CopyMonToSummaryStruct(struct Pokemon *p) { assert(p==&mon.currentMo
 static void SwapMovesNamesPP(u8 a,u8 b) { (void)a; (void)b; }
 static void SwapMovesTypeSprites(u8 a,u8 b) { (void)a; (void)b; }
 
+static u8 sCtrOpenMove;
+static bool8 CtrSummary_TurnToTarget(u8 taskId) { (void)taskId; return FALSE; }
+static int CtrExtras_Get(const char *key) { (void)key; return 0; }
+static void CycleSkillsStatsMode(void) {}
 #include "touch.inc"
 
 static void reset(void)

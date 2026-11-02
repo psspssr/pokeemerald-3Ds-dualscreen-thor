@@ -1,3 +1,5 @@
+diff --git a/src/save.c b/src/save.c
+index f75e629..a208219 100644
 --- a/src/save.c
 +++ b/src/save.c
 @@ -4,6 +4,7 @@
@@ -8,7 +10,7 @@
  #include "task.h"
  #include "decompress.h"
  #include "load_save.h"
-@@ -793,6 +794,8 @@
+@@ -821,6 +822,8 @@ u8 TrySavingData(u8 saveType)
      if (!gDamagedSaveSectors)
      {
          gSaveAttemptStatus = SAVE_STATUS_OK;

@@ -278,3 +278,54 @@ void C3D_FrameBufClear(C3D_FrameBuf *buffer,C3D_ClearBits bits,u32 color,u32 dep
 }
 void C3D_FrameBufTransfer(C3D_FrameBuf *buffer,gfxScreen_t screen,gfx3dSide_t side,u32 flags)
 { (void)flags; if(side==GFX_RIGHT) return; gpuC2DFlush(); GpuTarget *t=gpuFindTarget(buffer); if(t) gpuTransferToScreen(t,screen,buffer->width,buffer->height); }
+
+/* Whole-buffer copies back up and restore the held top picture for Pokédex.
+ * Keep CPU and FBO contents coherent even when a target has a scaled image. */
+bool gpuTargetCopy(void *destination,const void *source,size_t bytes)
+{
+    GpuTarget *read=NULL,*write=NULL;
+    for(GpuTarget *t=gpuTargets;t;t=t->next) {
+        if(t->target->frameBuf.colorBuf==source) read=t;
+        if(t->target->frameBuf.colorBuf==destination) write=t;
+    }
+    if(!read && !write) return false;
+    GpuTarget *t=read?read:write;
+    C3D_FrameBuf *fb=&t->target->frameBuf;
+    unsigned width=fb->width,height=fb->height;
+    if(bytes!=gpuTextureSize(width,height,(GPU_TEXCOLOR)fb->colorFmt)) {
+        GPU_LOG("partial render-target copy unsupported"); CtrHost_SetState(CTR_HOST_EXITING); return true;
+    }
+    unsigned char *rgba=malloc((size_t)width*height*4);
+    if(!rgba) {CtrHost_SetState(CTR_HOST_EXITING);return true;}
+    glDisable(GL_SCISSOR_TEST);
+    if(read) {
+        if(read->scale>1) {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER,read->fbo);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER,read->nativeFbo);
+            glBlitFramebuffer(0,0,width*read->scale,height*read->scale,0,0,width,height,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER,read->nativeFbo);
+        glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,rgba);
+        if(!gpuEncodeTexture(rgba,destination,width,height,(GPU_TEXCOLOR)fb->colorFmt)) CtrHost_SetState(CTR_HOST_EXITING);
+    }
+    if(write) {
+        C3D_FrameBuf *out=&write->target->frameBuf;
+        if(bytes!=gpuTextureSize(out->width,out->height,(GPU_TEXCOLOR)out->colorFmt)
+           || out->width!=width || out->height!=height
+           || !gpuDecodeTexture(read?destination:source,rgba,width,height,(GPU_TEXCOLOR)out->colorFmt)) {
+            CtrHost_SetState(CTR_HOST_EXITING);
+        } else {
+            glBindTexture(GL_TEXTURE_2D,write->nativeColor);
+            glTexSubImage2D(GL_TEXTURE_2D,0,0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,rgba);
+            if(write->scale>1) {
+                glBindFramebuffer(GL_READ_FRAMEBUFFER,write->nativeFbo);
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER,write->fbo);
+                glBlitFramebuffer(0,0,width,height,0,0,width*write->scale,height*write->scale,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+            }
+            if(write->texture) write->texture->authoritative=true;
+        }
+    }
+    free(rgba);
+    glBindFramebuffer(GL_FRAMEBUFFER,gpuTarget?gpuTarget->fbo:0);gpuApplyState();
+    return true;
+}

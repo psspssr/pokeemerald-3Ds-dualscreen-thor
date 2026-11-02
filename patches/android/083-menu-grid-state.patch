@@ -1,6 +1,8 @@
+diff --git a/src/menu.c b/src/menu.c
+index e243f1b..e43cabd 100644
 --- a/src/menu.c
 +++ b/src/menu.c
-@@ -935,6 +935,9 @@
+@@ -936,6 +936,9 @@ static u8 InitMenu(u8 windowId, u8 fontId, u8 left, u8 top, u8 cursorHeight, u8
      sMenu.windowId = windowId;
      sMenu.fontId = fontId;
      sMenu.optionHeight = cursorHeight;
@@ -8,9 +10,9 @@
 +    sMenu.columns = 1;
 +    sMenu.rows = numChoices;
      sMenu.APressMuted = muteAPress;
- 
-     pos = initialCursorPos;
-@@ -1617,6 +1620,9 @@
+ #ifdef PLATFORM_3DS
+     // A list, not a grid: a grid's columns left from the menu before (the
+@@ -1629,6 +1632,9 @@ u8 InitMenuInUpperLeftCorner(u8 windowId, u8 itemCount, u8 initialCursorPos, boo
      sMenu.windowId = windowId;
      sMenu.fontId = FONT_NORMAL;
      sMenu.optionHeight = 16;
@@ -18,5 +20,5 @@
 +    sMenu.columns = 1;
 +    sMenu.rows = itemCount;
      sMenu.APressMuted = APressMuted;
- 
-     pos = initialCursorPos;
+ #ifdef PLATFORM_3DS
+     // A list, not a grid: a grid's columns left from the menu before (the

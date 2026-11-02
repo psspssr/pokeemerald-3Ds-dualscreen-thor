@@ -142,12 +142,14 @@ ANDROID_LDFLAGS := -m armelf_linux_eabi -pie --no-dynamic-linker -e 0 -soname li
 	--build-id=sha1 --eh-frame-hdr --gc-sections --emit-relocs --use-blx --undefined=__ctr_script_keep \
 	$(addprefix --wrap=,$(WRAP_SYMBOLS)) \
 	-L$(NDK_LIB)
-LINK_OBJECTS = $(NDK_LIB)/crtbegin_so.o $(OBJECTS) $(ANDROID_OBJS) \
+LINK_OBJECTS = $(NDK_LIB)/crtbegin_so.o $(OBJECTS) build/linkid.o $(ANDROID_OBJS) \
 	$(NDK_BUILTINS) $(NDK_UNWIND) $(ANDROID_LIBS) $(NDK_BUILTINS) $(NDK_LIB)/crtend_so.o
 
 build/android_%.ld: $(ANDROID_NATIVE)/android.ld.in
 	@mkdir -p build
 	sed -e 's/@LOAD_ADDRESS@/$(LOAD_ADDRESS)/' -e 's/@GAMEDATA_TYPE@/$(if $(filter release,$*),(NOLOAD),)/' $< > $@
+
+build/linkid.c: $(ANDROID_OBJS)
 
 # Same objects, same order, same script apart from @GAMEDATA_TYPE@: the two
 # links must agree on every address (gen_gamedata_bundle.py checks).
@@ -174,6 +176,14 @@ build/android.wrap: FORCE
 
 # A new picasso (the placeholder replaced by tools/picasso2glsl.py) rebuilds the shader.
 romfs/shaders/voxel.shbin: $(DEVKITPRO)/tools/bin/picasso $(wildcard $(PICASSO2GLSL))
+	@mkdir -p $(dir $@)
+	$(DEVKITPRO)/tools/bin/picasso -o $@ $(filter %.pica,$^)
+
+# Android has no Nintendo UDS radio. Report unavailable through the real
+# session interface, so link counters fail promptly without a stuck worker.
+build/3ds_local.o: $(ANDROID_NATIVE)/src/local_unavailable.c
+	@mkdir -p $(dir $@)
+	"$(CC)" $(CPPFLAGS) $(CFLAGS) -MMD -MP -I$(ROOT)/include -c $(ANDROID_NATIVE)/src/local_unavailable.c -o $@
 
 # What ships: the release link without its link-time relocation sections
 # (.rel.gamedata among them, as origin's objcopy does for the 3DSX) and

@@ -3,12 +3,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#define Port_ResolveAssetPointerSized(p,n) Port_ResolveAssetPointer(p)
 #include "gba/defines.h"
 #include "gba/io_reg.h"
 typedef uint8_t u8, bool8;
 typedef int16_t s16;
 typedef uint16_t u16;
-typedef uint32_t u32;
+typedef uint32_t u32, bool32;
 typedef int32_t s32;
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof(*(a)))
 #define BG_PLTT_ID(n) ((n) * 16)

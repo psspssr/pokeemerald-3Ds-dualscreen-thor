@@ -12,7 +12,9 @@ enum { FALSE, TRUE, COPYWIN_GFX = 2 };
 
 static bool8 national, tapPending;
 static s16 tapX, tapY;
-static struct { u8 queued; } sCtrDex;
+enum { CTR_DEX_OP_NONE };
+static struct { u8 queued, nativeOp; } sCtrDex;
+static u8 CtrDex_SearchNativeOp(u8 taskId) { (void)taskId; assert(!"unexpected native op"); return 0; }
 static struct { s16 data[16]; void (*func)(u8); } gTasks[1];
 static struct { unsigned x, y, w, h; } drawn[4];
 static unsigned drawCount, lastHighlight, lastTopBar;

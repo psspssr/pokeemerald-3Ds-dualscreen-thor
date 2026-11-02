@@ -1,0 +1,49 @@
+--- a/src/map_name_popup.c
++++ b/src/map_name_popup.c
+@@ -471,7 +471,7 @@
+     // lookup refuses that for the last theme, which then loaded nothing.
+     LoadBgTiles(GetWindowAttribute(popupWindowId, WINDOW_BG), sMapPopUp_OutlineTable[popUpThemeId], sizeof(sMapPopUp_OutlineTable[0]), 0x21D);
+ #else
+-    LoadBgTiles(GetWindowAttribute(popupWindowId, WINDOW_BG), sMapPopUp_OutlineTable[popUpThemeId], 0x400, 0x21D);
++    LoadBgTiles(GetWindowAttribute(popupWindowId, WINDOW_BG), sMapPopUp_OutlineTable[popUpThemeId], sizeof(sMapPopUp_OutlineTable[0]), 0x21D);
+ #endif
+     CallWindowFunction(popupWindowId, DrawMapNamePopUpFrame);
+     PutWindowTilemap(popupWindowId);
+--- a/src/pokemon.c
++++ b/src/pokemon.c
+@@ -5837,14 +5837,17 @@
+         *(pixels) += (SPOT_COLOR_ADJUSTMENT << (shift)); \
+     }
+ 
++static const u16 *GetSpindaSpotImage(unsigned spot)
++{
+ #ifdef PORT_BRIDGE
+-// The spot images are INCBINs inside the structs, zero-filled here; the asset
+-// table holds the four images back to back at the table's address.
+-#define SPINDA_SPOT_IMAGE(i) ((const u16 *)Port_ResolveAssetPointerSized(gSpindaSpotGraphics, \
+-    ARRAY_COUNT(gSpindaSpotGraphics) * SPINDA_SPOT_HEIGHT * sizeof(u16)) + (i) * SPINDA_SPOT_HEIGHT)
+-#else
+-#define SPINDA_SPOT_IMAGE(i) (gSpindaSpotGraphics[(i)].image)
++    const void *images = Port_ResolveAssetPointerSized(gSpindaSpotGraphics,
++        ARRAY_COUNT(gSpindaSpotGraphics) * SPINDA_SPOT_HEIGHT * sizeof(u16));
++    if (images != gSpindaSpotGraphics)
++        return (const u16 *)images + spot * SPINDA_SPOT_HEIGHT;
+ #endif
++    return gSpindaSpotGraphics[spot].image;
++}
++#define SPINDA_SPOT_IMAGE(i) GetSpindaSpotImage(i)
+ 
+ #define DRAW_SPINDA_SPOTS(personality, dest)                                  \
+ {                                                                               \
+--- a/3ds_port/src/3ds_video.c
++++ b/3ds_port/src/3ds_video.c
+@@ -7868,6 +7868,9 @@
+ /* As SurfaceFilter, for the battle scene's surface. */
+ static void SceneTexFilter(GPU_TEXTURE_FILTER_PARAM filter)
+ {
++#ifdef __ANDROID__
++    if (filter == GPU_LINEAR) filter = CtrGpu_BattleSceneFilter();
++#endif
+     C2D_Flush();
+     C3D_TexSetFilter(&sSceneTex, filter, filter);
+     C3D_TexBind(0, &sSceneTex);

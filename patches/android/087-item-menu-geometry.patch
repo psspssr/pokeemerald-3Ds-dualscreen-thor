@@ -1,12 +1,14 @@
+diff --git a/3ds_port/full.mk b/3ds_port/full.mk
+index 3d9dafb..d95ad47 100644
 --- a/3ds_port/full.mk
 +++ b/3ds_port/full.mk
-@@ -141,7 +141,8 @@
+@@ -187,7 +187,8 @@ $(CTR_GBA_STAGE_OBJS): compat/ctr_gba_stage.h $(ROOT)/include/gba/defines.h
  # (compat/ctr_gba_centred.h).
- CTR_GBA_CENTRED_SRCS := region_map field_region_map main_menu naming_screen wallclock \
- 	pokemon_summary_screen starter_choose evolution_scene evolution_graphics shop \
--	pokeblock contest contest_util
-+	pokeblock contest contest_util \
-+	berry_tag_screen use_pokeblock pokeblock_feed
+ CTR_GBA_CENTRED_SRCS := region_map field_region_map main_menu option_menu naming_screen wallclock \
+ 	pokemon_summary_screen starter_choose shop link berry_blender pokemon_jump dodrio_berry_picking \
+-	contest contest_util slot_machine roulette
++	contest contest_util slot_machine roulette \
++	pokeblock berry_tag_screen use_pokeblock pokeblock_feed
  CTR_GBA_CENTRED_OBJS := $(patsubst %,build/root/src/%.o,$(CTR_GBA_CENTRED_SRCS))
  $(CTR_GBA_CENTRED_OBJS): FULLCFLAGS += -DCTR_GBA_STAGE -include $(abspath compat/ctr_gba_centred.h)
  $(CTR_GBA_CENTRED_OBJS): compat/ctr_gba_centred.h $(ROOT)/include/gba/defines.h

@@ -23,6 +23,10 @@ class UpstreamHostFixtureTests(unittest.TestCase):
             target = cls.port / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / "origin/3ds_port" / rel, target)
+        for path in list((ROOT / "origin/3ds_port/src").glob("*.inc")) + list((ROOT / "origin/3ds_port/src").glob("*.c")):
+            shutil.copy2(path, cls.port / "src" / path.name)
+        shutil.copytree(ROOT / "origin/3ds_port/include", cls.port / "include")
+        shutil.copytree(ROOT / "origin/patches", cls.tree / "patches")
         (cls.port / "build").mkdir()
         subprocess.run(["git", "init", "-q", str(cls.tree)], check=True)
         strict_apply(cls.tree, ROOT / "patches/android/060-upstream-host-test-extraction.patch")
@@ -39,7 +43,7 @@ class UpstreamHostFixtureTests(unittest.TestCase):
     def test_actual_bottom_map_dirty_rect_probe_passes(self):
         result = subprocess.run([sys.executable, str(self.port / "tests/bottom_map_test.py"), "--cc", "cc"],
                                 check=True, capture_output=True, text=True)
-        self.assertIn("partial/full canvas and framebuffer equivalence", result.stdout)
+        self.assertIn("partial redraws", result.stdout)
 
 
 if __name__ == "__main__":

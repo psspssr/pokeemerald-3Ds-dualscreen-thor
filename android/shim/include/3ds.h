@@ -27,6 +27,7 @@ extern "C" {
 #include <3ds/allocator/vram.h>
 
 #include <3ds/services/apt.h>
+#include <3ds/services/cfgu.h>
 #include <3ds/services/dsp.h>
 #include <3ds/services/gspgpu.h>
 #include <3ds/services/hid.h>

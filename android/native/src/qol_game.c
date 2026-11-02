@@ -6,6 +6,7 @@
 #include "constants/battle_move_effects.h"
 #include "constants/moves.h"
 #include "android_qol.h"
+#include "3ds_extras.h"
 #include "android_qol_rules.h"
 #include "ctr_host.h"
 
@@ -17,7 +18,8 @@ static bool sMoveEscapeApproved[MAX_BATTLERS_COUNT];
 
 void CtrQol_BeginWildMon(struct Pokemon *mon)
 {
-    sWildMultiplier = CtrHost_ShinyMultiplier();
+    /* An explicit in-game policy takes priority; never multiply bonuses. */
+    sWildMultiplier = CtrExtras_Get("shiny_odds") ? 1 : CtrHost_ShinyMultiplier();
     sWildMon = sWildMultiplier > 1 && mon ? &mon->box : NULL;
 }
 

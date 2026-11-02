@@ -239,6 +239,12 @@ def main() -> int:
 
     port = args.origin / "3ds_port"
     unit_objects = native_units(port)
+    # Same explicit native replacement as android/native/Makefile: UDS is a
+    # Nintendo radio service, unavailable on Android. Scan the adapter instead.
+    radio = port / "src/3ds_local.c"
+    if radio in unit_objects:
+        obj = unit_objects.pop(radio)
+        unit_objects[args.android / "native/src/local_unavailable.c"] = obj
     units = list(unit_objects)
     files = units + local_headers(port, units)
     used, called = sdk_identifiers(files)
@@ -274,7 +280,7 @@ def main() -> int:
         undefined = sorted(n for n in called if n not in inline and n not in defined and n not in own)
 
     report = {
-        "native_units": [str(u.relative_to(args.origin)) for u in units],
+        "native_units": [str(u.relative_to(args.origin)) if u.is_relative_to(args.origin) else str(u) for u in units],
         "sdk_identifiers": len(used),
         "undeclared": undeclared,
         "undefined": undefined,

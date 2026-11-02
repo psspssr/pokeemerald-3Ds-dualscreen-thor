@@ -54,6 +54,7 @@ void ndspChnWaveBufClear(int channel) { (void)channel; assert(!"unexpected devic
 void ndspExit(void) { assert(!"unexpected device-output path"); }
 void linearFree(void *data) { (void)data; assert(!"unexpected device-output allocation"); }
 
+static void ndspSetCallback(void (*callback)(void *),void *user) {(void)callback;(void)user;}
 #include "audio_worker_actual.inc"
 
 static void await(atomic_int *value, int wanted)

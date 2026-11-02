@@ -44,7 +44,13 @@ def main():
         start = present.index('    PORT_PROF_BEGIN(frameEnd);')
         stop = present.index('    uint64_t now = CtrPlatform_Milliseconds();', start)
         assert present.index('if (!C3D_FrameBegin(C3D_FRAME_SYNCDRAW)) return;') < start
-        (work / 'video_tail.inc').write_text(present[start:stop])
+        # Extract only submission and the stream dispatch; early GPU logging
+        # is independent of Android's frame deadline and needs no doubles.
+        tail = present[start:stop]
+        submit_start = tail.index('#ifdef __ANDROID__') if '#ifdef __ANDROID__' in tail else tail.index('        C3D_FrameEnd(')
+        submit_end = tail.index('        sGpuEarly = false;', submit_start)
+        after_start = tail.index('#ifndef __ANDROID__') if '#ifndef __ANDROID__' in tail else tail.index('    if (overworld || battleUpdated)',submit_end)
+        (work / 'video_tail.inc').write_text('bool running=false;\n'+tail[submit_start:submit_end]+tail[after_start:])
         hook = 'static void VoxelAfterSubmitBeforePacing(void *parameter)'
         (work / 'video_hook.inc').write_text(function(video, hook) if hook in video else '')
         shutdown = function(video, 'void CtrVideo_Shutdown(void)')
@@ -60,7 +66,7 @@ def main():
             'bool gpuShouldRender(void)', 'void gpuPace(void)',
         )) + helper)
         constants = ('VOXEL_FRAME_MS', 'VOXEL_AFTER_MAX_MS', 'VOXEL_AFTER_MARGIN_MS',
-                     'VOXEL_OTHERS_CAP_MS', 'VOXEL_CROSSING_RESERVE_MS')
+                     'VOXEL_OTHERS_CAP_MS', 'VOXEL_CROSSING_RESERVE_MS', 'VOXEL_AFTER_STARVED_MS')
         definitions = '\n'.join(re.search(r'^#define ' + name + r'\s+.*$', voxel, re.M)[0] for name in constants)
         (work / 'voxel.inc').write_text(definitions + '\n' + '\n'.join(function(voxel, name) for name in (
             'static float MsSince(uint64_t start)', 'static float TicksMs(uint64_t ticks)',

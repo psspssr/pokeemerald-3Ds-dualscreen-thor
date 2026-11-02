@@ -41,14 +41,7 @@ def main():
             target = work / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes((TREE / rel).read_bytes())
-        patch = ROOT / "patches/android/091-fossil-spinda-assets.patch"
-        try:
-            strict_apply(work, patch, ["--reverse"])
-        except PatchError:
-            strict_apply(work, patch)
-            strict_apply(work, patch, ["--reverse"])
-        if not args.before:
-            strict_apply(work, patch)
+        if args.before: raise SystemExit("The fix is upstream; use a historical checkout for --before")
         fossil = (work / "src/mirage_tower.c").read_text()
         pokemon = (work / "src/pokemon.c").read_text()
         header = (TREE / "include/pokemon.h").read_text()
@@ -61,11 +54,12 @@ def main():
         data += "static struct BgRegOffsets *sBgShakeOffsets;\n"
         data += "static u8 *sMirageTowerGfxBuffer, *sMirageTowerTilemapBuffer;\n"
         data += re.search(r"^#define FOSSIL_DISINTEGRATE_LENGTH .*$", fossil, re.M)[0] + "\n"
-        size_macro = re.search(r"#ifdef PORT_BRIDGE\n#define FOSSIL_GFX_LENGTH .*?\n#endif", fossil, re.S)
+        size_macro = re.search(r"#ifdef PORT_BRIDGE\n(?:(?!#endif).)*#define MIRAGE_TOWER_GFX_LENGTH .*?\n#endif", fossil, re.S)
         if size_macro:
             data += size_macro[0] + "\n"
-        tower_macro = re.search(r"#ifdef PORT_BRIDGE\n#define MIRAGE_TOWER_GFX_LENGTH .*?\n#endif", fossil, re.S)
-        data += (tower_macro[0] if tower_macro else re.search(r"^#define MIRAGE_TOWER_GFX_LENGTH .*$", fossil, re.M)[0]) + "\n"
+        tower_macro = re.search(r"#ifdef PORT_BRIDGE\n(?:(?!#endif).)*#define MIRAGE_TOWER_GFX_LENGTH .*?\n#endif", fossil, re.S)
+        if not size_macro:
+            data += (tower_macro[0] if tower_macro else re.search(r"^#define MIRAGE_TOWER_GFX_LENGTH .*$", fossil, re.M)[0]) + "\n"
         data += "\n".join(re.findall(r"^#define (?:OUTER|INNER)_BUFFER_LENGTH .*$", fossil, re.M)) + "\n"
         images = [[sum(1 << col for col in range(2, 14) if (row * 3 + col + spot) % 5 == 0)
                    if 2 <= row < 14 else 0 for row in range(16)] for spot in range(4)]
@@ -105,12 +99,14 @@ def main():
         data += "#else\n" + embedded_spots + "static const u8 sFossil_Gfx[] = {" + payload + "};\n"
         data += "static const u8 sMirageTower_Gfx[] __attribute__((aligned(2))) = {" + tower_payload + "};\n#endif\n"
         (work / "asset_pair_data.inc").write_text(data)
-        helpers = ""
+        helpers = "#define gObjectEventPic_Fossil sFossil_Gfx\n"
         bios = (TREE / "src/platform/bios.c").read_text()
         for signature in ("static uint32_t CPUReadMemory(const void *src)",
                           "static void CPUWriteMemory(void *dest, uint32_t val)",
                           "static uint16_t CPUReadHalfWord(const void *src)",
                           "static void CPUWriteHalfWord(void *dest, uint16_t val)",
+                          "static bool32 CopyRepeats(const u8 *source, const u8 *dest, u32 bytes)",
+                          "static void Fill32(u8 *dest, u32 value, u32 count)",
                           "void CpuSet(const void *src, void *dst, u32 cnt)"):
             helpers += function(bios, signature)
         for signature in ("static void InitMirageTowerShake(u8 taskId)",

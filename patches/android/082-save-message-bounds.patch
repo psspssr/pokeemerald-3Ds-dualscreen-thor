@@ -1,29 +1,11 @@
+diff --git a/3ds_port/src/3ds_bottom_ui.c b/3ds_port/src/3ds_bottom_ui.c
+index 9e3bbf6..0e430c3 100644
 --- a/3ds_port/src/3ds_bottom_ui.c
 +++ b/3ds_port/src/3ds_bottom_ui.c
-@@ -1107,7 +1107,7 @@
-     u8 isDouble, safari, cursor, battler;
-     BattlerView battlers[MAX_BATTLERS_COUNT];
-     struct ChooseMoveStruct moves4;
--    u8 text[96];
-+    u8 text[256];
- } ViewState;
- 
- /* Which of the game's bag is on show. */
-@@ -1175,7 +1175,7 @@
- #endif
- static u8 sPickMapsec = MAPSEC_NONE, sPickX, sPickY;
- static u8 sSaveStep;
--static u8 sSaveMessage[96];
-+static u8 sSaveMessage[256];
- 
- enum { SAVE_ASK, SAVE_OVERWRITE, SAVE_DONE };
- 
-@@ -1838,6 +1838,65 @@
-         ++n;
-     }
+@@ -3062,6 +3062,65 @@ static void CopyText(u8 *dst, int size, const u8 *src)
      dst[n] = EOS;
-+}
-+
+ }
+ 
 +/* Save warnings include multiple game-text pages. Expand without writing
 + * past the CPU menu's buffer, including nested player/string placeholders. */
 +static bool8 AppendSaveMessage(u8 **out, unsigned *remaining, const u8 *text, unsigned depth)
@@ -81,42 +63,12 @@
 +        /* Never offer Yes for an incomplete overwrite warning. */
 +        sSaveStep = SAVE_DONE;
 +    }
- }
- 
- #if 0
-@@ -2528,15 +2587,24 @@
- 
- static void DrawSave(const ViewState *s)
- {
--    DrawBox(BOX_MESSAGE, 0, 40, 30, 8);
--    DrawStr(&sNormal, s->text, 18, 52, TXT_WHITE, TXT_DARK);
-+    const u8 *text = s->text;
-+    unsigned lines = 1;
-+    for (u16 glyph; (glyph = NextGlyph(&text)) != 0xFFFF; )
-+        if (glyph == 0xFFFE) ++lines;
-+    /* Keep short prompts where they were. The complete different-trainer
-+     * warning has eight lines; only this Save page needs the taller box. */
-+    bool8 tall = lines > 3;
-+    int top = tall ? 8 : 40, buttonsY = tall ? 184 : 136;
++}
 +
-+    DrawBox(BOX_MESSAGE, 0, top, 30, tall ? 20 : 8);
-+    DrawStr(&sNormal, s->text, 18, top + 12, TXT_WHITE, TXT_DARK);
-     if (s->saveStep == SAVE_DONE)
-     {
--        DrawLabelButton(64, 136, 14, 5, Ascii("OK"), s->pressed == HIT_OK, TRUE, HIT_OK);
--        return;
--    }
--    DrawLabelButton(8, 136, 13, 6, gText_Yes, s->pressed == HIT_YES, s->canSave, HIT_YES);
--    DrawLabelButton(128, 136, 13, 6, gText_No, s->pressed == HIT_NO, TRUE, HIT_NO);
-+        DrawLabelButton(64, buttonsY, 14, 5, Ascii("OK"), s->pressed == HIT_OK, TRUE, HIT_OK);
-+        return;
-+    }
-+    DrawLabelButton(8, buttonsY, 13, 6, gText_Yes, s->pressed == HIT_YES, s->canSave, HIT_YES);
-+    DrawLabelButton(128, buttonsY, 13, 6, gText_No, s->pressed == HIT_NO, TRUE, HIT_NO);
- }
- 
- static const u8 *OptionValue(int row, u8 value)
-@@ -3730,7 +3798,7 @@
+ /* trainer_card.c's GetRubyTrainerStars as Emerald fills it in. */
+ static u8 CardStars(void)
+ {
+@@ -6116,7 +6175,7 @@ static void DoSave(void)
      {
          status = TrySavingData(SAVE_NORMAL);
      }
@@ -125,7 +77,7 @@
      if (status == SAVE_STATUS_OK)
          PlaySE(SE_SAVE);
      sSaveStep = SAVE_DONE;
-@@ -3739,7 +3807,7 @@
+@@ -6125,7 +6184,7 @@ static void DoSave(void)
  static void OpenSave(void)
  {
      sSaveStep = SAVE_ASK;
@@ -133,9 +85,9 @@
 +    SetSaveMessage(gText_ConfirmSave);
  }
  
- #if 0 /* The old party menu's buttons; the game's own takes touch itself. */
-@@ -4029,13 +4097,13 @@
-             PickMapCell(sTouch.lastX, sTouch.lastY);
+ /* A column screen chosen while one of the game's is on show, for when the
+@@ -6556,13 +6615,13 @@ static void Activate(u8 id, u8 mode)
+         NuzlockeTap(id);
          break;
      case SCR_SAVE:
 -        if (id == HIT_YES && FieldIdle())
