@@ -44,11 +44,12 @@ PORT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 import voxel_building as vb  # noqa: E402
-from PIL import Image, ImageDraw  # noqa: E402
+import voxel_relief_fixes as vrf  # noqa: E402
+from PIL import Image  # noqa: E402
 
 GRID = 64                      # tests/voxel_mesh_dump.c: the virtual atlas
 METATILE_REAL = 1024           # voxel_atlas.h
-VARIANTS = 128
+VARIANTS = 160
 CUT_FIRST = METATILE_REAL + VARIANTS
 DUMP = os.path.join(PORT, "build", "voxel_mesh_dump.exe")
 RELIEF = os.path.join(PORT, "romfs", "voxel", "relief.bin")
@@ -106,10 +107,10 @@ def relief_cuts():
 def building_variants():
     """[(layout, metatile, quarters)] of buildings.bin's ground variants."""
     b = open(os.path.join(PORT, "romfs", "voxel", "buildings.bin"), "rb").read()
-    assert b[:4] == b"VXB7"
+    assert b[:4] in (b"VXB8", b"VXB9")
     pages, models, pmodels, places, hbytes, masks = struct.unpack_from("<6H", b, 4)
     nverts, nvar = struct.unpack_from("<IH", b, 16)
-    o = 24 + pages * 8 + models * 16 + pmodels * 8 + places * 16
+    o = (28 if b[:4] == b"VXB9" else 24) + pages * 8 + models * 16 + pmodels * 8 + places * 16
     o += hbytes
     o += o & 1
     o += hbytes * 2 + masks * 32 + hbytes
@@ -151,9 +152,12 @@ class Atlas:
             lay, mt, rows = self.cuts[k]
             im = self._art(lay).cell_image(mt).copy()
             px = im.load()
+            clear = vrf.cut_clear(rows)     # as voxel_atlas.c composes it
+            for (i, j), (si, sj) in vrf.cut_fringe(rows, clear).items():
+                px[i, j] = px[si, sj]
             for j in range(16):
                 for i in range(16):
-                    if (rows[j] >> i) & 1:
+                    if (clear[j] >> i) & 1:
                         px[i, j] = (0, 0, 0, 0)
             return im
         k = aid - METATILE_REAL
@@ -197,7 +201,15 @@ class Raster:
         self.tex = [None] * (w * h)
 
     def draw(self, verts, tex, tpx, shade, owner):
+        """`shade` one for the triangle, or one a vertex: interpolated across
+        it as the console's GPU interpolates a vertex colour (a cast shadow
+        is a vertex's, not a triangle's)."""
         (x0, y0, d0, w0, u0, v0), (x1, y1, d1, w1, u1, v1), (x2, y2, d2, w2, u2, v2) = verts
+        if isinstance(shade, (tuple, list)):
+            s0, s1, s2 = (s * w for s, w in zip(shade, (w0, w1, w2)))
+            flat = None
+        else:
+            flat = shade
         area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
         if abs(area) < 1e-9:
             return
@@ -232,7 +244,8 @@ class Raster:
                 self.depth[idx] = d
                 self.tri[idx] = owner
                 self.tex[idx] = (tu, tv)
-                self.color[idx] = (int(r * shade), int(g * shade), int(bb * shade))
+                sh = flat if flat is not None else (a * s0 + b * s1 + c * s2) / iw
+                self.color[idx] = (int(r * sh), int(g * sh), int(bb * sh))
 
     def image(self):
         img = Image.new("RGB", (self.w, self.h))
@@ -284,7 +297,7 @@ def render(tris, atlas, cam, scale=2, box=None):
             sx, sy, d, iw = pr
             vs.append((sx - ox, sy - oy, d, iw, u * S * iw, v * S * iw))
         else:
-            ras.draw(vs, tex, tpx, tri[0][5], k)
+            ras.draw(vs, tex, tpx, tuple(p[5] for p in tri), k)
     return ras
 
 

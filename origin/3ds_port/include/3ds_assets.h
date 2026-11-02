@@ -20,10 +20,11 @@ struct CtrAssetStats
     uint32_t loads, hits, misses, evictions, errors;
 };
 
-void CtrAssets_SetBudget(uint32_t bytes);
 void CtrAssets_Collect(void);
 /* Reads every payload into the cache from a background worker (see 3ds_assets.c). */
 void CtrAssets_StartWarmup(void);
+/* Stops the warm-up before the file system closes (at exit). */
+void CtrAssets_StopWarmup(void);
 const struct CtrAssetStats *CtrAssets_GetStats(void);
 void CtrAssets_Fatal(const char *detail) __attribute__((noreturn));
 

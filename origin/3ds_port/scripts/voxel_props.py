@@ -53,6 +53,53 @@ OBJECTS = {
                  (128, 129, 132, 133),
                  (144, 145, 148, 149)),
     },
+    # The same boulder and stack in Fallarbor's beige (Routes 114 and 115):
+    # the General's tiles drawn in the secondary tileset's palette 11, the
+    # boulder on the mountain's top, the stack in the sea and, on the land,
+    # as the mounds on Route 115's terraces
+    "sand_boulder_fallarbor": {
+        "land": True,
+        "tileset": "gTileset_General",
+        "secondary": "gTileset_Fallarbor",
+        "palette": 11,
+        "grid": ((88, 89),
+                 (104, 105)),
+    },
+    "sea_stack_fallarbor": {
+        "tileset": "gTileset_General",
+        "secondary": "gTileset_Fallarbor",
+        "palette": 11,
+        "grid": ((None, 65, 68, (69, True, 11)),
+                 (80, 81, 84, 85),
+                 (128, 129, 132, 133),
+                 (144, 145, 148, 149)),
+    },
+    # The Battle Frontier's flags along its walls: the cloth three tiles
+    # across and two down (its tiles the ones the game animates, 218-223 of
+    # the secondary tileset), the pole two tiles under its west end, each
+    # side's tileset its own copy of them
+    "frontier_flag_east": {"tileset": "gTileset_General",
+                           "secondary": "gTileset_BattleFrontierOutsideEast",
+                           "land": True, "palette": 11,
+                           "grid": ((730, 731, 732), (733, 734, 735), (746, None, None),
+                                    (762, None, None))},
+    "frontier_flag_west": {"tileset": "gTileset_General",
+                           "secondary": "gTileset_BattleFrontierOutsideWest",
+                           "land": True, "palette": 11,
+                           "grid": ((730, 731, 732), (733, 734, 735), (746, None, None),
+                                    (762, None, None))},
+    # Slateport market's goods, each a cell of the secondary tileset's
+    # upper layer over whatever paving it stands on
+    "basket_green": {"tileset": "gTileset_General", "secondary": "gTileset_Slateport",
+                     "land": True, "palette": 7, "grid": ((518, 519), (534, 535))},
+    "basket_orange": {"tileset": "gTileset_General", "secondary": "gTileset_Slateport",
+                      "land": True, "palette": 7, "grid": ((516, 517), (532, 533))},
+    "basket_red": {"tileset": "gTileset_General", "secondary": "gTileset_Slateport",
+                   "land": True, "palette": 7, "grid": ((514, 515), (530, 531))},
+    "urn": {"tileset": "gTileset_General", "secondary": "gTileset_Slateport",
+            "land": True, "palette": 7, "grid": ((614, 615), (630, 631))},
+    "fruit": {"tileset": "gTileset_General", "secondary": "gTileset_Slateport",
+              "land": True, "palette": 7, "grid": ((736, 737), (738, 739))},
 }
 
 
@@ -97,7 +144,7 @@ def connections():
     if _CONNECTIONS is not None:
         return _CONNECTIONS
     maps_dir = os.path.join(ROOT, "data", "maps")
-    by_id, layout_of = {}, {}
+    by_id = {}
     for name in os.listdir(maps_dir):
         path = os.path.join(maps_dir, name, "map.json")
         if os.path.exists(path):
@@ -171,7 +218,7 @@ def find(layout_entry, names=None):
     for name, obj in OBJECTS.items():
         if names and name not in names:
             continue
-        if primary != obj["tileset"]:
+        if primary != obj["tileset"] or obj.get("secondary", secondary) != secondary:
             continue
         if subs is None:
             subs = _subtiles_of(layout_entry)

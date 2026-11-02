@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "emerald3ds-builder"
-version = "0.2.0"
-description = "Builds the Pokémon Emerald 3Ds Dual Screen data pack from the player's own Pokémon Emerald ROM"
+version = "0.5.0"
+description = "Builds the Emerald 3DS data pack from the player's own Pokémon Emerald ROM"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["Pillow>=10"]
-license = {text = "See LICENSE-PORT.md in the repository"}
+license = {text = "CC-BY-NC-SA-4.0; see LICENSE-PORT.md in the repository"}
 
 [project.scripts]
 emerald3ds-builder = "emerald3ds_builder.__main__:main"

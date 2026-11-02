@@ -21,11 +21,11 @@ MAKEROM ?= $(firstword $(wildcard $(TOOLS_BIN)/makerom$(EXE)) makerom)
 BANNERTOOL ?= $(firstword $(wildcard $(TOOLS_BIN)/bannertool$(EXE)) bannertool)
 
 ART := ../assets/artwork
-APP_TITLE := Pokemon Emerald 3Ds Dual Screen
-APP_SHORT := Emerald 3Ds Dual Screen
-APP_AUTHOR := ZallaxDev
+APP_TITLE := Emerald 3DS
+APP_SHORT := Emerald 3DS
+APP_AUTHOR := Zallax
 # Shown by FBI and the HOME Menu; bump with the forwarder, not with the game.
-APP_VERSION ?= 1.0.0
+APP_VERSION ?= 1.1.0
 CIA := dist/Emerald3DS-Forwarder.cia
 
 all: $(CIA)

@@ -1,3 +1,3 @@
-"""Pokémon Emerald 3Ds Dual Screen Builder: turns the player's own ROM into the game's data pack."""
+"""Emerald 3DS Builder: turns the player's own ROM into the game's data pack."""
 
-__version__ = "0.2.0"
+__version__ = "0.5.0"

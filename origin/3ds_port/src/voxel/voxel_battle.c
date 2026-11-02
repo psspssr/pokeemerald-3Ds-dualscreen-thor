@@ -11,6 +11,7 @@
 #include "main.h"
 #include "battle.h"
 #include "battle_anim.h"
+#include "data.h"
 #include "event_object_movement.h"
 #include "field_player_avatar.h"
 #include "metatile_behavior.h"
@@ -18,6 +19,7 @@
 
 #include "3ds_platform.h"
 #include "3ds_video.h"
+#include "ctr_battle_layout.h"
 #include "voxel_battle.h"
 #include "voxel_building.h"
 #include "voxel_relief.h"
@@ -145,7 +147,7 @@ static void ReadCell(StageCell *cell, int x, int z, bool indoor)
 {
     const VoxelMapInstance *inst = VoxelWorld_GetInstanceAt(x, z);
     VoxelVisualShape shape;
-    int metatile, ground;
+    int metatile;
     float top = 0.0f;
     const int16_t *relief;
 
@@ -170,16 +172,17 @@ static void ReadCell(StageCell *cell, int x, int z, bool indoor)
     cell->kind = KindOf(VoxelWorld_GetMetatileBehavior(x, z));
     cell->blocked = VoxelWorld_GetCollision(x, z) != 0;
     metatile = VoxelWorld_GetMetatileId(x, z);
-    if (VoxelBuildings_CellAt(inst, x, z, &ground, &top) && top > cell->top)
+    if (VoxelBuildings_CellAt(inst, x, z, NULL, &top) && top > cell->top)
         cell->top = top;
     if (VoxelWorld_UsesTreeSprites(inst))
     {
-        int part = VoxelTree_Part(metatile);
+        int part = VoxelTree_Part(inst->secondaryTileset, metatile);
 
-        /* A tree's trunk, or the cell its crown leans over. */
-        if (part >= 0)
+        /* A tree's trunk, or the cell its crown leans over. Long grass is
+         * the ground a battle stands on. */
+        if (part >= 0 && part != VOXEL_TREE_GRASS)
             top = part == VOXEL_TREE_SMALL ? 1.8f : 2.4f;
-        else if (VoxelTree_GroundMetatile(metatile) != metatile)
+        else if (VoxelTree_GroundMetatile(inst->secondaryTileset, metatile) != metatile)
             top = 2.4f;
         if (top > cell->top)
             cell->top = top;
@@ -205,14 +208,20 @@ static void ReadCell(StageCell *cell, int x, int z, bool indoor)
     cell->slope = relief != NULL && VoxelRelief_IsSlope(relief);
 }
 
-static const StageCell *CellAt(float x, float z)
+/* The cell at world cell x, z. */
+static const StageCell *CellAtCell(int x, int z)
 {
     static const StageCell sPlain = {GROUND_PLAIN, false, false, 0.0f, 0.0f};
-    int gx = (int)floorf(x) - sGridX - GRID_X0, gz = (int)floorf(z) - sGridZ - GRID_Z0;
+    int gx = x - sGridX - GRID_X0, gz = z - sGridZ - GRID_Z0;
 
     if (gx < 0 || gx >= GRID_W || gz < 0 || gz >= GRID_H)
         return &sPlain;
     return &sGrid[gz][gx];
+}
+
+static const StageCell *CellAt(float x, float z)
+{
+    return CellAtCell((int)floorf(x), (int)floorf(z));
 }
 
 /* ── The search ─────────────────────────────────────────────────────────── */
@@ -220,15 +229,16 @@ static const StageCell *CellAt(float x, float z)
 /*
  * Where the battlers stand on the GBA picture (sBattlerCoords, the bottom of
  * their 64x64 pictures: battle_anim_mons.c), and the part of it each side's
- * pictures cover, singles and doubles together.
+ * pictures cover, singles and doubles together - each side moved as the
+ * game moves it on the 3DS (ctr_battle_layout.h).
  */
 #define FEET_PLAYER_X 72.0f
-#define FEET_PLAYER_Y 110.0f
+#define FEET_PLAYER_Y (110.0f + CTR_BATTLE_PLAYER_DROP)
 #define FEET_ENEMY_X 176.0f
-#define FEET_ENEMY_Y 70.0f
+#define FEET_ENEMY_Y (70.0f - CTR_BATTLE_ENEMY_RISE)
 static const float sSideRect[2][4] = {
-    {16.0f, 40.0f, 128.0f, 112.0f}, /* the player's, x0 y0 x1 y1 */
-    {128.0f, 8.0f, 224.0f, 76.0f},  /* the opponent's */
+    {16.0f, 40.0f + CTR_BATTLE_PLAYER_DROP, 128.0f, 112.0f + CTR_BATTLE_PLAYER_DROP}, /* the player's, x0 y0 x1 y1 */
+    {128.0f, 8.0f - CTR_BATTLE_ENEMY_RISE, 224.0f, 76.0f - CTR_BATTLE_ENEMY_RISE},  /* the opponent's */
 };
 
 typedef struct
@@ -300,6 +310,10 @@ static float StageScore(const StageSearch *s, float tx, float tz, float distance
     const BattleView *v = &s->view;
     float groundT = CellAt(tx, tz)->lift;
     float score = -0.5f * distance;
+    /* The target's cell, floored once: the cells around it are whole steps
+     * from it, the same cells floorf found for each of them, 1500 calls a
+     * candidate (the search's frames were 4.5 ms on an Old 3DS). */
+    int ix = (int)floorf(tx), iz = (int)floorf(tz);
 
     for (int side = 0; side < 2; ++side)
         score += FeetScore(s, side, tx, tz, groundT);
@@ -312,8 +326,8 @@ static float StageScore(const StageSearch *s, float tx, float tz, float distance
     for (int dz = -3; dz <= 7; ++dz)
         for (int dx = -6; dx <= 6; ++dx)
         {
-            float cx = floorf(tx) + dx, cz = floorf(tz) + dz;
-            const StageCell *cell = CellAt(cx, cz);
+            float cx = (float)(ix + dx), cz = (float)(iz + dz);
+            const StageCell *cell = CellAtCell(ix + dx, iz + dz);
             float x0, y0, x1, y1, h;
 
             if (cell->top <= 0.4f)
@@ -331,9 +345,9 @@ static float StageScore(const StageSearch *s, float tx, float tz, float distance
     for (int dz = -10; dz <= 4; ++dz)
         for (int dx = -10; dx <= 10; ++dx)
         {
-            float cx = floorf(tx) + dx + 0.5f, cz = floorf(tz) + dz + 0.5f, sx, sy;
+            float cx = (float)(ix + dx) + 0.5f, cz = (float)(iz + dz) + 0.5f, sx, sy;
 
-            if (CellAt(cx, cz)->kind != GROUND_VOID)
+            if (CellAtCell(ix + dx, iz + dz)->kind != GROUND_VOID)
                 continue;
             if (!Project(v, cx - tx, 0.0f, cz - tz, &sx, &sy) || sx < 0.0f || sx > CTR_GAME_WIDTH
              || sy < 0.0f || sy > CTR_GAME_HEIGHT - 48)
@@ -467,7 +481,8 @@ bool VoxelBattle_StepStage(unsigned cells, unsigned candidates, float *targetX, 
                      sStage.indoor ? " indoor" : "");
     }
     *targetX = sStage.bestX;
-    *targetZ = sStage.bestZ;
+    /* where its ground is drawn, as the player is (VoxelRelief_ShiftAt) */
+    *targetZ = sStage.bestZ + VoxelRelief_ShiftAt(sStage.bestX, sStage.bestZ);
     *ground = VoxelRelief_LiftAt(sStage.bestX, sStage.bestZ);
     return true;
 }
@@ -492,6 +507,11 @@ unsigned VoxelBattle_Shadows(VoxelBattleShadow *out, unsigned max)
         if (!sprite->inUse || sprite->invisible)
             continue;
         enemy = GetBattlerSide(b) != B_SIDE_PLAYER;
+        /* The player's trainer, before the Pokemon is sent out: no shadow -
+         * the player side's Pokemon are drawn with gAnims_MonPic, the trainer
+         * with its back picture's own. */
+        if (!enemy && sprite->anims != gAnims_MonPic)
+            continue;
         /* A floating Pokemon's shadow is the game's own sprite. */
         shadow = gBattleSpritesDataPtr->healthBoxesData[b].shadowSpriteId;
         if (enemy && shadow < MAX_SPRITES && gSprites[shadow].inUse && !gSprites[shadow].invisible)

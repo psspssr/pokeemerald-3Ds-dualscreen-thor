@@ -502,7 +502,6 @@ def _distort(cam, path, under, tris, tags, tex, scale, pitch, Hh):
         proj.append(vs)
         ras.draw(vs, tex, shade, owner=k)
     seen = collections.Counter(o for o in ras.owner if o is not None and o >= 0)
-    legit = {}
     faults = collections.defaultdict(lambda: [0, 0.0])
     bad = set()
     for k, n in seen.items():
@@ -600,7 +599,6 @@ def _distort(cam, path, under, tris, tags, tex, scale, pitch, Hh):
     # and a hole: the plane under it all, seen through the terrain (the
     # middle of the view only - past its edges no relief is drawn)
     img = ras.image() if not path else img
-    hp = img.load() if not path else None
     holes = 0
     for yy in range(Hgt // 4, Hgt - Hgt // 4):
         for xx in range(W // 4, W - W // 4):
